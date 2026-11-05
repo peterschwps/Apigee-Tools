@@ -74,6 +74,12 @@ In GitHub Actions, run `npx --yes @peterschwps/apigee-tools apiproxy` after `act
 
 Directories are searched recursively for XML under `apiproxy` and `sharedflowbundle`, skipping `node_modules` and `.git`; files given explicitly are always linted. Each finding is printed as `file:line:column: severity rule message`, followed by a summary on standard error. Use `--ignore AX110,AX101` like the `ignore` setting; inline `apigee-tools disable` comments also apply. `--version` prints the installed version.
 
+Use `--only AX112` to report only missing policy files listed in manifests, or `--only AX108,AX112` to include missing flow policy references. Both `--only` and `--ignore` accept comma-separated IDs or repeated options, ignoring case. IDs match exactly; `--ignore` and inline suppression take precedence. The summary and exit code reflect only the reported findings.
+
+```sh
+npx @peterschwps/apigee-tools --only AX112 path/to/bundles
+```
+
 | Exit code | Meaning |
 | --- | --- |
 | 0 | No errors; warnings may have been reported |
