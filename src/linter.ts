@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 import { elementMap, normalizeEnumValue, type DocumentSpec, type ElementSpec, type ValueSpec } from './spec';
 import { applyDirectives } from './directives';
-import { closestValue } from './fixes';
+import { closestValue, type TextEdit } from './fixes';
 import { parseXml, type XmlDocument, type XmlNode } from './xml';
 
 export type LintIssue = {
@@ -13,6 +13,10 @@ export type LintIssue = {
   severity?: 'error' | 'warning';
   /** Documented value that likely replaces a mistyped one. */
   replacement?: string;
+  /** Edit removing a stale manifest entry. */
+  remove?: TextEdit;
+  /** Bundle-local file to create for a missing manifest entry. */
+  createFile?: string;
 };
 
 export type DocumentKind = DocumentSpec['kind'];

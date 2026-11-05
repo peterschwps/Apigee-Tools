@@ -1,7 +1,18 @@
 import { directiveRules } from './directives';
-import { parseXml } from './xml';
+import { parseXml, type XmlNode } from './xml';
 
 export type TextEdit = { start: number; end: number; text: string };
+
+/** Removes an element, including its lines when they contain only that element and whitespace. */
+export function removeElementEdit(xml: string, node: XmlNode): TextEdit {
+  const lineStart = xml.lastIndexOf('\n', node.start - 1) + 1;
+  const newline = xml.indexOf('\n', node.end);
+  const lineEnd = newline < 0 ? xml.length : newline;
+  const ownLines = /^[ \t]*$/.test(xml.slice(lineStart, node.start))
+    && /^[ \t\r]*$/.test(xml.slice(node.end, lineEnd));
+  return { start: ownLines ? lineStart : node.start,
+    end: ownLines ? (newline < 0 ? lineEnd : newline + 1) : node.end, text: '' };
+}
 
 /** Counts insertions, deletions, substitutions, and adjacent transpositions. */
 function editDistance(a: string, b: string): number {

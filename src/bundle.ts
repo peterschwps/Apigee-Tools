@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { applyDirectives } from './directives';
+import { removeElementEdit } from './fixes';
 import type { LintIssue } from './linter';
 import { parseXml, type XmlNode, type XmlText } from './xml';
 
@@ -8,6 +9,31 @@ const flowNameSource = 'https://docs.cloud.google.com/apigee/docs/api-platform/r
 const resourceSource = 'https://docs.cloud.google.com/apigee/docs/api-platform/develop/resource-files#where-resources-are-stored';
 const routeTargetSource = 'https://docs.cloud.google.com/apigee/docs/api-platform/reference/api-proxy-configuration-reference#proxyendpoint-howtoconfigurerouterules';
 const referencePattern = /^[A-Za-z0-9._$ %\-]+$/;
+
+async function manifestPolicyIssues(xml: string, root: XmlNode, directory: string): Promise<LintIssue[]> {
+  const policies = root.children.filter(child => child.name === 'Policies')
+    .flatMap(node => node.children).flatMap(node => {
+      const text = node.text;
+      return node.name === 'Policy' && text && referencePattern.test(text.value) ? [{ node, text }] : [];
+    });
+  if (!policies.length) return [];
+  let names: Set<string>;
+  try {
+    const entries = await readdir(path.join(directory, 'policies'), { withFileTypes: true });
+    names = new Set(entries.filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.xml'))
+      .map(entry => entry.name.slice(0, -'.xml'.length)));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return [];
+    names = new Set();
+  }
+  const reference = root.name === 'APIProxy' ? 'api-proxy' : 'shared-flow-bundle';
+  const source = `https://docs.cloud.google.com/apigee/docs/api-platform/reference/${reference}-configuration-reference#baseconfiguration-baseconfigurationelements`;
+  return policies.filter(({ text }) => !names.has(text.value)).map(({ node, text }) => ({
+    rule: 'AX112', message: `Policy file "policies/${text.value}.xml" listed in this manifest was not found in this bundle.`,
+    start: text.start, end: text.end, source, severity: 'warning',
+    remove: removeElementEdit(xml, node), createFile: path.join(directory, 'policies', `${text.value}.xml`),
+  }));
+}
 
 function findBundleRoot(filePath: string): string | undefined {
   let directory = path.dirname(filePath);
@@ -70,6 +96,9 @@ export async function lintBundleReferences(xml: string, filePath: string): Promi
   if (!rootDirectory) return [];
   const document = parseXml(xml);
   if (document.syntaxIssues.length || !document.root) return [];
+  if (document.root.name === 'APIProxy' || document.root.name === 'SharedFlowBundle') {
+    return applyDirectives(xml, document.comments, await manifestPolicyIssues(xml, document.root, rootDirectory));
+  }
   if (document.root.name === 'OASValidation' || document.root.name === 'MessageValidation') {
     return applyDirectives(xml, document.comments, await localResourceIssue(document.root, rootDirectory));
   }

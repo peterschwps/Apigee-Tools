@@ -22,6 +22,7 @@ Install **Apigee Tools** from the [Visual Studio Marketplace](https://marketplac
 | AX109 | Resource absent locally; it may exist at environment scope (warning) |
 | AX110 | Deprecated element or documented X compatibility concern (warning) |
 | AX111 | RouteRule target endpoint missing from the proxy bundle |
+| AX112 | Policy file listed in a proxy or shared flow manifest is missing (warning) |
 
 Checks for unknown elements and attributes apply only to complete reviewed contexts. Some references are incomplete or contradictory. A clean result therefore does not prove that Apigee will accept or correctly execute the proxy.
 
@@ -58,6 +59,8 @@ Use the light bulb or **Ctrl+.** on a diagnostic:
 
 - **Change to "…"** replaces an AX105 value with the single documented value closest to it, such as `flase` with `false`. No fix is offered when no value is close enough or several are equally close; the diagnostic message names the suggestion.
 - **Disable … for this line** inserts the inline suppression comment above the reported line, or extends an existing directive there. It is not offered where a comment cannot be placed, such as inside a multi-line start tag or on the XML declaration line.
+- **Remove policy reference** removes an AX112 manifest entry, including its line when it contains only that entry.
+- **Create policies/….xml** creates and opens an empty file for an AX112 manifest entry. Existing files are preserved. Configure the policy in the new file; this fix checks file existence only.
 
 ## Command line
 
