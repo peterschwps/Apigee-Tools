@@ -65,6 +65,7 @@ export function disableDirectiveEdit(
   const lineStart = xml.lastIndexOf('\n', offset - 1) + 1;
   const newline = xml.indexOf('\n', lineStart);
   const line = xml.slice(lineStart, newline < 0 ? xml.length : newline);
+  // Nothing may precede the XML declaration
   if (/^\s*<\?xml\b/.test(line)) return undefined;
 
   // Extend a directive on the previous line

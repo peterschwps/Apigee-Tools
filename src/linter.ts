@@ -109,6 +109,7 @@ export function lint(
   );
 }
 
+/** Collects syntax issues and the findings of the matching specification. */
 function lintDocument(
   parsed: XmlDocument,
   filePath: string,

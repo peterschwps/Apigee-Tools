@@ -152,46 +152,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.languages.registerCompletionItemProvider(
       xmlFiles,
-      {
-        async provideCompletionItems(document, position) {
-          if (!applicable(document, specs)) return [];
-          const xml = document.getText();
-          const offset = document.offsetAt(position);
-          // ponytail: reads the policies directory per request;
-          // cache per bundle if large bundles feel slow.
-          const policyNames = stepDocuments.has(
-            classifyDocument(document.uri.fsPath),
-          )
-            ? await bundlePolicyNames(document.uri.fsPath)
-            : [];
-          const suggestions = complete(
-            xml,
-            offset,
-            document.uri.fsPath,
-            specs,
-            policyNames,
-          );
-          return suggestions.map(suggestion =>
-            toCompletionItem(document, suggestion),
-          );
-        },
-      },
+      completionProvider(specs),
       ...completionTriggers,
     ),
     vscode.languages.registerCodeActionsProvider(
       xmlFiles,
-      {
-        provideCodeActions(document, _range, codeActionContext) {
-          // Fixes need the issues of the diagnostics' document version
-          const current = published.get(document.uri.toString());
-          if (!current || current.version !== document.version) return [];
-          return codeActionContext.diagnostics
-            .filter(diagnostic => diagnostic.source === diagnosticSource)
-            .flatMap(diagnostic =>
-              quickFixes(document, diagnostic, current.issues),
-            );
-        },
-      },
+      codeActionProvider(published),
       { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
     ),
     {
@@ -206,7 +172,55 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  // Resources are disposed through the extension context.
+  // Resources are disposed through the extension context
+}
+
+/** Suggests elements, attributes, values, and bundle policy names. */
+function completionProvider(
+  specs: readonly DocumentSpec[],
+): vscode.CompletionItemProvider {
+  return {
+    async provideCompletionItems(document, position) {
+      if (!applicable(document, specs)) return [];
+      const xml = document.getText();
+      const offset = document.offsetAt(position);
+      // ponytail: reads the policies directory per request;
+      // cache per bundle if large bundles feel slow.
+      const policyNames = stepDocuments.has(
+        classifyDocument(document.uri.fsPath),
+      )
+        ? await bundlePolicyNames(document.uri.fsPath)
+        : [];
+      const suggestions = complete(
+        xml,
+        offset,
+        document.uri.fsPath,
+        specs,
+        policyNames,
+      );
+      return suggestions.map(suggestion =>
+        toCompletionItem(document, suggestion),
+      );
+    },
+  };
+}
+
+/** Offers quick fixes for the diagnostics of the linted document version. */
+function codeActionProvider(
+  published: ReadonlyMap<string, Published>,
+): vscode.CodeActionProvider {
+  return {
+    provideCodeActions(document, _range, codeActionContext) {
+      // Fixes need the issues of the diagnostics' document version
+      const current = published.get(document.uri.toString());
+      if (!current || current.version !== document.version) return [];
+      return codeActionContext.diagnostics
+        .filter(diagnostic => diagnostic.source === diagnosticSource)
+        .flatMap(diagnostic =>
+          quickFixes(document, diagnostic, current.issues),
+        );
+    },
+  };
 }
 
 function settings(

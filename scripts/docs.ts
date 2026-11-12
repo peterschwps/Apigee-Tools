@@ -317,7 +317,7 @@ async function refresh(): Promise<void> {
     const previous = baseline[source.id];
     const keys = new Set([
       ...Object.keys(current),
-      ...Object.keys(previous || {}),
+      ...Object.keys(previous ?? {}),
     ]);
     const changedSections = [...keys].filter(
       key => current[key] !== previous?.[key],
@@ -415,7 +415,7 @@ function proposeSection(source: Source, section: CandidateSection) {
     attributes,
     namedRows,
     possibleValues: section.valueHints.flatMap(
-      hint => simpleValues(hint) || [],
+      hint => simpleValues(hint) ?? [],
     ),
     valueHints: section.valueHints,
     formatHints: section.formatHints,
@@ -678,7 +678,7 @@ function finishSection(
 
 /** Returns the distinct matches of a pattern, cut to 350 characters. */
 function hints(texts: readonly string[], pattern: RegExp): string[] {
-  const matches = texts.flatMap(text => text.match(pattern) || []);
+  const matches = texts.flatMap(text => text.match(pattern) ?? []);
   return [...new Set(matches.map(text => text.slice(0, 350)))];
 }
 

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { build } from 'esbuild';
 
-// The engine floor from package.json, so the oldest supported VS Code is exercised.
+// The engine floor from package.json, to test the oldest supported VS Code
 const vscodeVersion = '1.96.0';
 const root = path.resolve(__dirname, '..', '..');
 const outputDirectory = path.join(root, '.cache', 'integration');
@@ -19,7 +19,7 @@ const workspaceFiles: Record<string, string> = {
 };
 
 async function main(): Promise<void> {
-  // The extension host loads plain JavaScript, so bundle the TypeScript suite first.
+  // Bundle the TypeScript suite, since the extension host loads JavaScript
   const suite = path.join(outputDirectory, 'suite.js');
   await build({
     entryPoints: [path.join(__dirname, 'suite.ts')],
