@@ -3,32 +3,32 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-// The VS Code manifest cannot carry a scoped name, so the npm package gets its own manifest.
+type RootManifest = { version: string; license: string; keywords: string[] };
+
 const root = path.resolve(__dirname, '..');
 const stageDirectory = path.join(root, '.cache', 'npm-package');
 const repository = 'https://github.com/peterschwps/Apigee-Tools';
 const expectedFiles =
   /^(?:package\.json|README\.md|LICENSE|dist\/cli\.js|data\/reviewed\/[a-z0-9-]+\.json)$/;
 
-type RootManifest = { version: string; license: string; keywords: string[] };
-
-function exec(
-  command: string,
-  args: string[],
-  cwd: string,
-): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(command, args, {
-    cwd,
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-  });
-  return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
+async function main(): Promise<void> {
+  const [command] = process.argv.slice(2);
+  switch (command) {
+    case 'stage':
+      await stage();
+      break;
+    case 'check':
+      await check();
+      break;
+    default:
+      throw new Error('Usage: npm-package.ts <stage|check>');
+  }
 }
 
+/**
+ * Stages the npm package of the CLI with a manifest of its own, since the VS
+ * Code manifest cannot carry a scoped package name.
+ */
 async function stage(): Promise<void> {
   const manifest = JSON.parse(
     await readFile(path.join(root, 'package.json'), 'utf8'),
@@ -73,18 +73,23 @@ async function stage(): Promise<void> {
   );
 }
 
+/**
+ * Stages and packs the npm package, checks its file list, installs it like a
+ * user, and runs the installed command.
+ */
 async function check(): Promise<void> {
   await stage();
   const workspace = await mkdtemp(path.join(tmpdir(), 'apigee-tools-npm-'));
   try {
-    // Verify the published file list before anything else.
+    // Verify the published file list before anything else
     const packed = exec(
       'npm',
       ['pack', '--json', '--pack-destination', workspace],
       stageDirectory,
     );
-    if (packed.status !== 0)
+    if (packed.status !== 0) {
       throw new Error(`npm pack failed:\n${packed.stderr}`);
+    }
     const [tarball] = JSON.parse(packed.stdout) as {
       filename: string;
       files: { path: string }[];
@@ -92,12 +97,13 @@ async function check(): Promise<void> {
     const unexpected = tarball.files
       .map(file => file.path)
       .filter(file => !expectedFiles.test(file));
-    if (unexpected.length)
+    if (unexpected.length) {
       throw new Error(
         `Unexpected files in the npm package: ${unexpected.join(', ')}`,
       );
+    }
 
-    // Install the tarball like a user would and run the installed command.
+    // Install the tarball like a user would
     const project = path.join(workspace, 'project');
     await mkdir(project);
     await writeFile(
@@ -115,8 +121,11 @@ async function check(): Promise<void> {
       ],
       project,
     );
-    if (installed.status !== 0)
+    if (installed.status !== 0) {
       throw new Error(`npm install failed:\n${installed.stderr}`);
+    }
+
+    // Run the installed command on clean fixtures and on a policy with an error
     const command = path.join(
       project,
       'node_modules',
@@ -148,18 +157,23 @@ async function check(): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
-  const [command] = process.argv.slice(2);
-  switch (command) {
-    case 'stage':
-      await stage();
-      break;
-    case 'check':
-      await check();
-      break;
-    default:
-      throw new Error('Usage: npm-package.ts <stage|check>');
-  }
+/** Runs a command and returns its exit status and output. */
+function exec(
+  command: string,
+  args: string[],
+  cwd: string,
+): { status: number | null; stdout: string; stderr: string } {
+  // Windows needs a shell to run the npm and command shims
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  });
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 main().catch(error => {
