@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { bundlePolicyNames, lintBundleReferences } from '../src/bundle';
 import { classifyDocument, lint } from '../src/linter';
-import { fixtureBundle, policyFile, proxyFile, sharedFlowBundle, sharedFlowFile, sharedFlowPolicyFile, specs } from './support';
+import { fixtureBundle, policyFile, proxyFile, sharedFlowBundle, sharedFlowFile, sharedFlowManifest, sharedFlowPolicyFile, specs } from './support';
 
 for (const bundle of [fixtureBundle, sharedFlowBundle]) {
   test(`fixture ${path.basename(bundle)} has no findings`, async () => {
@@ -55,6 +55,24 @@ test('AX111 reports a route rule referencing a missing target endpoint', async (
   const xml = `<ProxyEndpoint name="t">${routes.join('')}</ProxyEndpoint>`;
   const issues = await lintBundleReferences(xml, proxyFile);
   assert.deepEqual(issues.map(issue => [issue.rule, xml.slice(issue.start, issue.end)]), [['AX111', 'missing']]);
+});
+
+test('AX112 warns about manifest policies without a file and offers both fixes', async () => {
+  const xml = '<APIProxy name="hello">\n  <Policies>\n    <Policy>SA-Limit</Policy>\n    <Policy>Missing</Policy>\n  </Policies>\n</APIProxy>';
+  const issues = await lintBundleReferences(xml, path.join(fixtureBundle, 'hello.xml'));
+  assert.deepEqual(issues.map(issue => [issue.rule, issue.severity, xml.slice(issue.start, issue.end)]), [['AX112', 'warning', 'Missing']]);
+  const [{ remove, createFile }] = issues;
+  assert.ok(remove);
+  assert.equal(xml.slice(0, remove.start) + remove.text + xml.slice(remove.end), xml.replace('    <Policy>Missing</Policy>\n', ''));
+  assert.equal(createFile, path.join(fixtureBundle, 'policies', 'Missing.xml'));
+});
+
+test('AX112 removes only the element when it shares its line', async () => {
+  const xml = '<SharedFlowBundle name="s"><Policies><Policy>SA-Shared</Policy><Policy>Gone</Policy></Policies></SharedFlowBundle>';
+  const [issue, ...rest] = await lintBundleReferences(xml, sharedFlowManifest);
+  assert.deepEqual([issue.rule, rest.length], ['AX112', 0]);
+  assert.ok(issue.remove);
+  assert.equal(xml.slice(0, issue.remove.start) + xml.slice(issue.remove.end), xml.replace('<Policy>Gone</Policy>', ''));
 });
 
 test('bundlePolicyNames lists sorted policy names of the containing bundle', async () => {

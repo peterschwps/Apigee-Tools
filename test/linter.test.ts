@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { test } from 'node:test';
 import { classifyDocument, lint as lintPolicy } from '../src/linter';
 import { policyFile, proxyFile, sharedFlowFile, sharedFlowManifest, sharedFlowPolicyFile, specs } from './support';
@@ -23,6 +24,10 @@ const cases: { name: string; xml: string; file?: string; rules: string[] }[] = [
   { name: 'AX106 invalid format', xml: '<SpikeArrest name="SA-Test"><Rate>fast</Rate></SpikeArrest>', rules: ['AX106'] },
   { name: 'AX107 duplicate flow name', xml: proxy('<Flows><Flow name="a"/><Flow name="a"/></Flows>'), file: proxyFile, rules: ['AX107'] },
   { name: 'AX110 compatibility warning', xml: spikeArrest('<UseEffectiveCount>false</UseEffectiveCount>'), rules: ['AX110'] },
+  { name: 'AX113 policy name without its type prefix', xml: '<SpikeArrest name="Limit"><Rate>10ps</Rate></SpikeArrest>', rules: ['AX113'] },
+  { name: 'AX113 prefix in the wrong case', xml: '<SpikeArrest name="sa-Limit"><Rate>10ps</Rate></SpikeArrest>', rules: ['AX113'] },
+  { name: 'AX113 prefix without a hyphen', xml: '<SpikeArrest name="SA_Limit"><Rate>10ps</Rate></SpikeArrest>', rules: ['AX113'] },
+  { name: 'AX113 prefix of another policy type', xml: '<SpikeArrest name="AM-Limit"><Rate>10ps</Rate></SpikeArrest>', rules: ['AX113'] },
   { name: 'comment inside an enum value', xml: spikeArrest('<UseEffectiveCount><!-- x -->true</UseEffectiveCount>'), rules: [] },
   { name: 'CDATA enum value', xml: spikeArrest('<UseEffectiveCount><![CDATA[true]]></UseEffectiveCount>'), rules: [] },
   { name: 'character reference in an enum attribute', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle>', 'name="FC-Test" enabled="tr&#117;e"'), rules: [] },
@@ -79,6 +84,27 @@ test('lint ranges cover the value without surrounding comments', () => {
 test('lint reports nothing for an empty or whitespace-only file', () => {
   assert.deepEqual(lint('', policyFile, specs), []);
   assert.deepEqual(lint(' \n\t', policyFile, specs), []);
+});
+
+test('AX113 warns on the name with the expected prefix', () => {
+  const xml = '<SpikeArrest name="Limit"><Rate>10ps</Rate></SpikeArrest>';
+  const [issue] = lint(xml, policyFile, specs);
+  assert.equal(issue.severity, 'warning');
+  assert.match(issue.message, /should start with "SA-"/);
+  assert.equal(xml.slice(issue.start, issue.end), 'Limit');
+});
+
+test('AX114 compares bundle policy file names with the name attribute', () => {
+  const xml = '<SpikeArrest name="SA-Rate.v2"><Rate>10ps</Rate></SpikeArrest>';
+  const issues = (file: string) => lintPolicy(xml, file, specs);
+  const policy = (name: string) => path.join(path.dirname(policyFile), name);
+  assert.deepEqual(issues(policy('SA-Rate.v2.xml')), []);
+  assert.deepEqual(issues(policy('sa-rate.v2.xml')).map(issue => issue.rule), ['AX114']);
+  const [mismatch] = issues(policy('SA-Rate.xml'));
+  assert.equal(mismatch.rule, 'AX114');
+  assert.equal(mismatch.severity ?? 'error', 'error');
+  assert.equal(xml.slice(mismatch.start, mismatch.end), 'SA-Rate.v2');
+  assert.deepEqual(issues('/w/standalone/Other.xml'), []);
 });
 
 test('lint omits ignored rules', () => {
