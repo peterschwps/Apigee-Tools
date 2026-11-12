@@ -3,6 +3,7 @@ import policyPrefixes from '../data/policy-prefixes.json';
 import {
   elementMap,
   normalizeEnumValue,
+  type DocumentKind,
   type DocumentSpec,
   type ElementSpec,
   type ValueSpec,
@@ -25,8 +26,6 @@ export type LintIssue = {
   /** Bundle-local file to create for a missing manifest entry. */
   createFile?: string;
 };
-
-export type DocumentKind = DocumentSpec['kind'];
 
 export function classifyDocument(filePath: string): DocumentKind | undefined {
   // The leading slash lets relative paths such as apiproxy/policies/A.xml match like absolute ones.

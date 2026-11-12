@@ -3,13 +3,12 @@ import { minimatch } from 'minimatch';
 import { complete } from './completion';
 import { bundlePolicyNames, lintBundleReferences } from './bundle';
 import { disableDirectiveEdit } from './fixes';
+import { classifyDocument, lint, type LintIssue } from './linter';
 import {
-  classifyDocument,
-  lint,
+  loadSpecifications,
   type DocumentKind,
-  type LintIssue,
-} from './linter';
-import { loadSpecifications, type DocumentSpec } from './spec';
+  type DocumentSpec,
+} from './spec';
 import { rootElementName } from './xml';
 
 const setting = 'apigeeTools';
