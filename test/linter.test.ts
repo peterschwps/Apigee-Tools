@@ -3,25 +3,25 @@ import { test } from 'node:test';
 import { classifyDocument, lint } from '../src/linter';
 import { policyFile, proxyFile, sharedFlowFile, sharedFlowManifest, sharedFlowPolicyFile, specs } from './support';
 
-const flowCallout = (body: string, attributes = 'name="FC"') => `<FlowCallout ${attributes}>${body}</FlowCallout>`;
-const spikeArrest = (body: string) => `<SpikeArrest name="SA"><Rate>10ps</Rate>${body}</SpikeArrest>`;
+const flowCallout = (body: string, attributes = 'name="FC-Test"') => `<FlowCallout ${attributes}>${body}</FlowCallout>`;
+const spikeArrest = (body: string) => `<SpikeArrest name="SA-Test"><Rate>10ps</Rate>${body}</SpikeArrest>`;
 const proxy = (body: string) => `<ProxyEndpoint name="default">${body}</ProxyEndpoint>`;
 
 const cases: { name: string; xml: string; file?: string; rules: string[] }[] = [
   { name: 'valid policy', xml: flowCallout('<SharedFlowBundle>shared</SharedFlowBundle>'), rules: [] },
-  { name: 'AX001 syntax error', xml: '<FlowCallout name="FC">', rules: ['AX001'] },
+  { name: 'AX001 syntax error', xml: '<FlowCallout name="FC-Test">', rules: ['AX001'] },
   { name: 'AX101 unknown element', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle><Bogus/>'), rules: ['AX101'] },
   { name: 'AX101 wrong document root', xml: '<TargetEndpoint name="default"/>', file: proxyFile, rules: ['AX101'] },
   { name: 'AX102 misplaced element', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle><Parameter name="p"/>'), rules: ['AX102'] },
-  { name: 'AX103 unknown attribute', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle>', 'name="FC" bogus="1"'), rules: ['AX103'] },
+  { name: 'AX103 unknown attribute', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle>', 'name="FC-Test" bogus="1"'), rules: ['AX103'] },
   { name: 'AX104 missing attribute and child', xml: flowCallout('', ''), rules: ['AX104', 'AX104'] },
-  { name: 'AX105 invalid enum attribute', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle>', 'name="FC" enabled="yes"'), rules: ['AX105'] },
-  { name: 'AX106 invalid format', xml: '<SpikeArrest name="SA"><Rate>fast</Rate></SpikeArrest>', rules: ['AX106'] },
+  { name: 'AX105 invalid enum attribute', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle>', 'name="FC-Test" enabled="yes"'), rules: ['AX105'] },
+  { name: 'AX106 invalid format', xml: '<SpikeArrest name="SA-Test"><Rate>fast</Rate></SpikeArrest>', rules: ['AX106'] },
   { name: 'AX107 duplicate flow name', xml: proxy('<Flows><Flow name="a"/><Flow name="a"/></Flows>'), file: proxyFile, rules: ['AX107'] },
   { name: 'AX110 compatibility warning', xml: spikeArrest('<UseEffectiveCount>false</UseEffectiveCount>'), rules: ['AX110'] },
   { name: 'comment inside an enum value', xml: spikeArrest('<UseEffectiveCount><!-- x -->true</UseEffectiveCount>'), rules: [] },
   { name: 'CDATA enum value', xml: spikeArrest('<UseEffectiveCount><![CDATA[true]]></UseEffectiveCount>'), rules: [] },
-  { name: 'character reference in an enum attribute', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle>', 'name="FC" enabled="tr&#117;e"'), rules: [] },
+  { name: 'character reference in an enum attribute', xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle>', 'name="FC-Test" enabled="tr&#117;e"'), rules: [] },
   { name: 'valid shared flow', xml: '<SharedFlow name="default"><Step><Condition>true</Condition><Name>P</Name></Step></SharedFlow>', file: sharedFlowFile, rules: [] },
   { name: 'empty shared flow', xml: '<SharedFlow name="default"/>', file: sharedFlowFile, rules: [] },
   { name: 'shared flow step without a name', xml: '<SharedFlow name="default"><Step><Condition>true</Condition></Step></SharedFlow>', file: sharedFlowFile, rules: ['AX104'] },
@@ -31,12 +31,12 @@ const cases: { name: string; xml: string; file?: string; rules: string[] }[] = [
   { name: 'shared flow manifest without SharedFlows', xml: '<SharedFlowBundle name="shared"><Description>d</Description></SharedFlowBundle>', file: sharedFlowManifest, rules: [] },
   { name: 'shared flow manifest with an invalid version', xml: '<SharedFlowBundle name="shared"><ConfigurationVersion majorVersion="5" minorVersion="0"/></SharedFlowBundle>', file: sharedFlowManifest, rules: ['AX105'] },
   { name: 'shared flow manifest without a name', xml: '<SharedFlowBundle><SharedFlows><SharedFlow>default</SharedFlow></SharedFlows></SharedFlowBundle>', file: sharedFlowManifest, rules: ['AX104'] },
-  { name: 'policy in a shared flow bundle', xml: '<SpikeArrest name="SA" bogus="1"><Rate>10ps</Rate></SpikeArrest>', file: sharedFlowPolicyFile, rules: ['AX103'] },
-  { name: 'RaiseFault with an undocumented Properties stub', xml: '<RaiseFault name="RF"><Properties/><FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse></RaiseFault>', rules: ['AX101'] },
-  { name: 'KVM with an undocumented Properties stub', xml: '<KeyValueMapOperations name="K" mapIdentifier="m"><Properties/><Get assignTo="v"><Key><Parameter>k</Parameter></Key></Get><Scope>environment</Scope></KeyValueMapOperations>', rules: ['AX101'] },
-  { name: 'ServiceCallout Verb in the request', xml: '<ServiceCallout name="SC"><Request><Set><Verb>POST</Verb></Set></Request><HTTPTargetConnection><URL>https://example.com</URL></HTTPTargetConnection></ServiceCallout>', rules: [] },
-  { name: 'ServiceCallout Verb in the connection', xml: '<ServiceCallout name="SC"><HTTPTargetConnection><Verb>POST</Verb><URL>https://example.com</URL></HTTPTargetConnection></ServiceCallout>', rules: ['AX101'] },
-  { name: 'comment inside a format value', xml: '<SpikeArrest name="SA"><Rate><!-- per second -->10ps</Rate></SpikeArrest>', rules: [] },
+  { name: 'policy in a shared flow bundle', xml: '<SpikeArrest name="SA-Test" bogus="1"><Rate>10ps</Rate></SpikeArrest>', file: sharedFlowPolicyFile, rules: ['AX103'] },
+  { name: 'RaiseFault with an undocumented Properties stub', xml: '<RaiseFault name="RF-Test"><Properties/><FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse></RaiseFault>', rules: ['AX101'] },
+  { name: 'KVM with an undocumented Properties stub', xml: '<KeyValueMapOperations name="KVM-Test" mapIdentifier="m"><Properties/><Get assignTo="v"><Key><Parameter>k</Parameter></Key></Get><Scope>environment</Scope></KeyValueMapOperations>', rules: ['AX101'] },
+  { name: 'ServiceCallout Verb in the request', xml: '<ServiceCallout name="SC-Test"><Request><Set><Verb>POST</Verb></Set></Request><HTTPTargetConnection><URL>https://example.com</URL></HTTPTargetConnection></ServiceCallout>', rules: [] },
+  { name: 'ServiceCallout Verb in the connection', xml: '<ServiceCallout name="SC-Test"><HTTPTargetConnection><Verb>POST</Verb><URL>https://example.com</URL></HTTPTargetConnection></ServiceCallout>', rules: ['AX101'] },
+  { name: 'comment inside a format value', xml: '<SpikeArrest name="SA-Test"><Rate><!-- per second -->10ps</Rate></SpikeArrest>', rules: [] },
 ];
 
 for (const { name, xml, file, rules } of cases) {

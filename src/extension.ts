@@ -76,6 +76,22 @@ export function activate(context: vscode.ExtensionContext): void {
       action.isPreferred = true;
       actions.push(action);
     }
+    if (issue.remove) {
+      const action = new vscode.CodeAction('Remove policy reference', vscode.CodeActionKind.QuickFix);
+      action.edit = new vscode.WorkspaceEdit();
+      action.edit.replace(document.uri, new vscode.Range(document.positionAt(issue.remove.start), document.positionAt(issue.remove.end)), issue.remove.text);
+      action.diagnostics = [diagnostic];
+      actions.push(action);
+    }
+    if (issue.createFile) {
+      const uri = vscode.Uri.file(issue.createFile);
+      const action = new vscode.CodeAction(`Create policies/${uri.path.split('/').at(-1)}`, vscode.CodeActionKind.QuickFix);
+      action.edit = new vscode.WorkspaceEdit();
+      action.edit.createFile(uri, { ignoreIfExists: true });
+      action.command = { command: 'vscode.open', title: 'Open policy file', arguments: [uri] };
+      action.diagnostics = [diagnostic];
+      actions.push(action);
+    }
     const directive = disableDirectiveEdit(document.getText(), issue.start, issue.rule);
     if (directive) {
       const action = new vscode.CodeAction(`Disable ${issue.rule} for this line`, vscode.CodeActionKind.QuickFix);
@@ -101,9 +117,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const referenceWatcher = vscode.workspace.createFileSystemWatcher('**/{apiproxy,sharedflowbundle}/{policies,targets}/*.xml');
   const resourceWatcher = vscode.workspace.createFileSystemWatcher('**/{apiproxy,sharedflowbundle}/resources/{oas,xsd,wsdl}/*');
-  const refreshEndpoints = () => {
+  const refreshReferences = () => {
     for (const document of vscode.workspace.textDocuments) {
-      if (stepDocuments.has(classifyDocument(document.uri.fsPath))) schedule(document);
+      const kind = classifyDocument(document.uri.fsPath);
+      if (stepDocuments.has(kind) || kind === 'apiProxy' || kind === 'sharedFlowBundle') schedule(document);
     }
   };
   const refreshResourcePolicies = () => {
@@ -115,9 +132,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     referenceWatcher,
     resourceWatcher,
-    referenceWatcher.onDidCreate(refreshEndpoints),
-    referenceWatcher.onDidChange(refreshEndpoints),
-    referenceWatcher.onDidDelete(refreshEndpoints),
+    referenceWatcher.onDidCreate(refreshReferences),
+    referenceWatcher.onDidChange(refreshReferences),
+    referenceWatcher.onDidDelete(refreshReferences),
     resourceWatcher.onDidCreate(refreshResourcePolicies),
     resourceWatcher.onDidChange(refreshResourcePolicies),
     resourceWatcher.onDidDelete(refreshResourcePolicies),

@@ -22,8 +22,86 @@ Install **Apigee Tools** from the [Visual Studio Marketplace](https://marketplac
 | AX109 | Resource absent locally; it may exist at environment scope (warning) |
 | AX110 | Deprecated element or documented X compatibility concern (warning) |
 | AX111 | RouteRule target endpoint missing from the proxy bundle |
+| AX112 | Policy file listed in a proxy or shared flow manifest is missing (warning) |
+| AX113 | Policy name does not use the selected prefix for its type (warning) |
 
 Checks for unknown elements and attributes apply only to complete reviewed contexts. Some references are incomplete or contradictory. A clean result therefore does not prove that Apigee will accept or correctly execute the proxy.
+
+## Policy name prefixes
+
+AX113 checks the policy XML's root `name` attribute against the prefix selected for that policy type, in both proxy and shared flow policies and supported standalone policy XML. Prefixes are case-sensitive and include a hyphen: `AM-SetHeaders` is accepted for AssignMessage; `am-SetHeaders`, `AM_SetHeaders`, and `SA-SetHeaders` are not. File names and `DisplayName` are not checked by this rule.
+
+These prefixes are this linter's convention, not mandatory Apigee syntax. [Google recommends short type prefixes](https://docs.cloud.google.com/apigee/docs/api-platform/fundamentals/best-practices-api-proxy-design-and-development#naming-conventions), but does not define one complete binding list. The selection draws on the [Apigee naming recommendations](https://discuss.google.dev/t/apigee-naming-convention/17403), [apigeelint's catalogue](https://github.com/apigee/apigeelint/blob/main/lib/package/plugins/policyMetaData.json), and documented examples such as [HTTPModifier's HM prefix](https://docs.cloud.google.com/apigee/docs/api-platform/reference/policies/http-modifier-policy). An asterisk marks an additional project choice. Related types may share a prefix.
+
+| Policy root | Prefix |
+| --- | --- |
+| AccessControl | `AC-` |
+| AccessEntity | `AE-` |
+| AssertCondition | `AC-` |
+| AssignMessage | `AM-` |
+| BasicAuthentication | `BA-` |
+| CORS | `CORS-` |
+| DataCapture | `DC-` |
+| DecodeJWS | `JWS-` |
+| DecodeJWT | `JWT-` |
+| DeleteOAuthV2Info | `DOA-` * |
+| ExternalCallout | `EC-` |
+| ExtractVariables | `EV-` |
+| FlowCallout | `FC-` |
+| GenerateJWS | `JWS-` |
+| GenerateJWT | `JWT-` |
+| GenerateSAMLAssertion | `SAML-` |
+| GetOAuthV2Info | `GOA-` * |
+| GraphQL | `GQL-` |
+| HMAC | `HMAC-` |
+| HTTPModifier | `HM-` |
+| IntegrationCallout | `INT-` |
+| InvalidateCache | `IC-` |
+| JavaCallout | `JC-` |
+| Javascript | `JS-` |
+| JSONThreatProtection | `JTP-` |
+| JSONToXML | `J2X-` |
+| KeyValueMapOperations | `KVM-` |
+| LLMTokenQuota | `LTQ-` |
+| LookupCache | `LC-` |
+| MessageLogging | `ML-` |
+| MessageValidation | `MV-` |
+| MonetizationLimitsCheck | `MLC-` * |
+| OASValidation | `OAS-` |
+| OAuthV2 | `OA-` |
+| ParseDialogflowRequest | `PDFR-` |
+| ParsePayload | `PP-` * |
+| PopulateCache | `PC-` |
+| PromptTokenLimit | `PTL-` |
+| PublishMessage | `PM-` |
+| Script (Python) | `PY-` * |
+| Quota | `Q-` |
+| RaiseFault | `RF-` |
+| ReadPropertySet | `RPS-` |
+| RegularExpressionProtection | `RE-` |
+| ResetQuota | `RQ-` |
+| ResponseCache | `RC-` |
+| RevokeOAuthV2 | `OAR-` |
+| SanitizeModelResponse | `SMR-` |
+| SanitizeUserPrompt | `SUP-` |
+| SemanticCacheLookup | `SCL-` |
+| SemanticCachePopulate | `SCP-` |
+| ServiceCallout | `SC-` |
+| SetDialogflowResponse | `SDFR-` |
+| SetIntegrationRequest | `SIR-` |
+| SetOAuthV2Info | `SOA-` * |
+| SpikeArrest | `SA-` |
+| TraceCapture | `TC-` |
+| ValidateSAMLAssertion | `SAML-` |
+| VerifyAPIKey | `VAK-` |
+| VerifyIAM | `VIAM-` |
+| VerifyJWS | `JWS-` |
+| VerifyJWT | `JWT-` |
+| XMLToJSON | `X2J-` |
+| XMLThreatProtection | `XTP-` |
+| XSL | `XSL-` |
+
+Use `--only AX113` in the CLI to find naming warnings, or `--ignore AX113` to suppress them. The extension's `ignore` setting and inline suppression also apply. The quick fix offers suppression; renaming a policy and its references is not automatic.
 
 ## Settings
 
@@ -58,6 +136,8 @@ Use the light bulb or **Ctrl+.** on a diagnostic:
 
 - **Change to "…"** replaces an AX105 value with the single documented value closest to it, such as `flase` with `false`. No fix is offered when no value is close enough or several are equally close; the diagnostic message names the suggestion.
 - **Disable … for this line** inserts the inline suppression comment above the reported line, or extends an existing directive there. It is not offered where a comment cannot be placed, such as inside a multi-line start tag or on the XML declaration line.
+- **Remove policy reference** removes an AX112 manifest entry, including its line when it contains only that entry.
+- **Create policies/….xml** creates and opens an empty file for an AX112 manifest entry. Existing files are preserved. Configure the policy in the new file; this fix checks file existence only.
 
 ## Command line
 
@@ -70,6 +150,12 @@ npx @peterschwps/apigee-tools path/to/apiproxy path/to/sharedflowbundle
 In GitHub Actions, run `npx --yes @peterschwps/apigee-tools apiproxy` after `actions/setup-node`. From a checkout of this repository, `npm ci && npm run build && node dist/cli.js path/to/bundles` runs the same command.
 
 Directories are searched recursively for XML under `apiproxy` and `sharedflowbundle`, skipping `node_modules` and `.git`; files given explicitly are always linted. Each finding is printed as `file:line:column: severity rule message`, followed by a summary on standard error. Use `--ignore AX110,AX101` like the `ignore` setting; inline `apigee-tools disable` comments also apply. `--version` prints the installed version.
+
+Use `--only AX112` to report only missing policy files listed in manifests, or `--only AX108,AX112` to include missing flow policy references. Both `--only` and `--ignore` accept comma-separated IDs or repeated options, ignoring case. IDs match exactly; `--ignore` and inline suppression take precedence. The summary and exit code reflect only the reported findings.
+
+```sh
+npx @peterschwps/apigee-tools --only AX112 path/to/bundles
+```
 
 | Exit code | Meaning |
 | --- | --- |

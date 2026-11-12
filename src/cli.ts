@@ -7,16 +7,20 @@ import { lintBundleReferences } from './bundle';
 import { classifyDocument, lint } from './linter';
 import { loadSpecifications } from './spec';
 
-const usage = `Usage: apigee-tools [--ignore AX110,AX101] [--version] [path ...]
+const usage = `Usage: apigee-tools [--only AX108,AX112] [--ignore AX110,AX101] [--version] [path ...]
 
 Lints Apigee X proxy and shared flow bundle XML below each path (default: the current directory).
 Files given explicitly are linted even outside apiproxy or sharedflowbundle directories.
+
+--only reports only the specified rule IDs. --only and --ignore accept comma-separated
+IDs or repeated options, ignoring case. --ignore and inline suppression take precedence.
+Counts and exit codes reflect the reported findings.
 
 Exit codes: 0 without errors, 1 when errors were found, 2 for invalid usage or unreadable paths.`;
 
 const argumentConfig = {
   allowPositionals: true,
-  options: { ignore: { type: 'string', multiple: true }, help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' } },
+  options: { only: { type: 'string', multiple: true }, ignore: { type: 'string', multiple: true }, help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' } },
 } as const;
 
 export type Output = { out: (line: string) => void; err: (line: string) => void };
@@ -47,6 +51,10 @@ function count(amount: number, noun: string): string {
   return `${amount} ${noun}${amount === 1 ? '' : 's'}`;
 }
 
+function ruleIds(values: string[] = []): Set<string> {
+  return new Set(values.flatMap(value => value.split(',')).map(rule => rule.trim().toUpperCase()).filter(Boolean));
+}
+
 function position(xml: string, offset: number): string {
   const lines = xml.slice(0, offset).split('\n');
   return `${lines.length}:${lines[lines.length - 1].length + 1}`;
@@ -67,7 +75,12 @@ export async function run(args: string[], output: Output = consoleOutput): Promi
     output.out(version);
     return 0;
   }
-  const ignored = new Set((options.values.ignore ?? []).flatMap(value => value.split(',')).map(rule => rule.trim().toUpperCase()).filter(Boolean));
+  const ignored = ruleIds(options.values.ignore);
+  const only = options.values.only ? ruleIds(options.values.only) : undefined;
+  if (only?.size === 0) {
+    output.err(`Provide at least one rule ID with --only.\n\n${usage}`);
+    return 2;
+  }
 
   // Collect files first so an unreadable path fails before any findings are printed.
   const files = new Set<string>();
@@ -86,7 +99,8 @@ export async function run(args: string[], output: Output = consoleOutput): Promi
   for (const file of [...files].sort()) {
     const xml = await readFile(file, 'utf8');
     const bundleIssues = (await lintBundleReferences(xml, file)).filter(issue => !ignored.has(issue.rule));
-    const issues = [...lint(xml, file, specs, ignored), ...bundleIssues].sort((a, b) => a.start - b.start);
+    const issues = [...lint(xml, file, specs, ignored), ...bundleIssues]
+      .filter(issue => !only || only.has(issue.rule)).sort((a, b) => a.start - b.start);
     for (const issue of issues) {
       const severity = issue.severity ?? 'error';
       if (severity === 'error') errors++;
