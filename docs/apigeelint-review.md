@@ -27,6 +27,7 @@ All 91 plugins received catalogue triage. This does **not** mean every candidate
 
 ## Confirmed differences and corrections
 
+- AX114 implements the file-name/root-name comparison covered by PO006 as an error. It compares the full file stem, including internal dots and case, for recognized bundle-local policies. Standalone XML is exempt; missing names and malformed XML remain separate diagnostics.
 - AX113 now checks one selected, case-sensitive prefix followed by a hyphen for each supported policy type. This is explicitly linter advice, not an Apigee schema error. Unlike PO007, it does not accept multiple aliases, dot separators, or whole-name patterns. Six additional project choices cover types without a selected source-backed abbreviation; see the [prefix table](index.md#policy-name-prefixes). No upstream implementation is copied.
 - `PO030` warns about multiple cache-expiry children, while Google documents precedence. Keep the current conservative choice model rather than adding an exclusivity error.
 - `PO038` warns about omitted KVM map names, while Google's [KVM reference](https://docs.cloud.google.com/apigee/docs/api-platform/reference/policies/key-value-map-operations-policy) defines the `kvmap` default. The same reference deprecates ExclusiveCache: add an AX110 warning, not an invented nested contract.

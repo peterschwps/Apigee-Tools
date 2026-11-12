@@ -39,6 +39,8 @@ Both `--only` and `--ignore` accept comma-separated IDs or repeated options, ign
 
 Use `--only AX113` to find policy names missing the selected prefix for their type (for example, `AM-` for AssignMessage). These case-sensitive prefixes are a linter convention, not mandatory Apigee syntax; see the [complete prefix table](https://github.com/peterschwps/Apigee-Tools/blob/main/docs/index.md#policy-name-prefixes).
 
+Use `--only AX114` to find bundle-local policy files whose names without `.xml` differ from the root `name` attribute, including case. AX114 is an error and causes exit code 1; standalone policy XML is exempt. See the [file-name rule](https://github.com/peterschwps/Apigee-Tools/blob/main/docs/index.md#policy-file-names).
+
 ## GitHub Actions
 
 ```yaml

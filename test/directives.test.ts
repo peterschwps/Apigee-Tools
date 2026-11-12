@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { lintBundleReferences } from '../src/bundle';
-import { lint } from '../src/linter';
+import { lint as lintPolicy } from '../src/linter';
 import { policyFile, proxyFile, specs } from './support';
+
+// These directive tests use a generic file path unrelated to the policy's name.
+const lint: typeof lintPolicy = (xml, filePath, specs, ignored = new Set()) =>
+  lintPolicy(xml, filePath, specs, new Set([...ignored, 'AX114']));
 
 function raiseFault(...lines: string[]): string {
   return ['<RaiseFault name="RF-Test">', ...lines, '<FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>', '</RaiseFault>'].join('\n');

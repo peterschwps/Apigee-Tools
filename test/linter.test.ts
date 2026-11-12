@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyDocument, lint } from '../src/linter';
+import { classifyDocument, lint as lintPolicy } from '../src/linter';
 import { policyFile, proxyFile, sharedFlowFile, sharedFlowManifest, sharedFlowPolicyFile, specs } from './support';
+
+// These XML contract tests use generic file paths unrelated to each policy's name.
+const lint: typeof lintPolicy = (xml, filePath, specs, ignored = new Set()) =>
+  lintPolicy(xml, filePath, specs, new Set([...ignored, 'AX114']));
 
 const flowCallout = (body: string, attributes = 'name="FC-Test"') => `<FlowCallout ${attributes}>${body}</FlowCallout>`;
 const spikeArrest = (body: string) => `<SpikeArrest name="SA-Test"><Rate>10ps</Rate>${body}</SpikeArrest>`;
