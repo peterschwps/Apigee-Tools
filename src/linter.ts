@@ -209,13 +209,22 @@ function lintDocument(parsed: XmlDocument, filePath: string, specs: DocumentSpec
   const knownNames = new Set(spec.elements.map(element => element.path.slice(element.path.lastIndexOf('/') + 1)));
   checkNode(root, rules, knownNames, `/${root.name}`, !parsed.syntaxIssues.length, issues);
   if (spec.kind === 'policy' && !parsed.syntaxIssues.length) {
-    const prefix = (policyPrefixes.prefixes as Record<string, string>)[root.name];
     const name = root.attributes.find(attribute => attribute.name === 'name');
-    if (prefix && name?.value?.trim() && !name.value.startsWith(prefix)
-      && name.valueStart !== undefined && name.valueEnd !== undefined) {
-      issues.push({ rule: 'AX113', severity: 'warning',
-        message: `Policy name "${name.value}" should start with "${prefix}" for <${root.name}>.`,
-        start: name.valueStart, end: name.valueEnd, source: policyPrefixes.source });
+    if (name?.value?.trim() && name.valueStart !== undefined && name.valueEnd !== undefined) {
+      const prefix = (policyPrefixes.prefixes as Record<string, string>)[root.name];
+      if (prefix && !name.value.startsWith(prefix)) {
+        issues.push({ rule: 'AX113', severity: 'warning',
+          message: `Policy name "${name.value}" should start with "${prefix}" for <${root.name}>.`,
+          start: name.valueStart, end: name.valueEnd, source: policyPrefixes.source });
+      }
+      if (kind === 'policy') {
+        const fileName = filePath.replace(/\\/g, '/').split('/').at(-1)!;
+        if (fileName.slice(0, -'.xml'.length) !== name.value) {
+          issues.push({ rule: 'AX114',
+            message: `Policy file name "${fileName}" does not match policy name "${name.value}".`,
+            start: name.valueStart, end: name.valueEnd, source: policyPrefixes.source });
+        }
+      }
     }
   }
   return issues;

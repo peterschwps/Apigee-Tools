@@ -24,6 +24,7 @@ Install **Apigee Tools** from the [Visual Studio Marketplace](https://marketplac
 | AX111 | RouteRule target endpoint missing from the proxy bundle |
 | AX112 | Policy file listed in a proxy or shared flow manifest is missing (warning) |
 | AX113 | Policy name does not use the selected prefix for its type (warning) |
+| AX114 | Policy file name does not match its root name attribute (error) |
 
 Checks for unknown elements and attributes apply only to complete reviewed contexts. Some references are incomplete or contradictory. A clean result therefore does not prove that Apigee will accept or correctly execute the proxy.
 
@@ -102,6 +103,14 @@ These prefixes are this linter's convention, not mandatory Apigee syntax. [Googl
 | XSL | `XSL-` |
 
 Use `--only AX113` in the CLI to find naming warnings, or `--ignore AX113` to suppress them. The extension's `ignore` setting and inline suppression also apply. The quick fix offers suppression; renaming a policy and its references is not automatic.
+
+## Policy file names
+
+AX114 requires the file name without its final `.xml` extension to exactly match the decoded `name` attribute of the policy root, including case. For example, `AM-SetHeaders.xml` with `name="AM-Other"` produces an error on the attribute value. Dots within the name are preserved. This follows [Google's naming conventions](https://docs.cloud.google.com/apigee/docs/api-platform/fundamentals/best-practices-api-proxy-design-and-development#naming-conventions).
+
+The rule applies only to recognized policies directly under `apiproxy/policies/` or `sharedflowbundle/policies/`. Standalone policy XML is exempt. Syntax errors and missing or empty names are left to existing checks. AX113 and AX114 may both be reported for the same name.
+
+Use `--only AX114` to find mismatches. These are errors and cause CLI exit code 1 unless suppressed through `--ignore AX114`, the extension's `ignore` setting, or an inline directive. The quick fix offers suppression; files, attributes, and references are not renamed automatically.
 
 ## Settings
 
