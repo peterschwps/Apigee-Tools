@@ -62,6 +62,29 @@ test('cli --ignore suppresses rules', async () => {
   assert.deepEqual(result.out, []);
 });
 
+test('cli --only reports selected rules and derives the exit code from them', async () => {
+  const both = [path.join(workspace, 'errors'), path.join(workspace, 'warnings')];
+  const warnings = await capture(['--only', 'ax110', ...both]);
+  assert.equal(warnings.code, 0);
+  assert.deepEqual(warnings.out.map(line => line.split(' ')[2]), ['AX110']);
+  assert.equal(warnings.err[0], '2 files checked: 0 errors, 1 warning.');
+  const repeated = await capture(['--only', 'AX105', '--only', 'AX110', ...both]);
+  assert.equal(repeated.code, 1);
+  assert.deepEqual(repeated.out.map(line => line.split(' ')[2]), ['AX105', 'AX110']);
+});
+
+test('cli --ignore takes precedence over --only', async () => {
+  const result = await capture(['--only', 'AX105,AX110', '--ignore', 'AX105', path.join(workspace, 'errors')]);
+  assert.equal(result.code, 0);
+  assert.deepEqual(result.out, []);
+});
+
+test('cli --only without rule IDs exits 2', async () => {
+  const result = await capture(['--only', ' , ']);
+  assert.equal(result.code, 2);
+  assert.match(result.err[0], /^Provide at least one rule ID with --only\./);
+});
+
 test('cli lints an explicitly given file', async () => {
   assert.equal((await capture([invalidPolicy])).code, 1);
 });
