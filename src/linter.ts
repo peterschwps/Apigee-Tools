@@ -1,5 +1,7 @@
 import { isIP } from 'node:net';
-import policyPrefixes from '../data/policy-prefixes.json';
+import policyPrefixData from '../data/policy-prefixes.json';
+import { applyDirectives } from './directives';
+import { closestValue, type TextEdit } from './fixes';
 import {
   elementMap,
   normalizeEnumValue,
@@ -8,16 +10,18 @@ import {
   type ElementSpec,
   type ValueSpec,
 } from './spec';
-import { applyDirectives } from './directives';
-import { closestValue, type TextEdit } from './fixes';
 import { parseXml, type XmlDocument, type XmlNode } from './xml';
 
+/** Describes a finding; offsets refer to the linted document. */
 export type LintIssue = {
+  /** Rule ID such as `AX105`. */
   rule: string;
   message: string;
   start: number;
   end: number;
+  /** Link to the documentation the finding is based on. */
   source?: string;
+  /** Severity of the finding; absent means `error`. */
   severity?: 'error' | 'warning';
   /** Documented value that likely replaces a mistyped one. */
   replacement?: string;
@@ -27,378 +31,88 @@ export type LintIssue = {
   createFile?: string;
 };
 
+/** Holds what the element checks of one document share. */
+type CheckContext = {
+  /** Element specifications by path. */
+  elements: ReadonlyMap<string, ElementSpec>;
+  /** Names of all documented elements, to tell misplaced from unknown ones. */
+  knownNames: ReadonlySet<string>;
+  /** Whether to check required and repeated content. */
+  checkContent: boolean;
+  issues: LintIssue[];
+};
+
+// Bundle locations of the document kinds; the first matching pattern wins
+const documentLocations: readonly [RegExp, DocumentKind][] = [
+  [/\/(?:apiproxy|sharedflowbundle)\/policies\/[^/]+\.xml$/, 'policy'],
+  [/\/apiproxy\/proxies\/[^/]+\.xml$/, 'proxyEndpoint'],
+  [/\/apiproxy\/targets\/[^/]+\.xml$/, 'targetEndpoint'],
+  [/\/apiproxy\/integration-endpoints\/[^/]+\.xml$/, 'integrationEndpoint'],
+  [/\/apiproxy\/[^/]+\.xml$/, 'apiProxy'],
+  [/\/sharedflowbundle\/sharedflows\/[^/]+\.xml$/, 'sharedFlow'],
+  [/\/sharedflowbundle\/[^/]+\.xml$/, 'sharedFlowBundle'],
+];
+
+// Root elements of the document kinds that allow only one root
+const expectedRoots: Partial<Record<DocumentKind, string>> = {
+  apiProxy: 'APIProxy',
+  proxyEndpoint: 'ProxyEndpoint',
+  targetEndpoint: 'TargetEndpoint',
+  integrationEndpoint: 'IntegrationEndpoint',
+  sharedFlowBundle: 'SharedFlowBundle',
+  sharedFlow: 'SharedFlow',
+};
+
+// Selected policy name prefixes and the naming conventions they are based on
+const policyPrefixes: Readonly<Record<string, string>> =
+  policyPrefixData.prefixes;
+const namingConventions = policyPrefixData.source;
+
+/** Classifies a file by its location in an API proxy or shared flow bundle. */
 export function classifyDocument(filePath: string): DocumentKind | undefined {
-  // The leading slash lets relative paths such as apiproxy/policies/A.xml match like absolute ones.
+  // A leading slash lets relative paths match like absolute ones
   const normalized = `/${filePath.replace(/\\/g, '/').toLowerCase()}`;
-  if (/\/(?:apiproxy|sharedflowbundle)\/policies\/[^/]+\.xml$/.test(normalized))
-    return 'policy';
-  if (/\/apiproxy\/proxies\/[^/]+\.xml$/.test(normalized))
-    return 'proxyEndpoint';
-  if (/\/apiproxy\/targets\/[^/]+\.xml$/.test(normalized))
-    return 'targetEndpoint';
-  if (/\/apiproxy\/integration-endpoints\/[^/]+\.xml$/.test(normalized))
-    return 'integrationEndpoint';
-  if (/\/apiproxy\/[^/]+\.xml$/.test(normalized)) return 'apiProxy';
-  if (/\/sharedflowbundle\/sharedflows\/[^/]+\.xml$/.test(normalized))
-    return 'sharedFlow';
-  if (/\/sharedflowbundle\/[^/]+\.xml$/.test(normalized))
-    return 'sharedFlowBundle';
-  return undefined;
+  return documentLocations.find(([pattern]) => pattern.test(normalized))?.[1];
 }
 
+/**
+ * Returns the specification of a root element, looked up within the document
+ * kind of the file's location or, for standalone files, among all kinds.
+ */
 export function chooseSpec(
   filePath: string,
   rootName: string,
-  specs: DocumentSpec[],
+  specs: readonly DocumentSpec[],
 ): DocumentSpec | undefined {
   const kind = classifyDocument(filePath);
-  if (kind)
-    return specs.find(spec => spec.kind === kind && spec.root === rootName);
-  return specs.find(spec => spec.root === rootName);
-}
-
-function valueIssue(
-  value: string,
-  rule: ValueSpec,
-  start: number,
-  end: number,
-  source: string,
-): LintIssue | undefined {
-  if (rule.allowTemplate && /\{[^{}]+\}/.test(value)) return undefined;
-  if (
-    rule.kind === 'enum' &&
-    rule.values &&
-    !rule.values.some(
-      candidate =>
-        normalizeEnumValue(candidate, rule) === normalizeEnumValue(value, rule),
-    )
-  ) {
-    const replacement = closestValue(value, rule.values, text =>
-      normalizeEnumValue(text, rule),
-    );
-    const hint = replacement ? ` Did you mean "${replacement}"?` : '';
-    return {
-      rule: 'AX105',
-      message: `Expected one of: ${rule.values.join(', ')}.${hint}`,
-      start,
-      end,
-      source,
-      replacement,
-    };
-  }
-  if (
-    rule.kind === 'format' &&
-    rule.pattern &&
-    !new RegExp(rule.pattern).test(value)
-  ) {
-    return {
-      rule: 'AX106',
-      message: rule.format || 'Value does not match the documented format.',
-      start,
-      end,
-      source,
-    };
-  }
-  if (rule.kind === 'format' && rule.formatType === 'ip' && isIP(value) === 0) {
-    return {
-      rule: 'AX106',
-      message: rule.format || 'Value is not a valid IP address.',
-      start,
-      end,
-      source,
-    };
-  }
-  if (rule.warningValues?.[value]) {
-    return {
-      rule: 'AX110',
-      message: rule.warningValues[value],
-      start,
-      end,
-      source,
-      severity: 'warning',
-    };
-  }
-  return undefined;
-}
-
-function checkNode(
-  node: XmlNode,
-  rules: Map<string, ElementSpec>,
-  knownNames: ReadonlySet<string>,
-  path: string,
-  checkRequired: boolean,
-  issues: LintIssue[],
-): void {
-  const definition = rules.get(path);
-  if (!definition) return;
-  const attributes = definition.attributes || {};
-  const presentAttributes = new Set(
-    node.attributes.map(attribute => attribute.name),
+  return specs.find(
+    spec => spec.root === rootName && (!kind || spec.kind === kind),
   );
-  if (definition.warning) {
-    issues.push({
-      rule: 'AX110',
-      message: definition.warning,
-      start: node.nameStart,
-      end: node.nameEnd,
-      source: definition.source,
-      severity: 'warning',
-    });
-  }
+}
 
-  for (const attribute of node.attributes) {
-    const attributeRule = attributes[attribute.name];
-    if (!attributeRule) {
-      if (
-        definition.complete &&
-        !definition.allowAnyAttributes &&
-        attribute.name !== 'xmlns' &&
-        !attribute.name.startsWith('xmlns:')
-      ) {
-        issues.push({
-          rule: 'AX103',
-          message: `Unknown attribute "${attribute.name}" on <${node.name}>.`,
-          start: attribute.start,
-          end: attribute.end,
-          source: definition.source,
-        });
-      }
-      continue;
-    }
-    if (
-      attribute.value !== undefined &&
-      attribute.valueStart !== undefined &&
-      attribute.valueEnd !== undefined
-    ) {
-      const issue = valueIssue(
-        attribute.value,
-        attributeRule,
-        attribute.valueStart,
-        attribute.valueEnd,
-        attributeRule.source || definition.source,
-      );
-      if (issue) issues.push(issue);
-    }
-  }
-
-  if (checkRequired) {
-    for (const [name, attribute] of Object.entries(attributes)) {
-      if (attribute.required && !presentAttributes.has(name)) {
-        issues.push({
-          rule: 'AX104',
-          message: `Missing required attribute "${name}" on <${node.name}>.`,
-          start: node.nameStart,
-          end: node.nameEnd,
-          source: attribute.source || definition.source,
-        });
-      }
-    }
-    for (const child of definition.requiredChildren || []) {
-      if (!node.children.some(item => item.name === child)) {
-        issues.push({
-          rule: 'AX104',
-          message: `Missing required <${child}> inside <${node.name}>.`,
-          start: node.nameStart,
-          end: node.nameEnd,
-          source: definition.source,
-        });
-      }
-    }
-    for (const group of definition.childGroups || []) {
-      const matching = node.children.filter(child =>
-        group.children.includes(child.name),
-      );
-      if (group.min !== undefined && matching.length < group.min) {
-        issues.push({
-          rule: 'AX107',
-          message: `Expected at least ${group.min} of: ${group.children.join(', ')}.`,
-          start: node.nameStart,
-          end: node.nameEnd,
-          source: group.source,
-        });
-      }
-      if (group.max !== undefined && matching.length > group.max) {
-        const excess = matching[group.max];
-        issues.push({
-          rule: 'AX107',
-          message: `Expected at most ${group.max} of: ${group.children.join(', ')}.`,
-          start: excess.nameStart,
-          end: excess.nameEnd,
-          source: group.source,
-        });
-      }
-    }
-    for (const group of definition.attributeGroups || []) {
-      const matching = node.attributes.filter(attribute =>
-        group.attributes.includes(attribute.name),
-      );
-      if (group.min !== undefined && matching.length < group.min) {
-        issues.push({
-          rule: 'AX107',
-          message: `Expected at least ${group.min} of attributes: ${group.attributes.join(', ')}.`,
-          start: node.nameStart,
-          end: node.nameEnd,
-          source: group.source,
-        });
-      }
-      if (group.max !== undefined && matching.length > group.max) {
-        const excess = matching[group.max];
-        issues.push({
-          rule: 'AX107',
-          message: `Expected at most ${group.max} of attributes: ${group.attributes.join(', ')}.`,
-          start: excess.start,
-          end: excess.end,
-          source: group.source,
-        });
-      }
-    }
-    for (const name of definition.singleChildren || []) {
-      const matching = node.children.filter(child => child.name === name);
-      if (matching.length > 1) {
-        issues.push({
-          rule: 'AX107',
-          message: `Only one <${name}> is allowed inside <${node.name}>.`,
-          start: matching[1].nameStart,
-          end: matching[1].nameEnd,
-          source: definition.source,
-        });
-      }
-    }
-    const unique = definition.uniqueChildAttribute;
-    if (unique) {
-      const seen = new Set<string>();
-      for (const child of node.children.filter(
-        item => item.name === unique.child,
-      )) {
-        const value = child.attributes.find(
-          attribute => attribute.name === unique.attribute,
-        );
-        if (!value?.value) continue;
-        if (seen.has(value.value)) {
-          issues.push({
-            rule: 'AX107',
-            message: `Duplicate ${unique.child} ${unique.attribute} "${value.value}".`,
-            start: value.valueStart ?? child.nameStart,
-            end: value.valueEnd ?? child.nameEnd,
-            source: unique.source,
-          });
-        }
-        seen.add(value.value);
-      }
-    }
-    const textLimit = definition.childTextLimit;
-    if (textLimit) {
-      let count = 0;
-      for (const child of node.children.filter(
-        item => item.name === textLimit.child,
-      )) {
-        for (const nested of child.children.filter(
-          item => item.name === textLimit.descendant,
-        )) {
-          if (nested.text?.value !== textLimit.value) continue;
-          count++;
-          if (count > textLimit.max) {
-            issues.push({
-              rule: 'AX107',
-              message: `At most ${textLimit.max} <${textLimit.child}> may have <${textLimit.descendant}>${textLimit.value}</${textLimit.descendant}>.`,
-              start: nested.nameStart,
-              end: nested.nameEnd,
-              source: textLimit.source,
-            });
-          }
-        }
-      }
-    }
-    for (const condition of definition.conditionalRequiredChildren || []) {
-      let selected: XmlNode | undefined = node;
-      for (const name of condition.selector)
-        selected = selected?.children.find(child => child.name === name);
-      if (!selected) continue;
-      if (
-        condition.values &&
-        !condition.values.includes(selected.text?.value ?? '')
-      )
-        continue;
-      if (!node.children.some(child => child.name === condition.required)) {
-        issues.push({
-          rule: 'AX104',
-          message: `<${condition.required}> is required when <${condition.selector.join('/')}> has this value.`,
-          start: node.nameStart,
-          end: node.nameEnd,
-          source: condition.source,
-        });
-      }
-    }
-    for (const conflict of definition.conflicts || []) {
-      const first = conflict.attribute
-        ? node.attributes.find(
-            attribute => attribute.name === conflict.attribute,
-          )
-        : node.children.find(child => child.name === conflict.child);
-      const second = node.children.find(
-        child => child.name === conflict.withChild,
-      );
-      if (first && second) {
-        const label = conflict.attribute
-          ? `attribute "${conflict.attribute}"`
-          : `<${conflict.child}>`;
-        issues.push({
-          rule: 'AX107',
-          message: `${label} cannot be combined with <${conflict.withChild}>.`,
-          start: second.nameStart,
-          end: second.nameEnd,
-          source: conflict.source,
-        });
-      }
-    }
-  }
-
-  const selector = definition.textByAttribute;
-  const selectorValue = node.attributes.find(
-    attribute => attribute.name === selector?.attribute,
-  )?.value;
-  const textRule = selectorValue
-    ? selector?.values[selectorValue] || definition.text
-    : definition.text;
-  if (textRule && node.text) {
-    const issue = valueIssue(
-      node.text.value,
-      textRule,
-      node.text.start,
-      node.text.end,
-      definition.source,
-    );
-    if (issue) issues.push(issue);
-  }
-
-  for (const child of node.children) {
-    const childPath = `${path}/${child.name}`;
-    if (
-      !rules.has(childPath) &&
-      definition.complete &&
-      !definition.allowAnyChildren &&
-      !(definition.children || []).includes(child.name)
-    ) {
-      const misplaced = knownNames.has(child.name);
-      issues.push({
-        rule: misplaced ? 'AX102' : 'AX101',
-        message: misplaced
-          ? `<${child.name}> is not allowed inside <${node.name}>.`
-          : `Unknown element <${child.name}> inside <${node.name}>.`,
-        start: child.nameStart,
-        end: child.nameEnd,
-        source: definition.source,
-      });
-    } else {
-      checkNode(child, rules, knownNames, childPath, checkRequired, issues);
-    }
-  }
+/**
+ * Lints a document against the reviewed specifications. Inline directives and
+ * `ignoredRules` suppress findings.
+ */
+export function lint(
+  xml: string,
+  filePath: string,
+  specs: readonly DocumentSpec[],
+  ignoredRules: ReadonlySet<string> = new Set(),
+): LintIssue[] {
+  // A newly created file is empty until its root element is typed
+  if (!xml.trim()) return [];
+  const parsed = parseXml(xml);
+  const issues = lintDocument(parsed, filePath, specs);
+  return applyDirectives(xml, parsed.comments, issues).filter(
+    issue => !ignoredRules.has(issue.rule),
+  );
 }
 
 function lintDocument(
   parsed: XmlDocument,
   filePath: string,
-  specs: DocumentSpec[],
+  specs: readonly DocumentSpec[],
 ): LintIssue[] {
   const issues: LintIssue[] = parsed.syntaxIssues.map(issue => ({
     rule: 'AX001',
@@ -406,90 +120,486 @@ function lintDocument(
   }));
   const root = parsed.root;
   if (!root) return issues;
+
+  // Report a wrong root where the file's location determines the document type
   const kind = classifyDocument(filePath);
   const spec = chooseSpec(filePath, root.name, specs);
   if (!spec) {
-    const expectedRoot: Partial<Record<DocumentKind, string>> = {
-      apiProxy: 'APIProxy',
-      proxyEndpoint: 'ProxyEndpoint',
-      targetEndpoint: 'TargetEndpoint',
-      integrationEndpoint: 'IntegrationEndpoint',
-      sharedFlowBundle: 'SharedFlowBundle',
-      sharedFlow: 'SharedFlow',
-    };
-    if (kind && expectedRoot[kind]) {
+    const expectedRoot = kind && expectedRoots[kind];
+    if (expectedRoot) {
       issues.push({
         rule: 'AX101',
-        message: `Expected <${expectedRoot[kind]}> as the document root.`,
-        start: root.nameStart,
-        end: root.nameEnd,
+        message: `Expected <${expectedRoot}> as the document root.`,
+        ...nameRange(root),
       });
     }
     return issues;
   }
-  const rules = elementMap(spec);
-  const knownNames = new Set(
-    spec.elements.map(element =>
-      element.path.slice(element.path.lastIndexOf('/') + 1),
-    ),
+
+  // Check the element tree
+  // Content checks need a complete document, so syntax errors skip them
+  const valid = !parsed.syntaxIssues.length;
+  const knownNames = spec.elements.map(element =>
+    element.path.slice(element.path.lastIndexOf('/') + 1),
   );
-  checkNode(
-    root,
-    rules,
-    knownNames,
-    `/${root.name}`,
-    !parsed.syntaxIssues.length,
+  checkElement(root, `/${root.name}`, {
+    elements: elementMap(spec),
+    knownNames: new Set(knownNames),
+    checkContent: valid,
     issues,
-  );
-  if (spec.kind === 'policy' && !parsed.syntaxIssues.length) {
-    const name = root.attributes.find(attribute => attribute.name === 'name');
-    if (
-      name?.value?.trim() &&
-      name.valueStart !== undefined &&
-      name.valueEnd !== undefined
-    ) {
-      const prefix = (policyPrefixes.prefixes as Record<string, string>)[
-        root.name
-      ];
-      if (prefix && !name.value.startsWith(prefix)) {
+  });
+  if (spec.kind === 'policy' && valid) {
+    issues.push(...policyNameIssues(root, filePath, kind));
+  }
+  return issues;
+}
+
+/**
+ * Checks an element and, recursively, its children against the specification
+ * at `path`. Elements without a specification are not checked.
+ */
+function checkElement(
+  node: XmlNode,
+  path: string,
+  context: CheckContext,
+): void {
+  const spec = context.elements.get(path);
+  if (!spec) return;
+  const issues = context.issues;
+  if (spec.warning) {
+    issues.push({
+      rule: 'AX110',
+      message: spec.warning,
+      ...nameRange(node),
+      source: spec.source,
+      severity: 'warning',
+    });
+  }
+  issues.push(...attributeIssues(node, spec));
+  if (context.checkContent) issues.push(...contentIssues(node, spec));
+  const issue = textIssue(node, spec);
+  if (issue) issues.push(issue);
+
+  // Report children the specification does not allow and check the others
+  for (const child of node.children) {
+    const childPath = `${path}/${child.name}`;
+    const allowed =
+      context.elements.has(childPath) ||
+      !spec.complete ||
+      spec.allowAnyChildren ||
+      (spec.children ?? []).includes(child.name);
+    if (allowed) {
+      checkElement(child, childPath, context);
+      continue;
+    }
+
+    // A documented element in another place is misplaced rather than unknown
+    const misplaced = context.knownNames.has(child.name);
+    issues.push({
+      rule: misplaced ? 'AX102' : 'AX101',
+      message: misplaced
+        ? `<${child.name}> is not allowed inside <${node.name}>.`
+        : `Unknown element <${child.name}> inside <${node.name}>.`,
+      ...nameRange(child),
+      source: spec.source,
+    });
+  }
+}
+
+/** Reports unknown attributes and invalid attribute values. */
+function attributeIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
+  const issues: LintIssue[] = [];
+  const attributeSpecs = spec.attributes ?? {};
+  for (const attribute of node.attributes) {
+    const attributeSpec = attributeSpecs[attribute.name];
+
+    // Report unknown attributes; namespace declarations are always allowed
+    if (!attributeSpec) {
+      const namespace =
+        attribute.name === 'xmlns' || attribute.name.startsWith('xmlns:');
+      if (spec.complete && !spec.allowAnyAttributes && !namespace) {
         issues.push({
-          rule: 'AX113',
-          severity: 'warning',
-          message: `Policy name "${name.value}" should start with "${prefix}" for <${root.name}>.`,
-          start: name.valueStart,
-          end: name.valueEnd,
-          source: policyPrefixes.source,
+          rule: 'AX103',
+          message: `Unknown attribute "${attribute.name}" on <${node.name}>.`,
+          start: attribute.start,
+          end: attribute.end,
+          source: spec.source,
         });
       }
-      if (kind === 'policy') {
-        const fileName = filePath.replace(/\\/g, '/').split('/').at(-1)!;
-        if (fileName.slice(0, -'.xml'.length) !== name.value) {
-          issues.push({
-            rule: 'AX114',
-            message: `Policy file name "${fileName}" does not match policy name "${name.value}".`,
-            start: name.valueStart,
-            end: name.valueEnd,
-            source: policyPrefixes.source,
-          });
-        }
+      continue;
+    }
+
+    // Check the value of documented attributes
+    const { value, valueStart, valueEnd } = attribute;
+    if (
+      value === undefined ||
+      valueStart === undefined ||
+      valueEnd === undefined
+    ) {
+      continue;
+    }
+    const issue = valueIssue(
+      value,
+      attributeSpec,
+      valueStart,
+      valueEnd,
+      attributeSpec.source || spec.source,
+    );
+    if (issue) issues.push(issue);
+  }
+  return issues;
+}
+
+/**
+ * Checks the text of a leaf element, against the constraint selected by an
+ * attribute value when the specification defines one.
+ */
+function textIssue(node: XmlNode, spec: ElementSpec): LintIssue | undefined {
+  const selector = spec.textByAttribute;
+  const selectorValue = node.attributes.find(
+    attribute => attribute.name === selector?.attribute,
+  )?.value;
+  const selected = selectorValue ? selector?.values[selectorValue] : undefined;
+  const textSpec = selected || spec.text;
+  if (!textSpec || !node.text) return undefined;
+  return valueIssue(
+    node.text.value,
+    textSpec,
+    node.text.start,
+    node.text.end,
+    spec.source,
+  );
+}
+
+/** Checks a value against its documented constraint. */
+function valueIssue(
+  value: string,
+  spec: ValueSpec,
+  start: number,
+  end: number,
+  source: string,
+): LintIssue | undefined {
+  // Message templates are only resolved at runtime
+  if (spec.allowTemplate && /\{[^{}]+\}/.test(value)) return undefined;
+
+  // Report undocumented enum values with the closest documented value
+  if (spec.kind === 'enum' && spec.values) {
+    const normalized = normalizeEnumValue(value, spec);
+    const documented = spec.values.some(
+      candidate => normalizeEnumValue(candidate, spec) === normalized,
+    );
+    if (!documented) {
+      const replacement = closestValue(value, spec.values, text =>
+        normalizeEnumValue(text, spec),
+      );
+      const hint = replacement ? ` Did you mean "${replacement}"?` : '';
+      return {
+        rule: 'AX105',
+        message: `Expected one of: ${spec.values.join(', ')}.${hint}`,
+        start,
+        end,
+        source,
+        replacement,
+      };
+    }
+  }
+
+  // Report values in the wrong format
+  if (
+    spec.kind === 'format' &&
+    spec.pattern &&
+    !new RegExp(spec.pattern).test(value)
+  ) {
+    return {
+      rule: 'AX106',
+      message: spec.format || 'Value does not match the documented format.',
+      start,
+      end,
+      source,
+    };
+  }
+  if (spec.kind === 'format' && spec.formatType === 'ip' && isIP(value) === 0) {
+    return {
+      rule: 'AX106',
+      message: spec.format || 'Value is not a valid IP address.',
+      start,
+      end,
+      source,
+    };
+  }
+
+  // Warn about documented values with known caveats
+  if (spec.warningValues?.[value]) {
+    return {
+      rule: 'AX110',
+      message: spec.warningValues[value],
+      start,
+      end,
+      source,
+      severity: 'warning',
+    };
+  }
+  return undefined;
+}
+
+/** Reports missing, repeated, and conflicting content of an element. */
+function contentIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
+  return [
+    ...requiredIssues(node, spec),
+    ...groupIssues(node, spec),
+    ...singleChildIssues(node, spec),
+    ...duplicateAttributeIssues(node, spec),
+    ...textLimitIssues(node, spec),
+    ...conditionalIssues(node, spec),
+    ...conflictIssues(node, spec),
+  ];
+}
+
+/** Reports missing required attributes and children (AX104). */
+function requiredIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
+  const issues: LintIssue[] = [];
+  const present = new Set(node.attributes.map(attribute => attribute.name));
+  for (const [name, attribute] of Object.entries(spec.attributes ?? {})) {
+    if (attribute.required && !present.has(name)) {
+      issues.push({
+        rule: 'AX104',
+        message: `Missing required attribute "${name}" on <${node.name}>.`,
+        ...nameRange(node),
+        source: attribute.source || spec.source,
+      });
+    }
+  }
+  for (const child of spec.requiredChildren ?? []) {
+    if (!node.children.some(item => item.name === child)) {
+      issues.push({
+        rule: 'AX104',
+        message: `Missing required <${child}> inside <${node.name}>.`,
+        ...nameRange(node),
+        source: spec.source,
+      });
+    }
+  }
+  return issues;
+}
+
+/**
+ * Reports groups of children or attributes outside their count limits; an
+ * excess is reported at the first item beyond the maximum (AX107).
+ */
+function groupIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const group of spec.childGroups ?? []) {
+    const names = group.children.join(', ');
+    const matching = node.children.filter(child =>
+      group.children.includes(child.name),
+    );
+    if (group.min !== undefined && matching.length < group.min) {
+      issues.push({
+        rule: 'AX107',
+        message: `Expected at least ${group.min} of: ${names}.`,
+        ...nameRange(node),
+        source: group.source,
+      });
+    }
+    if (group.max !== undefined && matching.length > group.max) {
+      issues.push({
+        rule: 'AX107',
+        message: `Expected at most ${group.max} of: ${names}.`,
+        ...nameRange(matching[group.max]),
+        source: group.source,
+      });
+    }
+  }
+  for (const group of spec.attributeGroups ?? []) {
+    const names = group.attributes.join(', ');
+    const matching = node.attributes.filter(attribute =>
+      group.attributes.includes(attribute.name),
+    );
+    if (group.min !== undefined && matching.length < group.min) {
+      issues.push({
+        rule: 'AX107',
+        message: `Expected at least ${group.min} of attributes: ${names}.`,
+        ...nameRange(node),
+        source: group.source,
+      });
+    }
+    if (group.max !== undefined && matching.length > group.max) {
+      const excess = matching[group.max];
+      issues.push({
+        rule: 'AX107',
+        message: `Expected at most ${group.max} of attributes: ${names}.`,
+        start: excess.start,
+        end: excess.end,
+        source: group.source,
+      });
+    }
+  }
+  return issues;
+}
+
+/** Reports the second occurrence of children allowed only once (AX107). */
+function singleChildIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const name of spec.singleChildren ?? []) {
+    const matching = node.children.filter(child => child.name === name);
+    if (matching.length > 1) {
+      issues.push({
+        rule: 'AX107',
+        message: `Only one <${name}> is allowed inside <${node.name}>.`,
+        ...nameRange(matching[1]),
+        source: spec.source,
+      });
+    }
+  }
+  return issues;
+}
+
+/** Reports repeated values of an attribute that must be unique (AX107). */
+function duplicateAttributeIssues(
+  node: XmlNode,
+  spec: ElementSpec,
+): LintIssue[] {
+  const unique = spec.uniqueChildAttribute;
+  if (!unique) return [];
+  const issues: LintIssue[] = [];
+  const seen = new Set<string>();
+  for (const child of node.children) {
+    if (child.name !== unique.child) continue;
+    const attribute = child.attributes.find(
+      item => item.name === unique.attribute,
+    );
+    if (!attribute?.value) continue;
+    if (seen.has(attribute.value)) {
+      issues.push({
+        rule: 'AX107',
+        message: `Duplicate ${unique.child} ${unique.attribute} "${attribute.value}".`,
+        start: attribute.valueStart ?? child.nameStart,
+        end: attribute.valueEnd ?? child.nameEnd,
+        source: unique.source,
+      });
+    }
+    seen.add(attribute.value);
+  }
+  return issues;
+}
+
+/** Reports each child text beyond the documented maximum (AX107). */
+function textLimitIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
+  const limit = spec.childTextLimit;
+  if (!limit) return [];
+  const issues: LintIssue[] = [];
+  let count = 0;
+  for (const child of node.children) {
+    if (child.name !== limit.child) continue;
+    for (const nested of child.children) {
+      if (nested.name !== limit.descendant) continue;
+      if (nested.text?.value !== limit.value) continue;
+      count++;
+      if (count > limit.max) {
+        issues.push({
+          rule: 'AX107',
+          message: `At most ${limit.max} <${limit.child}> may have <${limit.descendant}>${limit.value}</${limit.descendant}>.`,
+          ...nameRange(nested),
+          source: limit.source,
+        });
       }
     }
   }
   return issues;
 }
 
-export function lint(
-  xml: string,
+/** Reports children that the value of another element requires (AX104). */
+function conditionalIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const condition of spec.conditionalRequiredChildren ?? []) {
+    // Follow the selector path to the element that decides
+    let selected: XmlNode | undefined = node;
+    for (const name of condition.selector) {
+      selected = selected?.children.find(child => child.name === name);
+    }
+    if (!selected) continue;
+    const value = selected.text?.value ?? '';
+    if (condition.values && !condition.values.includes(value)) continue;
+
+    if (!node.children.some(child => child.name === condition.required)) {
+      issues.push({
+        rule: 'AX104',
+        message: `<${condition.required}> is required when <${condition.selector.join('/')}> has this value.`,
+        ...nameRange(node),
+        source: condition.source,
+      });
+    }
+  }
+  return issues;
+}
+
+/** Reports content combined with a conflicting child (AX107). */
+function conflictIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const conflict of spec.conflicts ?? []) {
+    const first = conflict.attribute
+      ? node.attributes.find(attribute => attribute.name === conflict.attribute)
+      : node.children.find(child => child.name === conflict.child);
+    const second = node.children.find(
+      child => child.name === conflict.withChild,
+    );
+    if (!first || !second) continue;
+    const label = conflict.attribute
+      ? `attribute "${conflict.attribute}"`
+      : `<${conflict.child}>`;
+    issues.push({
+      rule: 'AX107',
+      message: `${label} cannot be combined with <${conflict.withChild}>.`,
+      ...nameRange(second),
+      source: conflict.source,
+    });
+  }
+  return issues;
+}
+
+/**
+ * Checks a policy name against the prefix for its type (AX113) and, inside a
+ * bundle, against the file name (AX114).
+ */
+function policyNameIssues(
+  root: XmlNode,
   filePath: string,
-  specs: DocumentSpec[],
-  ignoredRules: ReadonlySet<string> = new Set(),
+  kind: DocumentKind | undefined,
 ): LintIssue[] {
-  // A newly created file is empty until its root element is typed.
-  if (!xml.trim()) return [];
-  const parsed = parseXml(xml);
-  return applyDirectives(
-    xml,
-    parsed.comments,
-    lintDocument(parsed, filePath, specs),
-  ).filter(issue => !ignoredRules.has(issue.rule));
+  const name = root.attributes.find(attribute => attribute.name === 'name');
+  if (!name?.value?.trim()) return [];
+  if (name.valueStart === undefined || name.valueEnd === undefined) return [];
+  const issues: LintIssue[] = [];
+  const prefix = policyPrefixes[root.name];
+  if (prefix && !name.value.startsWith(prefix)) {
+    issues.push({
+      rule: 'AX113',
+      severity: 'warning',
+      message: `Policy name "${name.value}" should start with "${prefix}" for <${root.name}>.`,
+      start: name.valueStart,
+      end: name.valueEnd,
+      source: namingConventions,
+    });
+  }
+
+  // Compare with the file name without its extension
+  // Standalone files are exempt, since only bundles tie file names to policies
+  if (kind === 'policy') {
+    const fileName = filePath.replace(/\\/g, '/').split('/').at(-1)!;
+    if (fileName.slice(0, -'.xml'.length) !== name.value) {
+      issues.push({
+        rule: 'AX114',
+        message: `Policy file name "${fileName}" does not match policy name "${name.value}".`,
+        start: name.valueStart,
+        end: name.valueEnd,
+        source: namingConventions,
+      });
+    }
+  }
+  return issues;
+}
+
+/** Returns the range of an element name, where element-level issues appear. */
+function nameRange(node: XmlNode): { start: number; end: number } {
+  return { start: node.nameStart, end: node.nameEnd };
 }
