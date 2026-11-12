@@ -44,12 +44,12 @@ jobs:
       - name: Package the extension and the CLI
         run: |
           mkdir -p release
-          npx vsce package --no-dependencies --pre-release --out "release/apigee-x-linter-${{ steps.version.outputs.version }}.vsix"
+          npx vsce package --no-dependencies --pre-release --out "release/apigee-tools-${{ steps.version.outputs.version }}.vsix"
           npm run package:npm
           npm pack ./.cache/npm-package --pack-destination release
       # Validate the exact publish command before approval; npm reads paths without ./ as GitHub repositories.
       - name: Dry-run the npm publication
-        run: npm publish "./release/peterschwps-apigee-x-linter-${{ steps.version.outputs.version }}.tgz" --access public --dry-run
+        run: npm publish "./release/peterschwps-apigee-tools-${{ steps.version.outputs.version }}.tgz" --access public --dry-run
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-      url: https://marketplace.visualstudio.com/items?itemName=peterschwps.apigee-x-linter
+      url: https://marketplace.visualstudio.com/items?itemName=peterschwps.apigee-tools
     permissions:
       id-token: write
     steps:
@@ -75,7 +75,7 @@ jobs:
         with:
           node-version: 24
       - name: Publish with trusted publishing
-        run: npx --yes @vscode/vsce@4.0.0 publish --oidc --pre-release --skip-duplicate --packagePath "release/apigee-x-linter-${{ needs.build.outputs.version }}.vsix"
+        run: npx --yes @vscode/vsce@4.0.0 publish --oidc --pre-release --skip-duplicate --packagePath "release/apigee-tools-${{ needs.build.outputs.version }}.vsix"
 
   publish-openvsx:
     name: Publish to Open VSX
@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-      url: https://open-vsx.org/extension/peterschwps/apigee-x-linter
+      url: https://open-vsx.org/extension/peterschwps/apigee-tools
     permissions:
       id-token: write
     steps:
@@ -96,7 +96,7 @@ jobs:
         with:
           node-version: 24
       - name: Publish with trusted publishing
-        run: npx --yes ovsx@1.2.0 publish --trusted-publishing --pre-release --skip-duplicate --packagePath "release/apigee-x-linter-${{ needs.build.outputs.version }}.vsix"
+        run: npx --yes ovsx@1.2.0 publish --trusted-publishing --pre-release --skip-duplicate --packagePath "release/apigee-tools-${{ needs.build.outputs.version }}.vsix"
 
   publish-npm:
     name: Publish to npm
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-      url: https://www.npmjs.com/package/@peterschwps/apigee-x-linter
+      url: https://www.npmjs.com/package/@peterschwps/apigee-tools
     permissions:
       id-token: write
     steps:
@@ -120,7 +120,7 @@ jobs:
       - name: Require npm 11.5.1 or later for trusted publishing
         run: node -e "const [a,b,c]=process.argv[1].split('.').map(Number); if (a<11 || a===11 && (b<5 || b===5 && c<1)) { console.error('::error::npm ' + process.argv[1] + ' is too old for trusted publishing.'); process.exit(1); }" "$(npm --version)"
       - name: Publish with trusted publishing
-        run: npm publish "./release/peterschwps-apigee-x-linter-${{ needs.build.outputs.version }}.tgz" --access public
+        run: npm publish "./release/peterschwps-apigee-tools-${{ needs.build.outputs.version }}.tgz" --access public
 
   github-assets:
     name: Attach the VSIX to the GitHub release
@@ -133,6 +133,6 @@ jobs:
         with:
           name: release
           path: release
-      - run: gh release upload "$GITHUB_REF_NAME" "release/apigee-x-linter-${{ needs.build.outputs.version }}.vsix" --clobber --repo "$GITHUB_REPOSITORY"
+      - run: gh release upload "$GITHUB_REF_NAME" "release/apigee-tools-${{ needs.build.outputs.version }}.vsix" --clobber --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ github.token }}

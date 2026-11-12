@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import * as vscode from 'vscode';
 
-const source = 'Apigee X Linter';
+const source = 'Apigee Tools';
 
 function workspaceFile(...segments: string[]): vscode.Uri {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -63,7 +63,7 @@ const tests: [string, () => Promise<void>][] = [
     const diagnostic = await waitFor('AX101', () => linterDiagnostic(document.uri, 'AX101'));
     const action = await quickFix(document, diagnostic, 'Disable AX101 for this line');
     assert.ok(await vscode.workspace.applyEdit(action.edit!));
-    assert.match(document.getText(), /\n {2}<!-- apigee-x-linter disable=AX101 -->\n {2}<Bogus\/>/);
+    assert.match(document.getText(), /\n {2}<!-- apigee-tools disable=AX101 -->\n {2}<Bogus\/>/);
     await waitFor('AX101 to clear', () => !linterDiagnostic(document.uri, 'AX101') && true);
   }],
   ['completes bundle policy names inside Step/Name', async () => {

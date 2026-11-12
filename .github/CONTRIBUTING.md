@@ -1,4 +1,4 @@
-# Contributing to Apigee X Linter
+# Contributing to Apigee Tools
 
 Thanks for your interest in contributing!
 
@@ -7,8 +7,8 @@ Thanks for your interest in contributing!
 Requires Node.js 22 or later.
 
 ```bash
-git clone https://github.com/peterschwps/Apigee-X-Linter.git
-cd Apigee-X-Linter
+git clone https://github.com/peterschwps/Apigee-Tools.git
+cd Apigee-Tools
 npm ci
 npm run check
 npm test

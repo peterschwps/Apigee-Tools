@@ -75,7 +75,7 @@ async function fetchHtml(url: string): Promise<string> {
       const response = await fetch(englishUrl, {
         headers: {
           'accept-language': 'en-US,en;q=0.9',
-          'user-agent': 'apigee-x-linter-docs-inventory/0.1 (public documentation review)',
+          'user-agent': 'apigee-tools-docs-inventory/0.1 (public documentation review)',
         },
         signal: AbortSignal.timeout(30000),
       });

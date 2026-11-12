@@ -49,15 +49,15 @@ test('disable edit inserts an indented directive that suppresses the issue', () 
   const xml = '<RaiseFault name="RF">\n  <Properties/>\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\n</RaiseFault>';
   const issue = firstIssue(xml);
   const edited = applyEdit(xml, disableDirectiveEdit(xml, issue.start, issue.rule));
-  assert.match(edited, /\n {2}<!-- apigee-x-linter disable=AX101 -->\n {2}<Properties\/>/);
+  assert.match(edited, /\n {2}<!-- apigee-tools disable=AX101 -->\n {2}<Properties\/>/);
   assert.deepEqual(lint(edited, policyFile, specs), []);
 });
 
 test('disable edit extends a directive on the previous line', () => {
-  const xml = '<RaiseFault name="RF">\n  <!-- apigee-x-linter disable=AX103 -->\n  <Properties/>\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\n</RaiseFault>';
+  const xml = '<RaiseFault name="RF">\n  <!-- apigee-tools disable=AX103 -->\n  <Properties/>\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\n</RaiseFault>';
   const issue = firstIssue(xml);
   const edited = applyEdit(xml, disableDirectiveEdit(xml, issue.start, issue.rule));
-  assert.match(edited, /<!-- apigee-x-linter disable=AX103,AX101 -->\n {2}<Properties\/>/);
+  assert.match(edited, /<!-- apigee-tools disable=AX103,AX101 -->\n {2}<Properties\/>/);
   assert.deepEqual(lint(edited, policyFile, specs), []);
   assert.equal(disableDirectiveEdit(edited, edited.indexOf('Properties'), 'AX101'), undefined);
 });
@@ -65,7 +65,7 @@ test('disable edit extends a directive on the previous line', () => {
 test('disable edit preserves CRLF line endings', () => {
   const xml = '<RaiseFault name="RF">\r\n  <Properties/>\r\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\r\n</RaiseFault>';
   const edit = disableDirectiveEdit(xml, xml.indexOf('Properties'), 'AX101');
-  assert.equal(edit?.text, '  <!-- apigee-x-linter disable=AX101 -->\r\n');
+  assert.equal(edit?.text, '  <!-- apigee-tools disable=AX101 -->\r\n');
 });
 
 test('disable edit refuses positions inside a start tag or on the XML declaration', () => {

@@ -1,10 +1,10 @@
-# Apigee X Linter
+# Apigee Tools
 
-Apigee X Linter provides XML diagnostics and context-aware completion in VS Code. The current alpha is for feedback; it does not replace deployment validation.
+Apigee Tools provides XML diagnostics and context-aware completion in VS Code. The current alpha is for feedback; it does not replace deployment validation.
 
 ## Getting started
 
-Install **Apigee X Linter** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=peterschwps.apigee-x-linter) or [Open VSX](https://open-vsx.org/extension/peterschwps/apigee-x-linter), then open a proxy or shared flow bundle. XML files under `apiproxy` or `sharedflowbundle` are recognized by their location; supported policy roots can also be recognized in standalone XML files. Use the Problems panel for diagnostics and Ctrl+Space for suggestions. Inside `<Step><Name>`, suggestions list the policies of the same bundle.
+Install **Apigee Tools** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=peterschwps.apigee-tools) or [Open VSX](https://open-vsx.org/extension/peterschwps/apigee-tools), then open a proxy or shared flow bundle. XML files under `apiproxy` or `sharedflowbundle` are recognized by their location; supported policy roots can also be recognized in standalone XML files. Use the Problems panel for diagnostics and Ctrl+Space for suggestions. Inside `<Step><Name>`, suggestions list the policies of the same bundle.
 
 ## Diagnostics
 
@@ -31,9 +31,9 @@ Use VS Code settings or a workspace settings file:
 
 ```json
 {
-  "apigeeXLinter.enabled": true,
-  "apigeeXLinter.exclude": ["**/generated/**"],
-  "apigeeXLinter.ignore": []
+  "apigeeTools.enabled": true,
+  "apigeeTools.exclude": ["**/generated/**"],
+  "apigeeTools.ignore": []
 }
 ```
 
@@ -45,7 +45,7 @@ To suppress diagnostics at one location, put a comment on the line before the re
 
 ```xml
 <RaiseFault name="RF-Fault">
-  <!-- apigee-x-linter disable=AX101 -->
+  <!-- apigee-tools disable=AX101 -->
   <Properties/>
 </RaiseFault>
 ```
@@ -61,15 +61,15 @@ Use the light bulb or **Ctrl+.** on a diagnostic:
 
 ## Command line
 
-The same checks run outside VS Code with the `@peterschwps/apigee-x-linter` package. It requires Node.js 20.1 or later:
+The same checks run outside VS Code with the `@peterschwps/apigee-tools` package. It requires Node.js 20.1 or later:
 
 ```sh
-npx @peterschwps/apigee-x-linter path/to/apiproxy path/to/sharedflowbundle
+npx @peterschwps/apigee-tools path/to/apiproxy path/to/sharedflowbundle
 ```
 
-In GitHub Actions, run `npx --yes @peterschwps/apigee-x-linter apiproxy` after `actions/setup-node`. From a checkout of this repository, `npm ci && npm run build && node dist/cli.js path/to/bundles` runs the same command.
+In GitHub Actions, run `npx --yes @peterschwps/apigee-tools apiproxy` after `actions/setup-node`. From a checkout of this repository, `npm ci && npm run build && node dist/cli.js path/to/bundles` runs the same command.
 
-Directories are searched recursively for XML under `apiproxy` and `sharedflowbundle`, skipping `node_modules` and `.git`; files given explicitly are always linted. Each finding is printed as `file:line:column: severity rule message`, followed by a summary on standard error. Use `--ignore AX110,AX101` like the `ignore` setting; inline `apigee-x-linter disable` comments also apply. `--version` prints the installed version.
+Directories are searched recursively for XML under `apiproxy` and `sharedflowbundle`, skipping `node_modules` and `.git`; files given explicitly are always linted. Each finding is printed as `file:line:column: severity rule message`, followed by a summary on standard error. Use `--ignore AX110,AX101` like the `ignore` setting; inline `apigee-tools disable` comments also apply. `--version` prints the installed version.
 
 | Exit code | Meaning |
 | --- | --- |

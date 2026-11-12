@@ -24,7 +24,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Extension version from the Extensions view, or output of `apigee-x-linter --version`.
+      description: Extension version from the Extensions view, or output of `apigee-tools --version`.
       placeholder: "0.1.0"
     validations:
       required: true
@@ -67,7 +67,7 @@ body:
     id: actual
     attributes:
       label: Actual behavior
-      description: Include the diagnostic message, CLI output, or error from the "Apigee X Linter" output channel.
+      description: Include the diagnostic message, CLI output, or error from the "Apigee Tools" output channel.
     validations:
       required: true
 

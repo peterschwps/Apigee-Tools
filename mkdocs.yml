@@ -1,7 +1,7 @@
-site_name: Apigee X Linter
+site_name: Apigee Tools
 site_description: XML diagnostics and completion for Apigee X proxy bundles.
-repo_url: https://github.com/peterschwps/apigee-x-linter
-repo_name: peterschwps/apigee-x-linter
+repo_url: https://github.com/peterschwps/apigee-tools
+repo_name: peterschwps/apigee-tools
 
 theme:
   name: material

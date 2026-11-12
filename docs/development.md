@@ -9,7 +9,7 @@ Run `npm ci`, `npm run check`, `npm test`, and `npm run build`. Press F5 to laun
 - `src/linter.ts` validates XML without depending on VS Code.
 - `src/completion.ts` generates suggestions for incomplete XML.
 - `src/bundle.ts` checks saved bundle-local references.
-- `src/directives.ts` applies inline `apigee-x-linter disable` comments.
+- `src/directives.ts` applies inline `apigee-tools disable` comments.
 - `src/fixes.ts` computes quick-fix edits without depending on VS Code.
 - `src/extension.ts` handles VS Code settings, events, and diagnostics.
 - `src/cli.ts` runs the same checks from the command line; it is built to `dist/cli.js` and excluded from the VSIX. `npm run package:npm` stages the npm package of the CLI and checks its contents and the installed command; CI runs this check on every push.

@@ -20,8 +20,8 @@ async function main(): Promise<void> {
   const suite = path.join(outputDirectory, 'suite.js');
   await build({ entryPoints: [path.join(__dirname, 'suite.ts')], bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], outfile: suite, logLevel: 'warning' });
 
-  const workspace = await mkdtemp(path.join(tmpdir(), 'apigee-x-linter-integration-'));
-  const userData = await mkdtemp(path.join(tmpdir(), 'apigee-x-linter-user-data-'));
+  const workspace = await mkdtemp(path.join(tmpdir(), 'apigee-tools-integration-'));
+  const userData = await mkdtemp(path.join(tmpdir(), 'apigee-tools-user-data-'));
   try {
     for (const [file, content] of Object.entries(workspaceFiles)) {
       await mkdir(path.dirname(path.join(workspace, file)), { recursive: true });

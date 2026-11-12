@@ -20,7 +20,7 @@ async function capture(args: string[]) {
 }
 
 before(async () => {
-  workspace = await mkdtemp(path.join(tmpdir(), 'apigee-x-linter-cli-'));
+  workspace = await mkdtemp(path.join(tmpdir(), 'apigee-tools-cli-'));
   const policies = path.join(workspace, 'errors', 'apiproxy', 'policies');
   await mkdir(policies, { recursive: true });
   invalidPolicy = path.join(policies, 'FC.xml');
@@ -76,7 +76,7 @@ test('cli exits 2 for unreadable paths and invalid options', async () => {
 test('cli --help prints usage', async () => {
   const result = await capture(['--help']);
   assert.equal(result.code, 0);
-  assert.match(result.out[0], /^Usage: apigee-x-linter/);
+  assert.match(result.out[0], /^Usage: apigee-tools/);
 });
 
 test('cli --version prints the package version', async () => {

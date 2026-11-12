@@ -1,6 +1,6 @@
 # Security Policy
 
 If you discover a security vulnerability, please report it
-**privately** via GitHub: <https://github.com/peterschwps/Apigee-X-Linter/security/advisories/new>.
+**privately** via GitHub: <https://github.com/peterschwps/Apigee-Tools/security/advisories/new>.
 
 Do not file public issues for security problems.

@@ -1,6 +1,6 @@
 {
-  "name": "apigee-x-linter",
-  "displayName": "Apigee X Linter",
+  "name": "apigee-tools",
+  "displayName": "Apigee Tools",
   "publisher": "peterschwps",
   "description": "Diagnostics, completion, and quick fixes for Apigee X proxy and shared flow XML, based on Google's documentation.",
   "version": "0.1.2",
@@ -9,11 +9,11 @@
   "icon": "images/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/peterschwps/Apigee-X-Linter.git"
+    "url": "https://github.com/peterschwps/Apigee-Tools.git"
   },
-  "homepage": "https://github.com/peterschwps/Apigee-X-Linter#readme",
+  "homepage": "https://github.com/peterschwps/Apigee-Tools#readme",
   "bugs": {
-    "url": "https://github.com/peterschwps/Apigee-X-Linter/issues"
+    "url": "https://github.com/peterschwps/Apigee-Tools/issues"
   },
   "engines": {
     "vscode": "^1.96.0"
@@ -35,21 +35,21 @@
   ],
   "main": "./dist/extension.js",
   "bin": {
-    "apigee-x-linter": "dist/cli.js"
+    "apigee-tools": "dist/cli.js"
   },
   "activationEvents": [
     "onLanguage:xml"
   ],
   "contributes": {
     "configuration": {
-      "title": "Apigee X Linter",
+      "title": "Apigee Tools",
       "properties": {
-        "apigeeXLinter.enabled": {
+        "apigeeTools.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable Apigee X XML diagnostics and completions."
         },
-        "apigeeXLinter.exclude": {
+        "apigeeTools.exclude": {
           "type": "array",
           "items": {
             "type": "string"
@@ -57,7 +57,7 @@
           "default": [],
           "description": "Glob patterns for Apigee X XML files to exclude."
         },
-        "apigeeXLinter.ignore": {
+        "apigeeTools.ignore": {
           "type": "array",
           "items": {
             "type": "string"

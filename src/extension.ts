@@ -7,8 +7,8 @@ import { classifyDocument, lint, type DocumentKind, type LintIssue } from './lin
 import { loadSpecifications, type DocumentSpec } from './spec';
 import { rootElementName } from './xml';
 
-const setting = 'apigeeXLinter';
-const diagnosticSource = 'Apigee X Linter';
+const setting = 'apigeeTools';
+const diagnosticSource = 'Apigee Tools';
 const delayMs = 250;
 const stepDocuments: ReadonlySet<DocumentKind | undefined> = new Set(['proxyEndpoint', 'targetEndpoint', 'sharedFlow']);
 
@@ -26,7 +26,7 @@ function applicable(document: vscode.TextDocument, specs: DocumentSpec[]): boole
 export function activate(context: vscode.ExtensionContext): void {
   const specs = loadSpecifications(context.extensionPath);
   const diagnostics = vscode.languages.createDiagnosticCollection('apigee-x');
-  const log = vscode.window.createOutputChannel('Apigee X Linter', { log: true });
+  const log = vscode.window.createOutputChannel('Apigee Tools', { log: true });
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   // Published issues keep fix data that VS Code diagnostics cannot carry.
   const published = new Map<string, { version: number; issues: LintIssue[] }>();

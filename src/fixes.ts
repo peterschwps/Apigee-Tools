@@ -48,10 +48,10 @@ export function disableDirectiveEdit(xml: string, offset: number, rule: string):
     const match = /^([ \t]*)<!--(.*)-->[ \t]*$/.exec(previous);
     const rules = match && directiveRules(match[2]);
     if (rules?.includes(rule)) return undefined;
-    if (match && rules) edit = { start: previousStart, end: previousStart + previous.length, text: `${match[1]}<!-- apigee-x-linter disable=${[...rules, rule].join(',')} -->` };
+    if (match && rules) edit = { start: previousStart, end: previousStart + previous.length, text: `${match[1]}<!-- apigee-tools disable=${[...rules, rule].join(',')} -->` };
   }
   const lineEnding = xml.includes('\r\n') ? '\r\n' : '\n';
-  edit ??= { start: lineStart, end: lineStart, text: `${/^[ \t]*/.exec(line)?.[0] ?? ''}<!-- apigee-x-linter disable=${rule} -->${lineEnding}` };
+  edit ??= { start: lineStart, end: lineStart, text: `${/^[ \t]*/.exec(line)?.[0] ?? ''}<!-- apigee-tools disable=${rule} -->${lineEnding}` };
 
   // Reject placements inside markup, where the text would not parse as the intended comment.
   const before = parseXml(xml);

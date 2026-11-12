@@ -6,7 +6,7 @@ import path from 'node:path';
 // The VS Code manifest cannot carry a scoped name, so the npm package gets its own manifest.
 const root = path.resolve(__dirname, '..');
 const stageDirectory = path.join(root, '.cache', 'npm-package');
-const repository = 'https://github.com/peterschwps/Apigee-X-Linter';
+const repository = 'https://github.com/peterschwps/Apigee-Tools';
 const expectedFiles = /^(?:package\.json|README\.md|LICENSE|dist\/cli\.js|data\/reviewed\/[a-z0-9-]+\.json)$/;
 
 type RootManifest = { version: string; license: string; keywords: string[] };
@@ -25,7 +25,7 @@ async function stage(): Promise<void> {
   await cp(path.join(root, 'npm', 'README.md'), path.join(stageDirectory, 'README.md'));
   await cp(path.join(root, 'LICENSE'), path.join(stageDirectory, 'LICENSE'));
   const packageManifest = {
-    name: '@peterschwps/apigee-x-linter',
+    name: '@peterschwps/apigee-tools',
     version: manifest.version,
     description: 'Command-line linter for Apigee X proxy and shared flow bundle XML, based on reviewed Google documentation.',
     license: manifest.license,
@@ -33,7 +33,7 @@ async function stage(): Promise<void> {
     homepage: `${repository}#readme`,
     bugs: { url: `${repository}/issues` },
     repository: { type: 'git', url: `git+${repository}.git` },
-    bin: { 'apigee-x-linter': 'dist/cli.js' },
+    bin: { 'apigee-tools': 'dist/cli.js' },
     files: ['dist/cli.js', 'data/reviewed'],
     engines: { node: '>=20.1' },
     publishConfig: { access: 'public' },
@@ -44,7 +44,7 @@ async function stage(): Promise<void> {
 
 async function check(): Promise<void> {
   await stage();
-  const workspace = await mkdtemp(path.join(tmpdir(), 'apigee-x-linter-npm-'));
+  const workspace = await mkdtemp(path.join(tmpdir(), 'apigee-tools-npm-'));
   try {
     // Verify the published file list before anything else.
     const packed = exec('npm', ['pack', '--json', '--pack-destination', workspace], stageDirectory);
@@ -59,7 +59,7 @@ async function check(): Promise<void> {
     await writeFile(path.join(project, 'package.json'), '{ "private": true }\n');
     const installed = exec('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', path.join(workspace, tarball.filename)], project);
     if (installed.status !== 0) throw new Error(`npm install failed:\n${installed.stderr}`);
-    const command = path.join(project, 'node_modules', '.bin', process.platform === 'win32' ? 'apigee-x-linter.cmd' : 'apigee-x-linter');
+    const command = path.join(project, 'node_modules', '.bin', process.platform === 'win32' ? 'apigee-tools.cmd' : 'apigee-tools');
     const invalid = path.join(project, 'apiproxy', 'policies', 'FC.xml');
     await mkdir(path.dirname(invalid), { recursive: true });
     await writeFile(invalid, '<FlowCallout name="FC" enabled="flase"><SharedFlowBundle>s</SharedFlowBundle></FlowCallout>\n');

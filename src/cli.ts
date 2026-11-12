@@ -7,7 +7,7 @@ import { lintBundleReferences } from './bundle';
 import { classifyDocument, lint } from './linter';
 import { loadSpecifications } from './spec';
 
-const usage = `Usage: apigee-x-linter [--ignore AX110,AX101] [--version] [path ...]
+const usage = `Usage: apigee-tools [--ignore AX110,AX101] [--version] [path ...]
 
 Lints Apigee X proxy and shared flow bundle XML below each path (default: the current directory).
 Files given explicitly are linted even outside apiproxy or sharedflowbundle directories.

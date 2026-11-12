@@ -1,7 +1,7 @@
 import type { LintIssue } from './linter';
 import type { XmlComment } from './xml';
 
-const directivePattern = /^\s*apigee-x-linter\s+disable\s*=\s*([A-Za-z]{2}[0-9]{3}(?:\s*,\s*[A-Za-z]{2}[0-9]{3})*)\s*$/;
+const directivePattern = /^\s*apigee-tools\s+disable\s*=\s*([A-Za-z]{2}[0-9]{3}(?:\s*,\s*[A-Za-z]{2}[0-9]{3})*)\s*$/;
 
 /** Returns the upper-case rule IDs of a directive comment body, or nothing for other comments. */
 export function directiveRules(commentText: string): string[] | undefined {
@@ -15,7 +15,7 @@ function lineOf(xml: string, offset: number): number {
 }
 
 /**
- * Drops issues on the line following an `<!-- apigee-x-linter disable=ID[,ID...] -->` comment,
+ * Drops issues on the line following an `<!-- apigee-tools disable=ID[,ID...] -->` comment,
  * matching apigeelint's line-based directive semantics.
  */
 export function applyDirectives(xml: string, comments: readonly XmlComment[], issues: LintIssue[]): LintIssue[] {
