@@ -5,12 +5,7 @@ import {
   disableDirectiveEdit,
   type TextEdit,
 } from '../src/fixes';
-import { lint as lintPolicy } from '../src/linter';
-import { policyFile, specs } from './support';
-
-// These text-edit tests use a generic file path unrelated to the policy's name.
-const lint: typeof lintPolicy = (xml, filePath, specs, ignored = new Set()) =>
-  lintPolicy(xml, filePath, specs, new Set([...ignored, 'AX114']));
+import { lintIgnoringFileName as lint, policyFile, specs } from './support';
 
 function applyEdit(xml: string, edit: TextEdit | undefined): string {
   assert.ok(edit, 'expected an edit');

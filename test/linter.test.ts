@@ -3,6 +3,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { classifyDocument, lint as lintPolicy } from '../src/linter';
 import {
+  lintIgnoringFileName as lint,
   policyFile,
   proxyFile,
   sharedFlowFile,
@@ -10,10 +11,6 @@ import {
   sharedFlowPolicyFile,
   specs,
 } from './support';
-
-// These XML contract tests use generic file paths unrelated to each policy's name.
-const lint: typeof lintPolicy = (xml, filePath, specs, ignored = new Set()) =>
-  lintPolicy(xml, filePath, specs, new Set([...ignored, 'AX114']));
 
 const flowCallout = (body: string, attributes = 'name="FC-Test"') =>
   `<FlowCallout ${attributes}>${body}</FlowCallout>`;

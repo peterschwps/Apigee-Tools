@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { lint } from '../src/linter';
 import { loadSpecifications } from '../src/spec';
 
 export const repositoryRoot = path.resolve(__dirname, '..');
@@ -28,3 +29,14 @@ export const sharedFlowPolicyFile = path.join(
   'policies',
   'Test.xml',
 );
+
+/**
+ * Lints like `lint`, but ignores AX114, since most tests use generic file paths
+ * unrelated to each policy's name.
+ */
+export const lintIgnoringFileName: typeof lint = (
+  xml,
+  filePath,
+  specs,
+  ignored = new Set(),
+) => lint(xml, filePath, specs, new Set([...ignored, 'AX114']));
