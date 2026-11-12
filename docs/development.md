@@ -15,9 +15,10 @@ TypeScript sources are formatted with Prettier. Run `npm run format` before comm
 - `src/fixes.ts` computes quick-fix edits without depending on VS Code.
 - `src/extension.ts` handles VS Code settings, events, and diagnostics.
 - `src/cli.ts` runs the same checks from the command line; it is built to `dist/cli.js` and excluded from the VSIX. `npm run package:npm` stages the npm package of the CLI and checks its contents and the installed command; CI runs this check on every push.
+- `scripts/docs.ts` maintains the documentation inventory and candidates; `scripts/validate-reviewed.ts` checks the reviewed rule data for `npm run check`.
 - `test/` contains `node:test` suites; `test/fixtures/bundle` and `test/fixtures/sharedflow` are a proxy and a shared flow bundle that must lint without findings.
 
-TypeScript strict mode is enabled. Rule data stays separate from behavior, and documentation tooling stays outside the runtime package. Keep code, comments, diagnostics, documentation, and commit messages in English.
+TypeScript strict mode is enabled, together with checks for unused code and implicit returns. Rule data stays separate from behavior, and documentation tooling stays outside the runtime package. Keep code, comments, diagnostics, documentation, and commit messages in English.
 
 ## Documentation maintenance
 
