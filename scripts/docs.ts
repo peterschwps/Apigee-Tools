@@ -328,11 +328,11 @@ function extractSections(html: string): CandidateSection[] {
   const blocks = fallback
     ? $.root().find('h1,h2,h3,h4,p,ul,ol,pre,table')
     : body.find('h1,h2,h3,h4,p,ul,ol,pre,table');
-  blocks.each((_, block) => {
-    if ($(block).closest('table').length && block.tagName !== 'table') return;
+  for (const block of blocks.toArray()) {
+    if ($(block).closest('table').length && block.tagName !== 'table') continue;
     const tag = block.tagName.toLowerCase();
     if (fallback && !started) {
-      if (tag !== 'h1') return;
+      if (tag !== 'h1') continue;
       started = true;
     }
     if (
@@ -340,13 +340,13 @@ function extractSections(html: string): CandidateSection[] {
       /^h[1-4]$/.test(tag) &&
       normalize($(block).text()) === 'Products and pricing'
     )
-      return false;
+      break;
     if (/^h[1-4]$/.test(tag)) {
       finish();
       const heading = normalize($(block).text());
       if (!heading) {
         current = undefined;
-        return;
+        continue;
       }
       if (/<[A-Za-z][\w.-]*>/.test(heading)) contextHeading = heading;
       current = {
@@ -370,9 +370,9 @@ function extractSections(html: string): CandidateSection[] {
         hash: '',
       };
       sectionText = [];
-      return;
+      continue;
     }
-    if (!current) return;
+    if (!current) continue;
     if (tag !== 'table') {
       if (tag === 'pre') {
         const code = $(block).text();
@@ -398,7 +398,7 @@ function extractSections(html: string): CandidateSection[] {
       }
       const text = normalize($(block).text());
       if (text) sectionText.push(text);
-      return;
+      continue;
     }
     const tableRows = $(block)
       .children('tr')
@@ -434,7 +434,7 @@ function extractSections(html: string): CandidateSection[] {
     } else if (rows.length) {
       current.otherTables.push({ headers, rows });
     }
-  });
+  }
   finish();
   return sections;
 }
