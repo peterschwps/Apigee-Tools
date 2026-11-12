@@ -75,7 +75,7 @@ jobs:
         with:
           node-version: 24
       - name: Publish with trusted publishing
-        run: npx --yes @vscode/vsce@4.0.0 publish --oidc --pre-release --skip-duplicate --packagePath "release/apigee-tools-${{ needs.build.outputs.version }}.vsix"
+        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --pre-release --skip-duplicate --packagePath "release/apigee-tools-${{ needs.build.outputs.version }}.vsix"
 
   publish-openvsx:
     name: Publish to Open VSX
