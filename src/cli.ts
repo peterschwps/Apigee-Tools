@@ -20,10 +20,18 @@ Exit codes: 0 without errors, 1 when errors were found, 2 for invalid usage or u
 
 const argumentConfig = {
   allowPositionals: true,
-  options: { only: { type: 'string', multiple: true }, ignore: { type: 'string', multiple: true }, help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' } },
+  options: {
+    only: { type: 'string', multiple: true },
+    ignore: { type: 'string', multiple: true },
+    help: { type: 'boolean', short: 'h' },
+    version: { type: 'boolean', short: 'v' },
+  },
 } as const;
 
-export type Output = { out: (line: string) => void; err: (line: string) => void };
+export type Output = {
+  out: (line: string) => void;
+  err: (line: string) => void;
+};
 
 const consoleOutput: Output = {
   out: line => process.stdout.write(`${line}\n`),
@@ -34,7 +42,9 @@ async function bundleFiles(target: string): Promise<string[]> {
   if (!(await stat(target)).isDirectory()) return [target];
   const entries = await readdir(target, { recursive: true });
   return entries
-    .filter(entry => !/(?:^|[\\/])(?:node_modules|\.git)(?:[\\/]|$)/.test(entry))
+    .filter(
+      entry => !/(?:^|[\\/])(?:node_modules|\.git)(?:[\\/]|$)/.test(entry),
+    )
     .map(entry => path.join(target, entry))
     .filter(file => classifyDocument(file));
 }
@@ -52,7 +62,12 @@ function count(amount: number, noun: string): string {
 }
 
 function ruleIds(values: string[] = []): Set<string> {
-  return new Set(values.flatMap(value => value.split(',')).map(rule => rule.trim().toUpperCase()).filter(Boolean));
+  return new Set(
+    values
+      .flatMap(value => value.split(','))
+      .map(rule => rule.trim().toUpperCase())
+      .filter(Boolean),
+  );
 }
 
 function position(xml: string, offset: number): string {
@@ -61,7 +76,10 @@ function position(xml: string, offset: number): string {
 }
 
 /** Lints the given paths, writes one line per finding, and returns the process exit code. */
-export async function run(args: string[], output: Output = consoleOutput): Promise<number> {
+export async function run(
+  args: string[],
+  output: Output = consoleOutput,
+): Promise<number> {
   const options = parseArguments(args);
   if (options instanceof Error) {
     output.err(`${options.message}\n\n${usage}`);
@@ -84,7 +102,9 @@ export async function run(args: string[], output: Output = consoleOutput): Promi
 
   // Collect files first so an unreadable path fails before any findings are printed.
   const files = new Set<string>();
-  for (const target of options.positionals.length ? options.positionals : ['.']) {
+  for (const target of options.positionals.length
+    ? options.positionals
+    : ['.']) {
     try {
       for (const file of await bundleFiles(target)) files.add(file);
     } catch (error) {
@@ -98,23 +118,35 @@ export async function run(args: string[], output: Output = consoleOutput): Promi
   let warnings = 0;
   for (const file of [...files].sort()) {
     const xml = await readFile(file, 'utf8');
-    const bundleIssues = (await lintBundleReferences(xml, file)).filter(issue => !ignored.has(issue.rule));
+    const bundleIssues = (await lintBundleReferences(xml, file)).filter(
+      issue => !ignored.has(issue.rule),
+    );
     const issues = [...lint(xml, file, specs, ignored), ...bundleIssues]
-      .filter(issue => !only || only.has(issue.rule)).sort((a, b) => a.start - b.start);
+      .filter(issue => !only || only.has(issue.rule))
+      .sort((a, b) => a.start - b.start);
     for (const issue of issues) {
       const severity = issue.severity ?? 'error';
       if (severity === 'error') errors++;
       else warnings++;
-      output.out(`${path.relative(process.cwd(), file) || file}:${position(xml, issue.start)}: ${severity} ${issue.rule} ${issue.message}`);
+      output.out(
+        `${path.relative(process.cwd(), file) || file}:${position(xml, issue.start)}: ${severity} ${issue.rule} ${issue.message}`,
+      );
     }
   }
-  output.err(`${count(files.size, 'file')} checked: ${count(errors, 'error')}, ${count(warnings, 'warning')}.`);
+  output.err(
+    `${count(files.size, 'file')} checked: ${count(errors, 'error')}, ${count(warnings, 'warning')}.`,
+  );
   return errors ? 1 : 0;
 }
 
 if (require.main === module) {
-  run(process.argv.slice(2)).then(code => { process.exitCode = code; }, (error: unknown) => {
-    console.error(error);
-    process.exitCode = 2;
-  });
+  run(process.argv.slice(2)).then(
+    code => {
+      process.exitCode = code;
+    },
+    (error: unknown) => {
+      console.error(error);
+      process.exitCode = 2;
+    },
+  );
 }

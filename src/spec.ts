@@ -48,15 +48,38 @@ export type ElementSpec = {
   childGroups?: ChildGroup[];
   attributeGroups?: AttributeGroup[];
   uniqueChildAttribute?: { child: string; attribute: string; source: string };
-  childTextLimit?: { child: string; descendant: string; value: string; max: number; source: string };
-  conditionalRequiredChildren?: { selector: string[]; values?: string[]; required: string; source: string }[];
-  conflicts?: { attribute?: string; child?: string; withChild: string; source: string }[];
+  childTextLimit?: {
+    child: string;
+    descendant: string;
+    value: string;
+    max: number;
+    source: string;
+  };
+  conditionalRequiredChildren?: {
+    selector: string[];
+    values?: string[];
+    required: string;
+    source: string;
+  }[];
+  conflicts?: {
+    attribute?: string;
+    child?: string;
+    withChild: string;
+    source: string;
+  }[];
   text?: ValueSpec;
   textByAttribute?: { attribute: string; values: Record<string, ValueSpec> };
 };
 
 export type DocumentSpec = {
-  kind: 'policy' | 'apiProxy' | 'proxyEndpoint' | 'targetEndpoint' | 'integrationEndpoint' | 'sharedFlowBundle' | 'sharedFlow';
+  kind:
+    | 'policy'
+    | 'apiProxy'
+    | 'proxyEndpoint'
+    | 'targetEndpoint'
+    | 'integrationEndpoint'
+    | 'sharedFlowBundle'
+    | 'sharedFlow';
   root: string;
   source: string;
   reviewedAt: string;
@@ -67,7 +90,12 @@ export function loadSpecifications(extensionPath: string): DocumentSpec[] {
   const directory = path.join(extensionPath, 'data', 'reviewed');
   return readdirSync(directory)
     .filter(file => file.endsWith('.json'))
-    .map(file => JSON.parse(readFileSync(path.join(directory, file), 'utf8')) as DocumentSpec);
+    .map(
+      file =>
+        JSON.parse(
+          readFileSync(path.join(directory, file), 'utf8'),
+        ) as DocumentSpec,
+    );
 }
 
 export function elementMap(document: DocumentSpec): Map<string, ElementSpec> {

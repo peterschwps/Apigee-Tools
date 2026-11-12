@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { closestValue, disableDirectiveEdit, type TextEdit } from '../src/fixes';
+import {
+  closestValue,
+  disableDirectiveEdit,
+  type TextEdit,
+} from '../src/fixes';
 import { lint as lintPolicy } from '../src/linter';
 import { policyFile, specs } from './support';
 
@@ -33,48 +37,84 @@ test('closestValue gives up on distant or ambiguous values', () => {
 
 test('closestValue compares normalized values', () => {
   const withoutHyphens = (text: string) => text.replace(/-/g, '');
-  assert.equal(closestValue('applicaton-json', ['application/json', 'applicationjson'], withoutHyphens), 'applicationjson');
+  assert.equal(
+    closestValue(
+      'applicaton-json',
+      ['application/json', 'applicationjson'],
+      withoutHyphens,
+    ),
+    'applicationjson',
+  );
 });
 
 test('AX105 carries a replacement and names it in the message', () => {
-  const issue = firstIssue('<FlowCallout name="FC-Test" enabled="flase"><SharedFlowBundle>s</SharedFlowBundle></FlowCallout>');
+  const issue = firstIssue(
+    '<FlowCallout name="FC-Test" enabled="flase"><SharedFlowBundle>s</SharedFlowBundle></FlowCallout>',
+  );
   assert.equal(issue.rule, 'AX105');
   assert.equal(issue.replacement, 'false');
   assert.match(issue.message, /Did you mean "false"\?$/);
 });
 
 test('AX105 has no replacement for distant values', () => {
-  const issue = firstIssue('<FlowCallout name="FC-Test" enabled="yes"><SharedFlowBundle>s</SharedFlowBundle></FlowCallout>');
+  const issue = firstIssue(
+    '<FlowCallout name="FC-Test" enabled="yes"><SharedFlowBundle>s</SharedFlowBundle></FlowCallout>',
+  );
   assert.equal(issue.replacement, undefined);
   assert.equal(issue.message, 'Expected one of: true, false.');
 });
 
 test('disable edit inserts an indented directive that suppresses the issue', () => {
-  const xml = '<RaiseFault name="RF-Test">\n  <Properties/>\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\n</RaiseFault>';
+  const xml =
+    '<RaiseFault name="RF-Test">\n  <Properties/>\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\n</RaiseFault>';
   const issue = firstIssue(xml);
-  const edited = applyEdit(xml, disableDirectiveEdit(xml, issue.start, issue.rule));
-  assert.match(edited, /\n {2}<!-- apigee-tools disable=AX101 -->\n {2}<Properties\/>/);
+  const edited = applyEdit(
+    xml,
+    disableDirectiveEdit(xml, issue.start, issue.rule),
+  );
+  assert.match(
+    edited,
+    /\n {2}<!-- apigee-tools disable=AX101 -->\n {2}<Properties\/>/,
+  );
   assert.deepEqual(lint(edited, policyFile, specs), []);
 });
 
 test('disable edit extends a directive on the previous line', () => {
-  const xml = '<RaiseFault name="RF-Test">\n  <!-- apigee-tools disable=AX103 -->\n  <Properties/>\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\n</RaiseFault>';
+  const xml =
+    '<RaiseFault name="RF-Test">\n  <!-- apigee-tools disable=AX103 -->\n  <Properties/>\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\n</RaiseFault>';
   const issue = firstIssue(xml);
-  const edited = applyEdit(xml, disableDirectiveEdit(xml, issue.start, issue.rule));
-  assert.match(edited, /<!-- apigee-tools disable=AX103,AX101 -->\n {2}<Properties\/>/);
+  const edited = applyEdit(
+    xml,
+    disableDirectiveEdit(xml, issue.start, issue.rule),
+  );
+  assert.match(
+    edited,
+    /<!-- apigee-tools disable=AX103,AX101 -->\n {2}<Properties\/>/,
+  );
   assert.deepEqual(lint(edited, policyFile, specs), []);
-  assert.equal(disableDirectiveEdit(edited, edited.indexOf('Properties'), 'AX101'), undefined);
+  assert.equal(
+    disableDirectiveEdit(edited, edited.indexOf('Properties'), 'AX101'),
+    undefined,
+  );
 });
 
 test('disable edit preserves CRLF line endings', () => {
-  const xml = '<RaiseFault name="RF-Test">\r\n  <Properties/>\r\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\r\n</RaiseFault>';
+  const xml =
+    '<RaiseFault name="RF-Test">\r\n  <Properties/>\r\n  <FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>\r\n</RaiseFault>';
   const edit = disableDirectiveEdit(xml, xml.indexOf('Properties'), 'AX101');
   assert.equal(edit?.text, '  <!-- apigee-tools disable=AX101 -->\r\n');
 });
 
 test('disable edit refuses positions inside a start tag or on the XML declaration', () => {
-  const multiline = '<FlowCallout name="FC-Test"\n    enabled="flase">\n  <SharedFlowBundle>s</SharedFlowBundle>\n</FlowCallout>';
-  assert.equal(disableDirectiveEdit(multiline, multiline.indexOf('flase'), 'AX105'), undefined);
+  const multiline =
+    '<FlowCallout name="FC-Test"\n    enabled="flase">\n  <SharedFlowBundle>s</SharedFlowBundle>\n</FlowCallout>';
+  assert.equal(
+    disableDirectiveEdit(multiline, multiline.indexOf('flase'), 'AX105'),
+    undefined,
+  );
   const declared = '<?xml version="1.0"?><RaiseFault/>';
-  assert.equal(disableDirectiveEdit(declared, declared.indexOf('RaiseFault'), 'AX104'), undefined);
+  assert.equal(
+    disableDirectiveEdit(declared, declared.indexOf('RaiseFault'), 'AX104'),
+    undefined,
+  );
 });

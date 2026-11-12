@@ -5,58 +5,104 @@ import { removeElementEdit } from './fixes';
 import type { LintIssue } from './linter';
 import { parseXml, type XmlNode, type XmlText } from './xml';
 
-const flowNameSource = 'https://docs.cloud.google.com/apigee/docs/api-platform/reference/flow-configuration-reference#name';
-const resourceSource = 'https://docs.cloud.google.com/apigee/docs/api-platform/develop/resource-files#where-resources-are-stored';
-const routeTargetSource = 'https://docs.cloud.google.com/apigee/docs/api-platform/reference/api-proxy-configuration-reference#proxyendpoint-howtoconfigurerouterules';
+const flowNameSource =
+  'https://docs.cloud.google.com/apigee/docs/api-platform/reference/flow-configuration-reference#name';
+const resourceSource =
+  'https://docs.cloud.google.com/apigee/docs/api-platform/develop/resource-files#where-resources-are-stored';
+const routeTargetSource =
+  'https://docs.cloud.google.com/apigee/docs/api-platform/reference/api-proxy-configuration-reference#proxyendpoint-howtoconfigurerouterules';
 const referencePattern = /^[A-Za-z0-9._$ %\-]+$/;
 
-async function manifestPolicyIssues(xml: string, root: XmlNode, directory: string): Promise<LintIssue[]> {
-  const policies = root.children.filter(child => child.name === 'Policies')
-    .flatMap(node => node.children).flatMap(node => {
+async function manifestPolicyIssues(
+  xml: string,
+  root: XmlNode,
+  directory: string,
+): Promise<LintIssue[]> {
+  const policies = root.children
+    .filter(child => child.name === 'Policies')
+    .flatMap(node => node.children)
+    .flatMap(node => {
       const text = node.text;
-      return node.name === 'Policy' && text && referencePattern.test(text.value) ? [{ node, text }] : [];
+      return node.name === 'Policy' && text && referencePattern.test(text.value)
+        ? [{ node, text }]
+        : [];
     });
   if (!policies.length) return [];
   let names: Set<string>;
   try {
-    const entries = await readdir(path.join(directory, 'policies'), { withFileTypes: true });
-    names = new Set(entries.filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.xml'))
-      .map(entry => entry.name.slice(0, -'.xml'.length)));
+    const entries = await readdir(path.join(directory, 'policies'), {
+      withFileTypes: true,
+    });
+    names = new Set(
+      entries
+        .filter(
+          entry => entry.isFile() && entry.name.toLowerCase().endsWith('.xml'),
+        )
+        .map(entry => entry.name.slice(0, -'.xml'.length)),
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return [];
     names = new Set();
   }
-  const reference = root.name === 'APIProxy' ? 'api-proxy' : 'shared-flow-bundle';
+  const reference =
+    root.name === 'APIProxy' ? 'api-proxy' : 'shared-flow-bundle';
   const source = `https://docs.cloud.google.com/apigee/docs/api-platform/reference/${reference}-configuration-reference#baseconfiguration-baseconfigurationelements`;
-  return policies.filter(({ text }) => !names.has(text.value)).map(({ node, text }) => ({
-    rule: 'AX112', message: `Policy file "policies/${text.value}.xml" listed in this manifest was not found in this bundle.`,
-    start: text.start, end: text.end, source, severity: 'warning',
-    remove: removeElementEdit(xml, node), createFile: path.join(directory, 'policies', `${text.value}.xml`),
-  }));
+  return policies
+    .filter(({ text }) => !names.has(text.value))
+    .map(({ node, text }) => ({
+      rule: 'AX112',
+      message: `Policy file "policies/${text.value}.xml" listed in this manifest was not found in this bundle.`,
+      start: text.start,
+      end: text.end,
+      source,
+      severity: 'warning',
+      remove: removeElementEdit(xml, node),
+      createFile: path.join(directory, 'policies', `${text.value}.xml`),
+    }));
 }
 
 function findBundleRoot(filePath: string): string | undefined {
   let directory = path.dirname(filePath);
   while (path.dirname(directory) !== directory) {
-    if (['apiproxy', 'sharedflowbundle'].includes(path.basename(directory).toLowerCase())) return directory;
+    if (
+      ['apiproxy', 'sharedflowbundle'].includes(
+        path.basename(directory).toLowerCase(),
+      )
+    )
+      return directory;
     directory = path.dirname(directory);
   }
   return undefined;
 }
 
 /** Reads the root name attribute of each XML file in a bundle directory, optionally adding the file names. */
-async function bundleNames(directory: string, includeFileNames = false): Promise<Set<string> | undefined> {
+async function bundleNames(
+  directory: string,
+  includeFileNames = false,
+): Promise<Set<string> | undefined> {
   try {
     const entries = await readdir(directory, { withFileTypes: true });
-    const files = entries.filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.xml'));
-    const names = await Promise.all(files.map(async entry => {
-      const fileNames = includeFileNames ? [entry.name.slice(0, -'.xml'.length)] : [];
-      try {
-        const root = parseXml(await readFile(path.join(directory, entry.name), 'utf8')).root;
-        const name = root?.attributes.find(attribute => attribute.name === 'name')?.value;
-        return name ? [name, ...fileNames] : fileNames;
-      } catch { return fileNames; }
-    }));
+    const files = entries.filter(
+      entry => entry.isFile() && entry.name.toLowerCase().endsWith('.xml'),
+    );
+    const names = await Promise.all(
+      files.map(async entry => {
+        const fileNames = includeFileNames
+          ? [entry.name.slice(0, -'.xml'.length)]
+          : [];
+        try {
+          const root = parseXml(
+            await readFile(path.join(directory, entry.name), 'utf8'),
+          ).root;
+          const name = root?.attributes.find(
+            attribute => attribute.name === 'name',
+          )?.value;
+          return name ? [name, ...fileNames] : fileNames;
+        } catch {
+          return fileNames;
+        }
+      }),
+    );
     return new Set(names.flat());
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Set();
@@ -64,45 +110,87 @@ async function bundleNames(directory: string, includeFileNames = false): Promise
   }
 }
 
-async function localResourceIssue(root: XmlNode, directory: string): Promise<LintIssue[]> {
-  const element = root.name === 'OASValidation' ? 'OASResource'
-    : root.name === 'MessageValidation' ? 'ResourceURL' : undefined;
+async function localResourceIssue(
+  root: XmlNode,
+  directory: string,
+): Promise<LintIssue[]> {
+  const element =
+    root.name === 'OASValidation'
+      ? 'OASResource'
+      : root.name === 'MessageValidation'
+        ? 'ResourceURL'
+        : undefined;
   if (!element) return [];
   const reference = root.children.find(child => child.name === element);
   const text = reference?.text;
   if (!text || /\{[^{}]+\}/.test(text.value)) return [];
   const match = /^(oas|xsd|wsdl):\/\/([^/\\]+)$/.exec(text.value);
-  if (!match || root.name === 'OASValidation' && match[1] !== 'oas'
-    || root.name === 'MessageValidation' && match[1] === 'oas') return [];
+  if (
+    !match ||
+    (root.name === 'OASValidation' && match[1] !== 'oas') ||
+    (root.name === 'MessageValidation' && match[1] === 'oas')
+  )
+    return [];
   try {
     const files = await readdir(path.join(directory, 'resources', match[1]));
     if (files.includes(match[2])) return [];
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return [];
   }
-  return [{ rule: 'AX109', message: `Resource "${match[2]}" is not in this bundle; it may exist at environment scope.`,
-    start: text.start, end: text.end, source: resourceSource, severity: 'warning' }];
+  return [
+    {
+      rule: 'AX109',
+      message: `Resource "${match[2]}" is not in this bundle; it may exist at environment scope.`,
+      start: text.start,
+      end: text.end,
+      source: resourceSource,
+      severity: 'warning',
+    },
+  ];
 }
 
 /** Returns the sorted policy names of the bundle containing the file, or none outside a bundle. */
 export async function bundlePolicyNames(filePath: string): Promise<string[]> {
   const rootDirectory = findBundleRoot(filePath);
-  const names = rootDirectory && await bundleNames(path.join(rootDirectory, 'policies'));
+  const names =
+    rootDirectory && (await bundleNames(path.join(rootDirectory, 'policies')));
   return names ? [...names].sort() : [];
 }
 
-export async function lintBundleReferences(xml: string, filePath: string): Promise<LintIssue[]> {
+export async function lintBundleReferences(
+  xml: string,
+  filePath: string,
+): Promise<LintIssue[]> {
   const rootDirectory = findBundleRoot(filePath);
   if (!rootDirectory) return [];
   const document = parseXml(xml);
   if (document.syntaxIssues.length || !document.root) return [];
-  if (document.root.name === 'APIProxy' || document.root.name === 'SharedFlowBundle') {
-    return applyDirectives(xml, document.comments, await manifestPolicyIssues(xml, document.root, rootDirectory));
+  if (
+    document.root.name === 'APIProxy' ||
+    document.root.name === 'SharedFlowBundle'
+  ) {
+    return applyDirectives(
+      xml,
+      document.comments,
+      await manifestPolicyIssues(xml, document.root, rootDirectory),
+    );
   }
-  if (document.root.name === 'OASValidation' || document.root.name === 'MessageValidation') {
-    return applyDirectives(xml, document.comments, await localResourceIssue(document.root, rootDirectory));
+  if (
+    document.root.name === 'OASValidation' ||
+    document.root.name === 'MessageValidation'
+  ) {
+    return applyDirectives(
+      xml,
+      document.comments,
+      await localResourceIssue(document.root, rootDirectory),
+    );
   }
-  if (!['ProxyEndpoint', 'TargetEndpoint', 'SharedFlow'].includes(document.root.name)) return [];
+  if (
+    !['ProxyEndpoint', 'TargetEndpoint', 'SharedFlow'].includes(
+      document.root.name,
+    )
+  )
+    return [];
 
   // Collect static policy and target endpoint references; templates and other values are skipped.
   const steps: XmlText[] = [];
@@ -110,24 +198,44 @@ export async function lintBundleReferences(xml: string, filePath: string): Promi
   function visit(node: XmlNode, parent?: XmlNode): void {
     const reference = node.text;
     if (reference && referencePattern.test(reference.value)) {
-      if (node.name === 'Name' && parent?.name === 'Step') steps.push(reference);
-      if (node.name === 'TargetEndpoint' && parent?.name === 'RouteRule') targets.push(reference);
+      if (node.name === 'Name' && parent?.name === 'Step')
+        steps.push(reference);
+      if (node.name === 'TargetEndpoint' && parent?.name === 'RouteRule')
+        targets.push(reference);
     }
     for (const child of node.children) visit(child, node);
   }
   visit(document.root);
 
   const issues: LintIssue[] = [];
-  const policies = steps.length ? await bundleNames(path.join(rootDirectory, 'policies')) : undefined;
-  for (const reference of steps.filter(step => policies && !policies.has(step.value))) {
-    issues.push({ rule: 'AX108', message: `Policy "${reference.value}" was not found in this bundle.`,
-      start: reference.start, end: reference.end, source: flowNameSource });
+  const policies = steps.length
+    ? await bundleNames(path.join(rootDirectory, 'policies'))
+    : undefined;
+  for (const reference of steps.filter(
+    step => policies && !policies.has(step.value),
+  )) {
+    issues.push({
+      rule: 'AX108',
+      message: `Policy "${reference.value}" was not found in this bundle.`,
+      start: reference.start,
+      end: reference.end,
+      source: flowNameSource,
+    });
   }
   // Google references targets by name attribute and by file name, so either one satisfies a RouteRule.
-  const endpoints = targets.length ? await bundleNames(path.join(rootDirectory, 'targets'), true) : undefined;
-  for (const reference of targets.filter(target => endpoints && !endpoints.has(target.value))) {
-    issues.push({ rule: 'AX111', message: `Target endpoint "${reference.value}" was not found in this proxy bundle.`,
-      start: reference.start, end: reference.end, source: routeTargetSource });
+  const endpoints = targets.length
+    ? await bundleNames(path.join(rootDirectory, 'targets'), true)
+    : undefined;
+  for (const reference of targets.filter(
+    target => endpoints && !endpoints.has(target.value),
+  )) {
+    issues.push({
+      rule: 'AX111',
+      message: `Target endpoint "${reference.value}" was not found in this proxy bundle.`,
+      start: reference.start,
+      end: reference.end,
+      source: routeTargetSource,
+    });
   }
   return applyDirectives(xml, document.comments, issues);
 }

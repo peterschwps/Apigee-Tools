@@ -15,11 +15,19 @@ type CursorContext = { stack: string[]; partialTag?: string };
 function scanToCursor(xml: string, offset: number): CursorContext {
   const stack: string[] = [];
   for (let index = 0; index < offset;) {
-    if (xml[index] !== '<') { index++; continue; }
-    const special = xml.startsWith('<!--', index) ? '-->'
-      : xml.startsWith('<![CDATA[', index) ? ']]>'
-      : xml.startsWith('<?', index) ? '?>'
-      : xml.startsWith('<!', index) ? '>' : undefined;
+    if (xml[index] !== '<') {
+      index++;
+      continue;
+    }
+    const special = xml.startsWith('<!--', index)
+      ? '-->'
+      : xml.startsWith('<![CDATA[', index)
+        ? ']]>'
+        : xml.startsWith('<?', index)
+          ? '?>'
+          : xml.startsWith('<!', index)
+            ? '>'
+            : undefined;
     if (special) {
       const end = xml.indexOf(special, index + 2);
       if (end < 0 || end + special.length > offset) return { stack };
@@ -55,12 +63,22 @@ function scanToCursor(xml: string, offset: number): CursorContext {
   return { stack };
 }
 
-function candidateSpec(filePath: string, stack: string[], specs: DocumentSpec[]): DocumentSpec | undefined {
+function candidateSpec(
+  filePath: string,
+  stack: string[],
+  specs: DocumentSpec[],
+): DocumentSpec | undefined {
   if (!stack.length) return undefined;
   return chooseSpec(filePath, stack[0], specs);
 }
 
-export function complete(xml: string, offset: number, filePath: string, specs: DocumentSpec[], policyNames: readonly string[] = []): Suggestion[] {
+export function complete(
+  xml: string,
+  offset: number,
+  filePath: string,
+  specs: DocumentSpec[],
+  policyNames: readonly string[] = [],
+): Suggestion[] {
   const before = xml.slice(0, offset);
   const context = scanToCursor(xml, offset);
   const partial = context.partialTag;
@@ -74,15 +92,26 @@ export function complete(xml: string, offset: number, filePath: string, specs: D
       if (parent) {
         const path = `/${context.stack.join('/')}`;
         const parentRule = elementMap(parent).get(path);
-        choices = (parentRule?.children || []).map(name => ({ name, source: parentRule?.source }));
+        choices = (parentRule?.children || []).map(name => ({
+          name,
+          source: parentRule?.source,
+        }));
       } else if (!context.stack.length) {
         const kind = classifyDocument(filePath);
-        choices = specs.filter(spec => !kind || spec.kind === kind).map(spec => ({ name: spec.root, source: spec.source }));
+        choices = specs
+          .filter(spec => !kind || spec.kind === kind)
+          .map(spec => ({ name: spec.root, source: spec.source }));
       }
-      return choices.filter(choice => choice.name.startsWith(typed)).map(choice => ({
-        label: choice.name, kind: 'element', replaceStart: offset - typed.length, replaceEnd: offset,
-        insertText: choice.name, source: choice.source,
-      }));
+      return choices
+        .filter(choice => choice.name.startsWith(typed))
+        .map(choice => ({
+          label: choice.name,
+          kind: 'element',
+          replaceStart: offset - typed.length,
+          replaceEnd: offset,
+          insertText: choice.name,
+          source: choice.source,
+        }));
     }
 
     const tagName = partial.match(/^<\s*([A-Za-z_][\w:.-]*)\b/);
@@ -91,23 +120,43 @@ export function complete(xml: string, offset: number, filePath: string, specs: D
     const path = `/${[...context.stack, tagName[1]].join('/')}`;
     const element = spec && elementMap(spec).get(path);
     if (!element) return [];
-    const valueMatch = partial.match(/([A-Za-z_][\w:.-]*)\s*=\s*(["'])([^"']*)$/);
+    const valueMatch = partial.match(
+      /([A-Za-z_][\w:.-]*)\s*=\s*(["'])([^"']*)$/,
+    );
     if (valueMatch) {
       const rule = element.attributes?.[valueMatch[1]];
       if (rule?.kind !== 'enum' || !rule.values) return [];
       const typed = valueMatch[3];
-      return rule.values.filter(value => normalizeEnumValue(value, rule).startsWith(normalizeEnumValue(typed, rule))).map(value => ({
-        label: value, kind: 'value', replaceStart: offset - typed.length, replaceEnd: offset,
-        insertText: value, source: rule.source || element.source,
-      }));
+      return rule.values
+        .filter(value =>
+          normalizeEnumValue(value, rule).startsWith(
+            normalizeEnumValue(typed, rule),
+          ),
+        )
+        .map(value => ({
+          label: value,
+          kind: 'value',
+          replaceStart: offset - typed.length,
+          replaceEnd: offset,
+          insertText: value,
+          source: rule.source || element.source,
+        }));
     }
     const typed = partial.match(/([A-Za-z_][\w:.-]*)$/)?.[1] || '';
-    const used = new Set([...partial.matchAll(/\b([A-Za-z_][\w:.-]*)\s*=/g)].map(match => match[1]));
+    const used = new Set(
+      [...partial.matchAll(/\b([A-Za-z_][\w:.-]*)\s*=/g)].map(
+        match => match[1],
+      ),
+    );
     return Object.keys(element.attributes || {})
       .filter(name => name.startsWith(typed) && !used.has(name))
       .map(name => ({
-        label: name, kind: 'attribute', replaceStart: offset - typed.length, replaceEnd: offset,
-        insertText: `${name}=""`, source: element.attributes?.[name].source || element.source,
+        label: name,
+        kind: 'attribute',
+        replaceStart: offset - typed.length,
+        replaceEnd: offset,
+        insertText: `${name}=""`,
+        source: element.attributes?.[name].source || element.source,
       }));
   }
 
@@ -118,18 +167,43 @@ export function complete(xml: string, offset: number, filePath: string, specs: D
   if (!element) return [];
   if (context.stack.at(-2) === 'Step' && context.stack.at(-1) === 'Name') {
     const typed = before.match(/([A-Za-z0-9._$%-]*)$/)?.[1] || '';
-    return policyNames.filter(name => name.startsWith(typed)).map(name => ({
-      label: name, kind: 'value', replaceStart: offset - typed.length, replaceEnd: offset, insertText: name, source: element.source,
-    }));
+    return policyNames
+      .filter(name => name.startsWith(typed))
+      .map(name => ({
+        label: name,
+        kind: 'value',
+        replaceStart: offset - typed.length,
+        replaceEnd: offset,
+        insertText: name,
+        source: element.source,
+      }));
   }
   const selector = element.textByAttribute;
-  const openingTag = before.slice(before.lastIndexOf(`<${context.stack.at(-1)}`));
-  const selectedValue = selector && openingTag.match(new RegExp(`\\b${selector.attribute}\\s*=\\s*["']([^"']+)["']`))?.[1];
-  const textRule = selectedValue ? selector?.values[selectedValue] || element.text : element.text;
+  const openingTag = before.slice(
+    before.lastIndexOf(`<${context.stack.at(-1)}`),
+  );
+  const selectedValue =
+    selector &&
+    openingTag.match(
+      new RegExp(`\\b${selector.attribute}\\s*=\\s*["']([^"']+)["']`),
+    )?.[1];
+  const textRule = selectedValue
+    ? selector?.values[selectedValue] || element.text
+    : element.text;
   if (textRule?.kind !== 'enum' || !textRule.values) return [];
   const typed = before.match(/([A-Za-z0-9_-]*)$/)?.[1] || '';
-  return textRule.values.filter(value => normalizeEnumValue(value, textRule).startsWith(normalizeEnumValue(typed, textRule))).map(value => ({
-    label: value, kind: 'value', replaceStart: offset - typed.length, replaceEnd: offset,
-    insertText: value, source: element.source,
-  }));
+  return textRule.values
+    .filter(value =>
+      normalizeEnumValue(value, textRule).startsWith(
+        normalizeEnumValue(typed, textRule),
+      ),
+    )
+    .map(value => ({
+      label: value,
+      kind: 'value',
+      replaceStart: offset - typed.length,
+      replaceEnd: offset,
+      insertText: value,
+      source: element.source,
+    }));
 }
