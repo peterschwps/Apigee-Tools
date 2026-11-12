@@ -70,7 +70,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts src/cli.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --sourcemap --outdir=dist",
-    "check": "tsc -p tsconfig.json --noEmit && npm run data:validate && npm run comparison:validate",
+    "check": "npm run format:check && tsc -p tsconfig.json --noEmit && npm run data:validate && npm run comparison:validate",
+    "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
     "comparison:validate": "tsx scripts/compare-apigeelint.ts --validate",
     "compare:apigeelint": "tsx scripts/compare-apigeelint.ts",
     "data:validate": "tsx scripts/docs.ts validate",
@@ -97,6 +99,7 @@
     "@vscode/vsce": "^4.0.0",
     "cheerio": "^1.2.0",
     "esbuild": "^0.28.2",
+    "prettier": "3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

@@ -2,6 +2,8 @@
 
 Run `npm ci`, `npm run check`, `npm test`, and `npm run build`. Press F5 to launch an Extension Development Host. `npm run package:alpha` builds a local pre-release VSIX without publishing it.
 
+TypeScript sources are formatted with Prettier. Run `npm run format` before committing; `npm run check` fails on unformatted files.
+
 ## Code structure
 
 - `src/xml.ts` converts parser output to a small position-aware XML model.
