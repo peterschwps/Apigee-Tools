@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import policyPrefixes from '../data/policy-prefixes.json';
 import { elementMap, normalizeEnumValue, type DocumentSpec, type ElementSpec, type ValueSpec } from './spec';
 import { applyDirectives } from './directives';
 import { closestValue, type TextEdit } from './fixes';
@@ -207,6 +208,16 @@ function lintDocument(parsed: XmlDocument, filePath: string, specs: DocumentSpec
   const rules = elementMap(spec);
   const knownNames = new Set(spec.elements.map(element => element.path.slice(element.path.lastIndexOf('/') + 1)));
   checkNode(root, rules, knownNames, `/${root.name}`, !parsed.syntaxIssues.length, issues);
+  if (spec.kind === 'policy' && !parsed.syntaxIssues.length) {
+    const prefix = (policyPrefixes.prefixes as Record<string, string>)[root.name];
+    const name = root.attributes.find(attribute => attribute.name === 'name');
+    if (prefix && name?.value?.trim() && !name.value.startsWith(prefix)
+      && name.valueStart !== undefined && name.valueEnd !== undefined) {
+      issues.push({ rule: 'AX113', severity: 'warning',
+        message: `Policy name "${name.value}" should start with "${prefix}" for <${root.name}>.`,
+        start: name.valueStart, end: name.valueEnd, source: policyPrefixes.source });
+    }
+  }
   return issues;
 }
 

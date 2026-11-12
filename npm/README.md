@@ -37,6 +37,8 @@ npx @peterschwps/apigee-tools --only AX108,AX112 path/to/bundles
 
 Both `--only` and `--ignore` accept comma-separated IDs or repeated options, ignoring case. IDs match exactly; `--ignore` and inline suppression take precedence. The summary and exit code reflect only the reported findings.
 
+Use `--only AX113` to find policy names missing the selected prefix for their type (for example, `AM-` for AssignMessage). These case-sensitive prefixes are a linter convention, not mandatory Apigee syntax; see the [complete prefix table](https://github.com/peterschwps/Apigee-Tools/blob/main/docs/index.md#policy-name-prefixes).
+
 ## GitHub Actions
 
 ```yaml

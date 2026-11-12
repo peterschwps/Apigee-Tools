@@ -24,11 +24,11 @@ before(async () => {
   const policies = path.join(workspace, 'errors', 'apiproxy', 'policies');
   await mkdir(policies, { recursive: true });
   invalidPolicy = path.join(policies, 'FC.xml');
-  await writeFile(invalidPolicy, '<FlowCallout name="FC"\n  enabled="flase">\n  <SharedFlowBundle>s</SharedFlowBundle>\n</FlowCallout>\n');
+  await writeFile(invalidPolicy, '<FlowCallout name="FC-Test"\n  enabled="flase">\n  <SharedFlowBundle>s</SharedFlowBundle>\n</FlowCallout>\n');
   const warnings = path.join(workspace, 'warnings', 'apiproxy', 'policies');
   await mkdir(warnings, { recursive: true });
   warningPolicy = path.join(warnings, 'SA.xml');
-  await writeFile(warningPolicy, '<SpikeArrest name="SA">\n  <Rate>10ps</Rate>\n  <UseEffectiveCount>false</UseEffectiveCount>\n</SpikeArrest>\n');
+  await writeFile(warningPolicy, '<SpikeArrest name="SA-Test">\n  <Rate>10ps</Rate>\n  <UseEffectiveCount>false</UseEffectiveCount>\n</SpikeArrest>\n');
   const ignoredDirectory = path.join(workspace, 'errors', 'node_modules', 'pkg', 'apiproxy', 'policies');
   await mkdir(ignoredDirectory, { recursive: true });
   await writeFile(path.join(ignoredDirectory, 'Bad.xml'), '<FlowCallout bogus="1"/>');

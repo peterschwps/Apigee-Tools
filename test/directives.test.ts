@@ -5,7 +5,7 @@ import { lint } from '../src/linter';
 import { policyFile, proxyFile, specs } from './support';
 
 function raiseFault(...lines: string[]): string {
-  return ['<RaiseFault name="RF">', ...lines, '<FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>', '</RaiseFault>'].join('\n');
+  return ['<RaiseFault name="RF-Test">', ...lines, '<FaultResponse><Set><StatusCode>500</StatusCode></Set></FaultResponse>', '</RaiseFault>'].join('\n');
 }
 
 function rules(xml: string): string[] {
@@ -35,7 +35,7 @@ test('directive applies only to the line after the comment ends', () => {
 test('malformed directives and CDATA text are not directives', () => {
   assert.deepEqual(rules(raiseFault('<!-- apigee-tools disable AX101 -->', '<Properties/>')), ['AX101']);
   assert.deepEqual(rules(raiseFault('<!-- apigeelint disable=AX101 -->', '<Properties/>')), ['AX101']);
-  const xml = '<SpikeArrest name="SA">\n<DisplayName><![CDATA[<!-- apigee-tools disable=AX106 -->]]></DisplayName>\n<Rate>fast</Rate>\n</SpikeArrest>';
+  const xml = '<SpikeArrest name="SA-Test">\n<DisplayName><![CDATA[<!-- apigee-tools disable=AX106 -->]]></DisplayName>\n<Rate>fast</Rate>\n</SpikeArrest>';
   assert.deepEqual(rules(xml), ['AX106']);
 });
 
