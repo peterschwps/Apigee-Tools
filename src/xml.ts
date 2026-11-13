@@ -58,13 +58,13 @@ export type XmlDocument = {
   syntaxIssues: SyntaxIssue[];
 };
 
-const predefinedEntities: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-};
+const predefinedEntities = new Map([
+  ['amp', '&'],
+  ['lt', '<'],
+  ['gt', '>'],
+  ['quot', '"'],
+  ['apos', "'"],
+]);
 
 /**
  * Decodes predefined and numeric XML references; unknown references stay
@@ -74,7 +74,7 @@ export function decodeEntities(raw: string): string {
   return raw.replace(
     /&(?:#x([0-9A-Fa-f]+)|#([0-9]+)|([A-Za-z_][\w.-]*));/g,
     (reference, hex?: string, decimal?: string, name?: string) => {
-      if (name) return predefinedEntities[name] ?? reference;
+      if (name) return predefinedEntities.get(name) ?? reference;
       const codePoint = Number.parseInt(hex ?? decimal ?? '', hex ? 16 : 10);
       return codePoint <= 0x10ffff
         ? String.fromCodePoint(codePoint)

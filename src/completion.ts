@@ -2,6 +2,7 @@ import { chooseSpec, classifyDocument } from './linter';
 import {
   elementMap,
   normalizeEnumValue,
+  ownValue,
   type DocumentSpec,
   type ElementSpec,
   type ValueSpec,
@@ -178,7 +179,7 @@ function attributeValueSuggestions(
   attribute: string,
   typed: string,
 ): Suggestion[] {
-  const spec = element.attributes?.[attribute];
+  const spec = ownValue(element.attributes, attribute);
   if (spec?.kind !== 'enum' || !spec.values) return [];
   const values = matchingEnumValues(spec, typed).map(value => ({
     label: value,
@@ -251,7 +252,8 @@ function textSpecAt(
     `\\b${selector.attribute}\\s*=\\s*["']([^"']+)["']`,
   );
   const selectedValue = openingTag.match(pattern)?.[1];
-  return (selectedValue && selector.values[selectedValue]) || element.text;
+  const selected = selectedValue && ownValue(selector.values, selectedValue);
+  return selected || element.text;
 }
 
 /**

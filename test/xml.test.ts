@@ -19,6 +19,11 @@ test('decodeEntities keeps unknown or invalid references literal', () => {
   assert.equal(decodeEntities('&custom; &#x110000;'), '&custom; &#x110000;');
 });
 
+test('decodeEntities keeps references named like object members literal', () => {
+  const xml = '&constructor; &toString; &__proto__;';
+  assert.equal(decodeEntities(xml), xml);
+});
+
 test('leaf text excludes comments and narrows the range to the value', () => {
   assert.deepEqual(rootText('<A>\n  <!-- note -->  true \n</A>'), {
     value: 'true',

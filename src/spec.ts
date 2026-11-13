@@ -159,6 +159,17 @@ export function elementMap(document: DocumentSpec): Map<string, ElementSpec> {
   return new Map(document.elements.map(element => [element.path, element]));
 }
 
+/**
+ * Returns the value that a record holds for a key itself. Keys come from
+ * documents, so inherited members such as `constructor` must not match.
+ */
+export function ownValue<T>(
+  record: Readonly<Record<string, T>> | undefined,
+  key: string,
+): T | undefined {
+  return record && Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
 /** Normalizes an enum value for comparison, as the specification requires. */
 export function normalizeEnumValue(value: string, spec: ValueSpec): string {
   const normalized = spec.ignoreHyphens ? value.replace(/-/g, '') : value;

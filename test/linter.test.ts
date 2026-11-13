@@ -57,6 +57,14 @@ const cases: { name: string; xml: string; file?: string; rules: string[] }[] = [
     rules: ['AX103'],
   },
   {
+    name: 'AX103 attributes named like object members',
+    xml: flowCallout(
+      '<SharedFlowBundle>s</SharedFlowBundle>',
+      'name="FC-Test" constructor="x" toString="y"',
+    ),
+    rules: ['AX103', 'AX103'],
+  },
+  {
     name: 'AX104 missing attribute and child',
     xml: flowCallout('', ''),
     rules: ['AX104', 'AX104'],
