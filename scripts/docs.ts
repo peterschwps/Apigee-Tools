@@ -719,7 +719,8 @@ async function fetchHtml(url: string): Promise<string> {
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}: ${url}`);
       }
-      return response.text();
+      // Await the body here, so a failed read is retried as well
+      return await response.text();
     } catch (error) {
       lastError = error;
       if (attempt < 2) {
