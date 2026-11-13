@@ -5,6 +5,7 @@ import { closestValue, type TextEdit } from './fixes';
 import {
   elementMap,
   normalizeEnumValue,
+  ownValue,
   type DocumentKind,
   type DocumentSpec,
   type ElementSpec,
@@ -210,9 +211,8 @@ function checkElement(
 /** Reports unknown attributes and invalid attribute values. */
 function attributeIssues(node: XmlNode, spec: ElementSpec): LintIssue[] {
   const issues: LintIssue[] = [];
-  const attributeSpecs = spec.attributes ?? {};
   for (const attribute of node.attributes) {
-    const attributeSpec = attributeSpecs[attribute.name];
+    const attributeSpec = ownValue(spec.attributes, attribute.name);
 
     // Report unknown attributes; namespace declarations are always allowed
     if (!attributeSpec) {
@@ -260,7 +260,9 @@ function textIssue(node: XmlNode, spec: ElementSpec): LintIssue | undefined {
   const selectorValue = node.attributes.find(
     attribute => attribute.name === selector?.attribute,
   )?.value;
-  const selected = selectorValue ? selector?.values[selectorValue] : undefined;
+  const selected = selectorValue
+    ? ownValue(selector?.values, selectorValue)
+    : undefined;
   const textSpec = selected || spec.text;
   if (!textSpec || !node.text) return undefined;
   return valueIssue(
@@ -330,10 +332,11 @@ function valueIssue(
   }
 
   // Warn about documented values with known caveats
-  if (spec.warningValues?.[value]) {
+  const warning = ownValue(spec.warningValues, value);
+  if (warning) {
     return {
       rule: 'AX110',
-      message: spec.warningValues[value],
+      message: warning,
       start,
       end,
       source,
@@ -571,7 +574,7 @@ function policyNameIssues(
   if (!name?.value?.trim()) return [];
   if (name.valueStart === undefined || name.valueEnd === undefined) return [];
   const issues: LintIssue[] = [];
-  const prefix = policyPrefixes[root.name];
+  const prefix = ownValue(policyPrefixes, root.name);
   if (prefix && !name.value.startsWith(prefix)) {
     issues.push({
       rule: 'AX113',

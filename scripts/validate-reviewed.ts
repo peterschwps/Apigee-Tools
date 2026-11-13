@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   documentKinds,
   normalizeEnumValue,
+  ownValue,
   valueKinds,
   type DocumentSpec,
   type ElementSpec,
@@ -197,7 +198,8 @@ function validateUniqueChildAttribute(check: ElementCheck): void {
   if (!unique) return;
   const childPath = `${element.path}/${unique.child}`;
   const documented = document.elements.some(
-    item => item.path === childPath && item.attributes?.[unique.attribute],
+    item =>
+      item.path === childPath && ownValue(item.attributes, unique.attribute),
   );
   if (!children.includes(unique.child) || !documented) {
     throw new Error(`${label} has an invalid unique child attribute.`);
@@ -263,7 +265,8 @@ function validateConflicts(check: ElementCheck): void {
   for (const conflict of element.conflicts || []) {
     if (
       Boolean(conflict.attribute) === Boolean(conflict.child) ||
-      (conflict.attribute && !element.attributes?.[conflict.attribute]) ||
+      (conflict.attribute &&
+        !ownValue(element.attributes, conflict.attribute)) ||
       (conflict.child && !children.includes(conflict.child)) ||
       !children.includes(conflict.withChild) ||
       conflict.child === conflict.withChild
@@ -294,7 +297,9 @@ function validateGroups(check: ElementCheck): void {
     if (
       !group.attributes.length ||
       new Set(group.attributes).size !== group.attributes.length ||
-      group.attributes.some(attribute => !element.attributes?.[attribute]) ||
+      group.attributes.some(
+        attribute => !ownValue(element.attributes, attribute),
+      ) ||
       invalidBounds(group)
     ) {
       throw new Error(`${label} has an invalid attribute group.`);
@@ -328,7 +333,7 @@ function validateValues(check: ElementCheck): void {
   if (element.text) validateValue(element.text, `${label} text`);
   if (element.textByAttribute) {
     const { attribute, values } = element.textByAttribute;
-    if (!element.attributes?.[attribute]) {
+    if (!ownValue(element.attributes, attribute)) {
       throw new Error(`${label} has an unknown text selector attribute.`);
     }
     for (const [name, value] of Object.entries(values)) {
