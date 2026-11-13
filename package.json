@@ -3,7 +3,7 @@
   "displayName": "Apigee Tools",
   "publisher": "peterschwps",
   "description": "Diagnostics, completion, and quick fixes for Apigee X proxy and shared flow XML, based on Google's documentation.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": false,
   "license": "MIT",
   "icon": "images/icon.png",
