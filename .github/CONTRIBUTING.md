@@ -14,7 +14,7 @@ npm run check
 npm test
 ```
 
-`npm run test:integration` runs the extension in a real VS Code host. Press F5 in VS Code to start an Extension Development Host. See the [development guide](../docs/development.md) for the code structure and documentation maintenance.
+Run `npm run format` before committing; `npm run check` also verifies the Prettier formatting. `npm run test:integration` runs the extension in a real VS Code host. Press F5 in VS Code to start an Extension Development Host. See the [development guide](../docs/development.md) for the code structure and documentation maintenance.
 
 ## Rules and documentation
 
