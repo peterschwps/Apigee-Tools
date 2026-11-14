@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- A second target endpoint, which no route rule uses. -->
-<TargetEndpoint name="backend">
-  <HTTPTargetConnection>
-    <URL>https://example.com/v2</URL>
-  </HTTPTargetConnection>
-</TargetEndpoint>

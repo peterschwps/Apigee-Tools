@@ -117,9 +117,9 @@ test('invalid configuration names are rejected', () => {
   });
 });
 
-test('a missing gcloud is reported as missing', async t => {
-  if (process.platform === 'win32') return t.skip('uses a POSIX path');
-  const gcloud = gcloudRunner(path.join(scripts, 'does-not-exist'));
+test('a command that is not on the PATH is reported as missing', async () => {
+  // Elsewhere than on Windows, running it fails with ENOENT
+  const gcloud = gcloudRunner('apigee-tools-no-such-command');
   await assert.rejects(gcloud(['version']), { reason: 'missing' });
 });
 

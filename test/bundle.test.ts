@@ -10,8 +10,12 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { bundlePolicyNames, lintBundleReferences } from '../src/bundle';
-import { classifyDocument, lint } from '../src/linter';
+import {
+  bundlePolicyNames,
+  lintBundleReferences,
+  lintFile,
+} from '../src/bundle';
+import { classifyDocument } from '../src/linter';
 import {
   fixtureBundle,
   policyFile,
@@ -31,11 +35,11 @@ for (const bundle of [fixtureBundle, sharedFlowBundle]) {
     assert.ok(files.length >= 4);
     for (const file of files) {
       const xml = await readFile(file, 'utf8');
-      const issues = [
-        ...lint(xml, file, specs),
-        ...(await lintBundleReferences(xml, file)),
-      ];
-      assert.deepEqual(issues, [], path.relative(bundle, file));
+      assert.deepEqual(
+        await lintFile(xml, file, specs),
+        [],
+        path.relative(bundle, file),
+      );
     }
   });
 }
@@ -100,7 +104,7 @@ test('AX109 resolves resources against the shared flow bundle', async () => {
 });
 
 test('AX111 reports a route rule referencing a missing target endpoint', async () => {
-  const routes = ['default', 'backend', 'missing', '{dynamic}'].map(
+  const routes = ['default', 'missing', '{dynamic}'].map(
     target =>
       `<RouteRule name="${target}"><TargetEndpoint>${target}</TargetEndpoint></RouteRule>`,
   );

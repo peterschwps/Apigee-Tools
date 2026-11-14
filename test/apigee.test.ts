@@ -251,7 +251,7 @@ test('the overview lists environments, groups, and enabled add-ons', async t => 
           name: 'acme',
           projectId: 'acme-project',
           runtimeType: 'CLOUD',
-          billingType: 'PAYG',
+          billingType: 'SUBSCRIPTION',
           environments: ['test', 'dev'],
           addonsConfig: {
             apiSecurityConfig: { enabled: true },
@@ -283,7 +283,7 @@ test('the overview lists environments, groups, and enabled add-ons', async t => 
     name: 'acme',
     projectId: 'acme-project',
     runtimeType: 'CLOUD',
-    billingType: 'PAYG',
+    billingType: 'SUBSCRIPTION',
     state: undefined,
     addons: ['Advanced API Security'],
     environments: [

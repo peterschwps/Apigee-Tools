@@ -39,7 +39,7 @@ export type Context = {
 type Operation = { name: string; done?: boolean; error?: { message?: string } };
 
 /** Reports a failed Apigee API request with Google's message. */
-export class ApiError extends Error {
+class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,

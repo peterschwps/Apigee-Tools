@@ -10,7 +10,6 @@ import { fixtureBundle, repositoryRoot, sharedFlowBundle } from './support';
 
 let workspace: string;
 let invalidPolicy: string;
-let warningPolicy: string;
 
 async function capture(args: string[]) {
   const out: string[] = [];
@@ -33,9 +32,8 @@ before(async () => {
   );
   const warnings = path.join(workspace, 'warnings', 'apiproxy', 'policies');
   await mkdir(warnings, { recursive: true });
-  warningPolicy = path.join(warnings, 'SA-Test.xml');
   await writeFile(
-    warningPolicy,
+    path.join(warnings, 'SA-Test.xml'),
     '<SpikeArrest name="SA-Test">\n  <Rate>10ps</Rate>\n  <UseEffectiveCount>false</UseEffectiveCount>\n</SpikeArrest>\n',
   );
   const ignoredDirectory = path.join(
