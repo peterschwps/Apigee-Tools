@@ -206,15 +206,29 @@ export function testOrg(context: Context) {
         'cloudkms.googleapis.com',
         `--project=${project}`,
       ]);
-      await request(
-        'POST',
-        `/projects/${encode(project)}:provisionOrganization`,
-        {
-          analyticsRegion: region,
-          runtimeLocation: region,
-          disableVpcPeering: true,
-        },
-      );
+      // A newly enabled API takes a few minutes to reach Apigee
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await request(
+            'POST',
+            `/projects/${encode(project)}:provisionOrganization`,
+            {
+              analyticsRegion: region,
+              runtimeLocation: region,
+              disableVpcPeering: true,
+            },
+          );
+          break;
+        } catch (error) {
+          const propagating =
+            error instanceof ApiError &&
+            error.status === 403 &&
+            /has not been used|is disabled/i.test(error.message);
+          if (!propagating || attempt === 10) throw error;
+          log('Waiting until the newly enabled Apigee API is available…');
+          await context.sleep(30_000);
+        }
+      }
       log('Provisioning started; this takes up to 40 minutes.');
 
       // The organization answers 403 until it is ready

@@ -180,3 +180,28 @@ test('provision stops before any change when billing is off', async t => {
     ['GET'],
   );
 });
+
+test('provision waits until a newly enabled Apigee API is available', async t => {
+  let attempts = 0;
+  serve(t, ({ method, path }) => {
+    if (method === 'GET') {
+      return attempts < 2 ? { status: 403 } : { body: { state: 'ACTIVE' } };
+    }
+    if (path.endsWith(':provisionOrganization') && ++attempts === 1) {
+      return {
+        status: 403,
+        body: {
+          error: {
+            message:
+              'Apigee API has not been used in project acme-test before or it is disabled.',
+          },
+        },
+      };
+    }
+    return { body: {} };
+  });
+  const run = context();
+  await testOrg(run).provision('acme-test');
+  assert.equal(attempts, 2);
+  assert.ok(run.lines.some(line => line.startsWith('Waiting until')));
+});
