@@ -144,12 +144,7 @@ class ApigeeDashboard extends LitElement {
     return html`
       <header class="topbar">
         <div class="brand">
-          <span class="logo" aria-hidden="true">
-            <span class="dot error"></span><span class="connector"></span>
-            <span class="dot warning"></span><span class="connector"></span>
-            <span class="dot success"></span>
-          </span>
-          <h1>Apigee Tools</h1>
+          <h1>Dashboard</h1>
         </div>
         <div class="context">
           ${
