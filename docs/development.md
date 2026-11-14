@@ -48,3 +48,16 @@ uv tool run --with "mkdocs-material>=9,<10" "mkdocs>=1.6,<2" build --strict
 `npm test` runs the suites with Node's built-in test runner. Add a failing case before fixing a bug, and extend the fixture bundle only with XML that Apigee X accepts. CI runs `check`, `test`, and `build` on pushes to `main` and on pull requests.
 
 `npm run test:integration` builds the extension, downloads VS Code 1.96.0 (the engine floor) into `.cache/vscode-test`, and runs `test/integration/suite.ts` in a real extension host against a temporary workspace. It covers diagnostics, quick fixes, and Step/Name completion through the VS Code API, and opens the dashboard with a fake `gcloud` script and a stubbed Apigee API, so it never needs a network or an Apigee organization. The dashboard case is skipped on Windows, where the fake `gcloud` cannot run. CI runs it in a separate job under `xvfb-run`; locally on Linux without a display, prefix the command with `xvfb-run -a`.
+
+## Trying the dashboard against Apigee
+
+`scripts/test-org.ts` sets up a free Apigee X evaluation organization to try the dashboard against. It needs `gcloud`, signed in with `gcloud auth login`, and a Google Cloud project with a billing account. The organization is created without VPC peering and without internet access, so no billable network resources are set up; Google deletes it after 60 days.
+
+```sh
+npx tsx scripts/test-org.ts provision PROJECT_ID
+npx tsx scripts/test-org.ts populate PROJECT_ID
+npx tsx scripts/test-org.ts status PROJECT_ID
+npx tsx scripts/test-org.ts delete PROJECT_ID --yes
+```
+
+Provisioning takes up to 40 minutes. `populate` adds an environment `test` in a group `test-group`, deploys the fixture proxy `hello` unchanged to `eval` and with one changed policy to `test`, and deploys the shared flow `traffic-shared` to `eval`. In the Extension Development Host, open the dashboard on this repository: `hello` matches the local bundle in `eval` and shows **≠ local** in `test`.

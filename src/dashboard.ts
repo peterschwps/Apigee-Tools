@@ -325,6 +325,35 @@ export function registerDashboard(
         return;
       }
 
+      // An organization guessed from the gcloud project may not exist, and
+      // Apigee answers 403 for missing organizations too
+      if (!organizations.includes(organization)) {
+        const missing = await client.organization(organization).then(
+          () => false,
+          error => {
+            if (error instanceof ApigeeError && error.status === 403)
+              return true;
+            throw error;
+          },
+        );
+        if (missing) {
+          snapshot = {
+            ...snapshot,
+            account: current.account,
+            organizations: [],
+            organization: undefined,
+            overview: undefined,
+            rows: undefined,
+            problem: {
+              reason: 'noOrganization',
+              message: `No Apigee organization was found for project ${organization}.`,
+              hint: 'Select the project of an Apigee organization with gcloud config set project, or ask for a role such as Apigee Read-only Admin (roles/apigee.readOnlyAdmin).',
+            },
+          };
+          return;
+        }
+      }
+
       // Publish the choice first, so the selector stays if loading it fails;
       // data of another organization or account must not stay next to it
       const changed =
