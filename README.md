@@ -35,7 +35,7 @@ Apigee Edge, hybrid-only configuration, and validation of embedded payload conte
 
 For CI, the same checks run from the command line: `npx @peterschwps/apigee-tools path/to/bundles` exits with 1 when errors are found. See the [command-line section](docs/index.md#command-line).
 
-See the [user guide](docs/index.md), [development guide](docs/development.md), and [apigeelint comparison](docs/apigeelint-review.md).
+See the [user guide](docs/index.md) and the [development guide](docs/development.md).
 
 Report problems through [GitHub Issues](https://github.com/peterschwps/Apigee-Tools/issues), including a minimal XML example without credentials or private data.
 

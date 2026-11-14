@@ -33,7 +33,7 @@ TypeScript strict mode is enabled, together with checks for unused code and impl
 
 `npm run release:check` validates inventory status, reviewed data, and comparison coverage. Passing does not resolve documented gaps or replace editor/package checks.
 
-The [apigeelint comparison](apigeelint-review.md) documents optional differential checks. apigeelint is not a runtime dependency.
+`data/comparison/apigeelint.json` records the review of [apigeelint](https://github.com/apigee/apigeelint): the package version and plugin hashes, a disposition for every upstream rule, the source-gap assessments, and the apigee-samples commit used for comparison. Google's documentation stays authoritative; apigeelint is optional evidence for development and never a runtime dependency. `npm run comparison:validate` checks the record as part of `check` and `release:check`. To rerun the comparison, install the recorded apigeelint version with `npm install --prefix .cache/apigeelint-runner --no-save --package-lock=false --ignore-scripts apigeelint@VERSION`, check out the recorded samples commit in `.cache/apigee-samples`, and run `npm run compare:apigeelint`. It verifies both, runs apigeelint with `--profile apigeex`, and writes `.cache/apigeelint-comparison.json`.
 
 ## Documentation site
 
