@@ -57,7 +57,7 @@ test('unzip reads stored and deflated entries and skips directories', async () =
     'apiproxy/policies/SA-Limit.xml',
     'apiproxy/proxies/default.xml',
     'apiproxy/resources/oas/hello.yaml',
-    'apiproxy/targets/backend-v2.xml',
+    'apiproxy/targets/backend.xml',
     'apiproxy/targets/default.xml',
   ]);
   assert.deepEqual(

@@ -11,9 +11,17 @@
 // billable network resources are set up. The project needs a billing account,
 // and gcloud must be signed in with an account that may provision Apigee.
 import { spawnSync } from 'node:child_process';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { crc32 } from 'node:zlib';
-import { gcloudRunner, tokenSource, type TokenSource } from '../src/gcloud';
+import {
+  gcloudCommand,
+  GcloudError,
+  gcloudInvocation,
+  gcloudRunner,
+  tokenSource,
+  type TokenSource,
+} from '../src/gcloud';
 import type { Kind } from '../src/protocol';
 import { readBundle, type BundleFiles } from '../src/revision';
 
@@ -92,16 +100,31 @@ export function testOrg(context: Context) {
       response = await send(await token);
     }
     const text = await response.text();
-    let json: { error?: { message?: string } } = {};
+    let json: {
+      error?: {
+        message?: string;
+        details?: {
+          violations?: { filename?: string; description?: string }[];
+        }[];
+      };
+    } = {};
     try {
       json = text ? JSON.parse(text) : {};
     } catch {
       // Not JSON; the status line describes the failure
     }
     if (!response.ok) {
+      // A rejected import lists each problem with its file
+      const violations = (json.error?.details ?? [])
+        .flatMap(detail => detail.violations ?? [])
+        .map(
+          violation =>
+            `\n  ${violation.filename ?? '?'}: ${violation.description ?? ''}`,
+        )
+        .join('');
       throw new ApiError(
         response.status,
-        json.error?.message || `${response.status} ${response.statusText}`,
+        `${json.error?.message || `${response.status} ${response.statusText}`}${violations}`,
       );
     }
     return json as T;
@@ -110,22 +133,24 @@ export function testOrg(context: Context) {
   /** Waits until a long-running operation is done. */
   async function finish(operation: Operation, what: string): Promise<void> {
     log(`${what}…`);
-    for (let current = operation; !current.done;) {
+    let current = operation;
+    while (!current.done) {
       await context.sleep(5_000);
-      current = await request<Operation>('GET', `/${current.name}`);
-      if (current.error) {
-        throw new Error(`${what} failed: ${current.error.message}`);
-      }
+      current = await request<Operation>('GET', `/${operation.name}`);
+    }
+    if (current.error) {
+      throw new Error(`${what} failed: ${current.error.message}`);
     }
   }
 
   /** Returns the organization, or nothing while it does not exist yet. */
   async function organization(project: string) {
     try {
-      return await request<{ state?: string; expiresAt?: string }>(
-        'GET',
-        `/organizations/${encode(project)}`,
-      );
+      return await request<{
+        state?: string;
+        expiresAt?: string;
+        billingType?: string;
+      }>('GET', `/organizations/${encode(project)}`);
     } catch (error) {
       // Apigee answers 403 for organizations that do not exist (yet)
       if (error instanceof ApiError && [403, 404].includes(error.status)) {
@@ -133,6 +158,53 @@ export function testOrg(context: Context) {
       }
       throw error;
     }
+  }
+
+  /**
+   * Fails unless the organization exists and is an evaluation organization,
+   * so that a mistyped project ID never changes or deletes a paid one.
+   */
+  async function evaluationOrganization(project: string): Promise<void> {
+    const current = await organization(project);
+    if (!current) {
+      throw new Error(
+        `Organization ${project} does not exist or is not ready yet; check it with the status command.`,
+      );
+    }
+    if (current.billingType !== 'EVALUATION') {
+      throw new Error(
+        `Organization ${project} is ${current.billingType ?? 'of an unknown type'}, not an evaluation organization; this script changes only evaluation organizations.`,
+      );
+    }
+  }
+
+  /** Waits until a deployment is ready, and fails with its errors. */
+  async function deployed(
+    project: string,
+    environment: string,
+    kind: Kind,
+    name: string,
+    revision: string,
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const status = await request<{
+        state?: string;
+        errors?: { message?: string }[];
+      }>(
+        'GET',
+        `/organizations/${encode(project)}/environments/${encode(environment)}/${kind}/${encode(name)}/revisions/${encode(revision)}/deployments`,
+      );
+      if (status.state === 'READY') return;
+      if (status.state === 'ERROR') {
+        throw new Error(
+          `Deploying ${name} revision ${revision} to ${environment} failed: ${(status.errors ?? []).map(error => error.message).join('; ')}`,
+        );
+      }
+      await context.sleep(10_000);
+    }
+    throw new Error(
+      `${name} revision ${revision} is not ready in ${environment} after ten minutes.`,
+    );
   }
 
   /** Imports a bundle as a new revision and returns its number. */
@@ -207,9 +279,10 @@ export function testOrg(context: Context) {
         `--project=${project}`,
       ]);
       // A newly enabled API takes a few minutes to reach Apigee
+      let operation: Operation | undefined;
       for (let attempt = 1; ; attempt++) {
         try {
-          await request(
+          operation = await request<Operation>(
             'POST',
             `/projects/${encode(project)}:provisionOrganization`,
             {
@@ -220,6 +293,10 @@ export function testOrg(context: Context) {
           );
           break;
         } catch (error) {
+          if (error instanceof ApiError && error.status === 409) {
+            log('Provisioning is already running.');
+            break;
+          }
           const propagating =
             error instanceof ApiError &&
             error.status === 403 &&
@@ -231,12 +308,25 @@ export function testOrg(context: Context) {
       }
       log('Provisioning started; this takes up to 40 minutes.');
 
-      // The organization answers 403 until it is ready
+      // The organization answers 403 until it is ready; a failed provisioning
+      // shows in its operation, and other errors are worth another try
       for (let minutes = 0; minutes <= 60; minutes++) {
-        const current = await organization(project);
+        const current = await organization(project).catch((error: Error) => {
+          if (error instanceof GcloudError) throw error;
+          log(`Checking failed (${error.message}); trying again.`);
+          return undefined;
+        });
         if (current?.state === 'ACTIVE') {
           log(`Organization ${project} is active.`);
           return;
+        }
+        const progress =
+          operation &&
+          (await request<Operation>('GET', `/${operation.name}`).catch(
+            () => undefined,
+          ));
+        if (progress?.error) {
+          throw new Error(`Provisioning failed: ${progress.error.message}`);
         }
         await context.sleep(60_000);
       }
@@ -247,6 +337,7 @@ export function testOrg(context: Context) {
 
     /** Adds the test environment and group and deploys the test fixtures. */
     async populate(project: string): Promise<void> {
+      await evaluationOrganization(project);
       const organizationPath = `/organizations/${encode(project)}`;
       // The runtime instance is still being created when the organization
       // already reports active; attachments need it ready
@@ -277,6 +368,11 @@ export function testOrg(context: Context) {
         `${organizationPath}/environments`,
       );
       if (!environments.includes(testEnvironment)) {
+        if (environments.length >= 2) {
+          throw new Error(
+            `${project} already has two environments (${environments.join(', ')}), the limit of an evaluation organization.`,
+          );
+        }
         await finish(
           await request<Operation>('POST', `${organizationPath}/environments`, {
             name: testEnvironment,
@@ -356,9 +452,16 @@ export function testOrg(context: Context) {
         'traffic-shared',
         sharedFlow,
       );
-      await deploy(project, 'eval', 'apis', 'hello', same);
-      await deploy(project, testEnvironment, 'apis', 'hello', different);
-      await deploy(project, 'eval', 'sharedflows', 'traffic-shared', flow);
+      const deployments: [string, Kind, string, string][] = [
+        ['eval', 'apis', 'hello', same],
+        [testEnvironment, 'apis', 'hello', different],
+        ['eval', 'sharedflows', 'traffic-shared', flow],
+      ];
+      for (const deployment of deployments)
+        await deploy(project, ...deployment);
+      for (const deployment of deployments) {
+        await deployed(project, ...deployment);
+      }
       log(
         [
           '',
@@ -413,6 +516,7 @@ export function testOrg(context: Context) {
      * disappears with it, so the organization itself is polled.
      */
     async delete(project: string): Promise<void> {
+      await evaluationOrganization(project);
       await request('DELETE', `/organizations/${encode(project)}`);
       log(`Deleting organization ${project}…`);
       for (let attempt = 0; attempt < 20; attempt++) {
@@ -482,13 +586,18 @@ async function main(): Promise<void> {
     tokens: tokenSource(gcloud),
     read: gcloud,
     gcloud: args => {
-      // Windows needs a shell to run gcloud.cmd
-      const result = spawnSync(gcloudPath, args, {
+      // The same invocation as the dashboard's, including cmd.exe on Windows
+      const run = gcloudInvocation(gcloudCommand(gcloudPath), args);
+      const result = spawnSync(run.file, run.args, {
         stdio: 'inherit',
-        shell: process.platform === 'win32',
+        shell: run.shell,
+        cwd: homedir(),
       });
-      if (result.status !== 0)
-        throw new Error(`gcloud ${args.join(' ')} failed.`);
+      if (result.status !== 0) {
+        throw new Error(
+          `gcloud ${args.join(' ')} failed${result.error ? `: ${result.error.message}` : '.'}`,
+        );
+      }
     },
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     log: line => console.log(line),
@@ -517,7 +626,11 @@ async function main(): Promise<void> {
 
 if (require.main === module) {
   main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
+    const cause = (error as { cause?: Error }).cause?.message;
+    console.error(
+      error instanceof Error ? error.message : error,
+      cause ? `(${cause})` : '',
+    );
     process.exitCode = 1;
   });
 }

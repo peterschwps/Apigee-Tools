@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The file name differs from the name attribute; RouteRules may use either. -->
+<!-- A second target endpoint, which no route rule uses. -->
 <TargetEndpoint name="backend">
   <HTTPTargetConnection>
     <URL>https://example.com/v2</URL>

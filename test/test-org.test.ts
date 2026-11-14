@@ -105,11 +105,16 @@ test('provision leaves an existing organization alone', async t => {
   );
 });
 
-test('populate adds the test environment and group and deploys the fixtures', async t => {
+/** Answers like an evaluation organization; `existing` adds the test setup. */
+function evaluation(existing = false) {
   let revision = 0;
   let instanceChecks = 0;
-  const requests = serve(t, ({ method, path }) => {
-    switch (`${method} ${path.split('?')[0]}`) {
+  let operationChecks = 0;
+  const answer = ({ method, path }: Request) => {
+    const route = `${method} ${path.split('?')[0]}`;
+    switch (route) {
+      case 'GET /organizations/acme-test':
+        return { body: { state: 'ACTIVE', billingType: 'EVALUATION' } };
       case 'GET /organizations/acme-test/instances':
         // The instance is still being created on the first request
         return {
@@ -123,21 +128,54 @@ test('populate adds the test environment and group and deploys the fixtures', as
           },
         };
       case 'GET /organizations/acme-test/environments':
-        return { body: ['eval'] };
+        return { body: existing ? ['eval', 'test'] : ['eval'] };
+      case 'GET /organizations/acme-test/instances/europe-west3/attachments':
+        return {
+          body: existing ? { attachments: [{ environment: 'test' }] } : {},
+        };
       case 'GET /organizations/acme-test/envgroups':
-        return { body: { environmentGroups: [{ name: 'eval-group' }] } };
+        return {
+          body: {
+            environmentGroups: [
+              { name: 'eval-group' },
+              ...(existing ? [{ name: 'test-group' }] : []),
+            ],
+          },
+        };
+      case 'GET /organizations/acme-test/envgroups/test-group/attachments':
+        return {
+          body: existing
+            ? { environmentGroupAttachments: [{ environment: 'test' }] }
+            : {},
+        };
+      case 'GET /organizations/acme-test/operations/1':
+        return { body: { done: ++operationChecks > 1 } };
       case 'POST /organizations/acme-test/apis':
       case 'POST /organizations/acme-test/sharedflows':
         return { body: { revision: String(++revision) } };
-      default:
-        // Lists are empty, and operations are done at once
-        return {
-          body: { name: 'organizations/acme-test/operations/1', done: true },
-        };
     }
-  });
+    if (route.startsWith('POST ') && route.endsWith('/deployments')) {
+      return { body: {} };
+    }
+    if (route.startsWith('GET ') && route.endsWith('/deployments')) {
+      return { body: { state: 'READY' } };
+    }
+    if (route.startsWith('POST ')) {
+      return {
+        body: { name: 'organizations/acme-test/operations/1', done: false },
+      };
+    }
+    return { status: 404 };
+  };
+  return { answer, checks: () => ({ instanceChecks, operationChecks }) };
+}
+
+test('populate adds the test environment and group and deploys the fixtures', async t => {
+  const fake = evaluation();
+  const requests = serve(t, fake.answer);
   await testOrg(context()).populate('acme-test');
-  assert.equal(instanceChecks, 2);
+  assert.equal(fake.checks().instanceChecks, 2);
+  assert.ok(fake.checks().operationChecks >= 2, 'operations are polled');
   const posts = requests.filter(request => request.method === 'POST');
   assert.deepEqual(
     posts.map(request => request.path),
@@ -168,14 +206,64 @@ test('populate adds the test environment and group and deploys the fixtures', as
   assert.match(different.get(policy)!.toString(), /40ps/);
 });
 
+test('populate again only imports and deploys', async t => {
+  const requests = serve(t, evaluation(true).answer);
+  await testOrg(context()).populate('acme-test');
+  const posts = requests.filter(request => request.method === 'POST');
+  assert.equal(posts.length, 6);
+  assert.ok(
+    posts.every(
+      request =>
+        request.path.includes('action=import') ||
+        request.path.endsWith('/deployments?override=true'),
+    ),
+  );
+});
+
+test('populate and delete change only evaluation organizations', async t => {
+  const requests = serve(t, () => ({
+    body: { state: 'ACTIVE', billingType: 'PAYG' },
+  }));
+  const commands = testOrg(context());
+  await assert.rejects(
+    commands.populate('acme-test'),
+    /not an evaluation organization/,
+  );
+  await assert.rejects(
+    commands.delete('acme-test'),
+    /not an evaluation organization/,
+  );
+  assert.ok(requests.every(request => request.method === 'GET'));
+});
+
+test('provision treats a running provisioning as started', async t => {
+  let checks = 0;
+  serve(t, ({ method }) => {
+    if (method === 'GET') {
+      return ++checks < 3 ? { status: 403 } : { body: { state: 'ACTIVE' } };
+    }
+    return { status: 409, body: { error: { message: 'already exists' } } };
+  });
+  const run = context();
+  await testOrg(run).provision('acme-test');
+  assert.ok(run.lines.includes('Provisioning is already running.'));
+});
+
 test('delete waits until the organization is gone', async t => {
   let checks = 0;
   const requests = serve(t, ({ method }) =>
-    method === 'GET' && ++checks > 1 ? { status: 403 } : { body: {} },
+    method !== 'GET'
+      ? { body: {} }
+      : ++checks > 2
+        ? { status: 403 }
+        : { body: { state: 'ACTIVE', billingType: 'EVALUATION' } },
   );
   const run = context();
   await testOrg(run).delete('acme-test');
-  assert.equal(requests[0].method, 'DELETE');
+  assert.deepEqual(
+    requests.slice(0, 2).map(request => request.method),
+    ['GET', 'DELETE'],
+  );
   assert.match(run.lines.at(-1)!, /^Deleted\./);
 });
 
