@@ -2,7 +2,7 @@
   "name": "apigee-tools",
   "displayName": "Apigee Tools",
   "publisher": "peterschwps",
-  "description": "Diagnostics, completion, and quick fixes for Apigee X proxy and shared flow XML, based on Google's documentation.",
+  "description": "Diagnostics, completion, and quick fixes for Apigee X proxy and shared flow XML, based on Google's documentation, and a read-only dashboard of an organization's deployments.",
   "version": "0.1.5",
   "private": false,
   "license": "MIT",
@@ -38,8 +38,17 @@
     "apigee-tools": "dist/cli.js"
   },
   "activationEvents": [
-    "onLanguage:xml"
+    "onLanguage:xml",
+    "onWebviewPanel:apigeeTools.dashboard",
+    "workspaceContains:**/apiproxy/*.xml",
+    "workspaceContains:**/sharedflowbundle/*.xml"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Linting works in Restricted Mode. The dashboard runs gcloud and reads from the Apigee API, so it needs a trusted workspace."
+    }
+  },
   "contributes": {
     "configuration": {
       "title": "Apigee Tools",
@@ -64,13 +73,36 @@
           },
           "default": [],
           "description": "Diagnostic rule IDs to ignore, for example AX103."
+        },
+        "apigeeTools.gcloudPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "Path to the `gcloud` executable for the dashboard. Leave empty to use `gcloud` from the `PATH`."
+        },
+        "apigeeTools.gcloudConfiguration": {
+          "type": "string",
+          "default": "",
+          "pattern": "^([a-z][-a-z0-9]*)?$",
+          "patternErrorMessage": "Use the name of a gcloud configuration: lower-case letters, digits, and hyphens.",
+          "markdownDescription": "Named gcloud configuration for the dashboard, as listed by `gcloud config configurations list`. Leave empty to use the active configuration."
         }
       }
-    }
+    },
+    "commands": [
+      {
+        "command": "apigeeTools.openDashboard",
+        "title": "Open Dashboard",
+        "category": "Apigee Tools",
+        "icon": "$(dashboard)"
+      }
+    ]
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts src/cli.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --sourcemap --outdir=dist",
-    "check": "npm run format:check && tsc -p tsconfig.json --noEmit && npm run data:validate && npm run comparison:validate",
+    "build": "npm run typecheck && esbuild src/extension.ts src/cli.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --sourcemap --outdir=dist && npm run build:webview",
+    "build:webview": "esbuild src/webview/main.ts src/webview/main.css node_modules/@vscode/codicons/dist/codicon.css --bundle --minify --sourcemap --format=iife --target=chrome128 --loader:.ttf=file \"--entry-names=[name]\" \"--asset-names=[name]\" --outdir=dist/webview",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p src/webview/tsconfig.json --noEmit",
+    "check": "npm run format:check && npm run typecheck && npm run data:validate && npm run comparison:validate",
     "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
     "comparison:validate": "tsx scripts/compare-apigeelint.ts --validate",
@@ -89,7 +121,10 @@
     "vscode:prepublish": "npm run build"
   },
   "dependencies": {
+    "@vscode-elements/elements": "^2.5.1",
+    "@vscode/codicons": "^0.0.45",
     "@xml-tools/parser": "^1.0.11",
+    "lit": "^3.3.3",
     "minimatch": "^10.2.6"
   },
   "devDependencies": {

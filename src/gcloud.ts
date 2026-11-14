@@ -46,6 +46,11 @@ const signedOutPattern =
 // cmd.exe's wording when a command does not exist
 const notFoundOnWindows = /is not recognized as an internal or external/i;
 
+/** Returns whether a name is a valid gcloud configuration name. */
+export function isConfigurationName(name: string): boolean {
+  return configurationPattern.test(name);
+}
+
 /**
  * Returns how to start gcloud: directly on macOS and Linux, and on Windows as
  * one quoted command line for cmd.exe, which Node needs to run `gcloud.cmd`.
@@ -73,7 +78,7 @@ export function gcloudInvocation(
  * prompt.
  */
 export function gcloudRunner(path: string, configuration = ''): Gcloud {
-  if (configuration && !configurationPattern.test(configuration)) {
+  if (configuration && !isConfigurationName(configuration)) {
     throw new GcloudError(
       'failed',
       `"${configuration}" is not a valid gcloud configuration name.`,

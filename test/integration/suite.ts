@@ -1,7 +1,53 @@
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
 import * as vscode from 'vscode';
 
 const source = 'Apigee Tools';
+const gcloudLog = process.env.APIGEE_TOOLS_GCLOUD_LOG ?? '';
+const revisionZip = process.env.APIGEE_TOOLS_REVISION_ZIP ?? '';
+const bundlePath =
+  '/v1/organizations/acme/apis/hello/revisions/1?format=bundle';
+const statusPath =
+  '/v1/organizations/acme/environments/dev/apis/hello/revisions/1/deployments';
+
+// Responses of a small fake organization, by path and query
+const apigee: Record<string, unknown> = {
+  '/v1/organizations': { organizations: [{ organization: 'acme' }] },
+  '/v1/organizations/acme': {
+    name: 'acme',
+    projectId: 'acme',
+    runtimeType: 'CLOUD',
+    environments: ['dev'],
+  },
+  '/v1/organizations/acme/environments/dev': { name: 'dev', type: 'BASE' },
+  '/v1/organizations/acme/envgroups': {
+    environmentGroups: [{ name: 'public', hostnames: ['api.example.com'] }],
+  },
+  '/v1/organizations/acme/envgroups/public/attachments': {
+    environmentGroupAttachments: [{ environment: 'dev' }],
+  },
+  '/v1/organizations/acme/apis': { proxies: [{ name: 'hello' }] },
+  '/v1/organizations/acme/sharedflows': { sharedFlows: [] },
+  '/v1/organizations/acme/deployments?sharedFlows=false': {
+    deployments: [
+      {
+        environment: 'dev',
+        apiProxy: 'hello',
+        revision: '1',
+        deployStartTime: '1700000000000',
+      },
+    ],
+  },
+  '/v1/organizations/acme/deployments?sharedFlows=true': { deployments: [] },
+  [statusPath]: { state: 'READY' },
+};
+
+/** Returns the recorded calls of the fake gcloud, none if it never ran. */
+function gcloudCalls(): string[] {
+  return existsSync(gcloudLog)
+    ? readFileSync(gcloudLog, 'utf8').trim().split('\n')
+    : [];
+}
 
 function workspaceFile(...segments: string[]): vscode.Uri {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -142,6 +188,64 @@ const tests: [string, () => Promise<void>][] = [
         labels.includes('FC-Typo') && labels.includes('FC-Disable'),
         `unexpected completions: ${labels.join(', ')}`,
       );
+    },
+  ],
+  [
+    'activation runs no gcloud command',
+    async () => {
+      assert.deepEqual(gcloudCalls(), []);
+    },
+  ],
+  [
+    'the dashboard loads deployments through gcloud and the Apigee API',
+    async () => {
+      // The extension shares the global fetch of the extension host
+      const requests: { path: string; authorization?: string }[] = [];
+      const original = globalThis.fetch;
+      globalThis.fetch = async (input, init) => {
+        const url = new URL(String(input));
+        const path = `${url.pathname}${url.search}`;
+        const headers = init?.headers as Record<string, string> | undefined;
+        requests.push({ path, authorization: headers?.authorization });
+        if (path === bundlePath) return new Response(readFileSync(revisionZip));
+        const body = apigee[path];
+        return new Response(JSON.stringify(body ?? {}), {
+          status: body ? 200 : 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      };
+      try {
+        await vscode.commands.executeCommand('apigeeTools.openDashboard');
+        const paths = () => requests.map(request => request.path);
+        await waitFor('the deployment status', () =>
+          paths().includes(statusPath),
+        );
+        await waitFor('the revision bundle', () =>
+          paths().includes(bundlePath),
+        );
+        const tab = vscode.window.tabGroups.all
+          .flatMap(group => group.tabs)
+          .find(
+            item =>
+              item.input instanceof vscode.TabInputWebview &&
+              item.input.viewType.endsWith('apigeeTools.dashboard'),
+          );
+        assert.ok(tab, 'expected the dashboard tab');
+        assert.ok(
+          requests.every(
+            request => request.authorization === 'Bearer ya29.integration',
+          ),
+          'expected every request to carry the gcloud token',
+        );
+        assert.deepEqual(
+          gcloudCalls()
+            .map(call => call.split(' ').slice(0, 2).join(' '))
+            .sort(),
+          ['auth print-access-token', 'config list'],
+        );
+      } finally {
+        globalThis.fetch = original;
+      }
     },
   ],
 ];

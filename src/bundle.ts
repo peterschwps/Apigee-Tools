@@ -229,7 +229,7 @@ function collectReferences(root: XmlNode): {
 }
 
 /** Returns the enclosing `apiproxy` or `sharedflowbundle` directory. */
-function findBundleRoot(filePath: string): string | undefined {
+export function findBundleRoot(filePath: string): string | undefined {
   let directory = path.dirname(filePath);
   while (path.dirname(directory) !== directory) {
     const name = path.basename(directory).toLowerCase();
