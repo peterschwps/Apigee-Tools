@@ -1,9 +1,9 @@
 import { minimatch } from 'minimatch';
 import * as vscode from 'vscode';
-import { bundlePolicyNames, lintBundleReferences } from './bundle';
+import { bundlePolicyNames, lintFile } from './bundle';
 import { complete, type Suggestion } from './completion';
 import { disableDirectiveEdit, type TextEdit } from './fixes';
-import { classifyDocument, lint, type LintIssue } from './linter';
+import { classifyDocument, type LintIssue } from './linter';
 import {
   loadSpecifications,
   type DocumentKind,
@@ -67,9 +67,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     const ignored = new Set(settings(document).get<string[]>('ignore', []));
     const version = document.version;
-    const xml = document.getText();
-    const issues = lint(xml, document.uri.fsPath, specs, ignored);
-    const bundleIssues = await lintBundleReferences(xml, document.uri.fsPath);
+    const issues = await lintFile(
+      document.getText(),
+      document.uri.fsPath,
+      specs,
+      ignored,
+    );
 
     // Discard the result if the document changed, closed, or became excluded
     // while bundle files were read
@@ -80,7 +83,6 @@ export function activate(context: vscode.ExtensionContext): void {
     ) {
       return;
     }
-    issues.push(...bundleIssues.filter(issue => !ignored.has(issue.rule)));
     diagnostics.set(
       document.uri,
       issues.map(issue => toDiagnostic(document, issue)),

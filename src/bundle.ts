@@ -3,7 +3,8 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { applyDirectives } from './directives';
 import { removeElementEdit } from './fixes';
-import type { LintIssue } from './linter';
+import { lint, type LintIssue } from './linter';
+import type { DocumentSpec } from './spec';
 import { parseXml, type XmlNode, type XmlText } from './xml';
 
 /** Describes how a policy references a resource: element and URL schemes. */
@@ -50,6 +51,23 @@ export async function lintBundleReferences(
   if (document.syntaxIssues.length || !document.root) return [];
   const issues = await referenceIssues(xml, document.root, bundleRoot);
   return applyDirectives(xml, document.comments, issues);
+}
+
+/**
+ * Lints a document together with its references to other files of its
+ * bundle, leaving out the ignored rules.
+ */
+export async function lintFile(
+  xml: string,
+  filePath: string,
+  specs: readonly DocumentSpec[],
+  ignored: ReadonlySet<string> = new Set(),
+): Promise<LintIssue[]> {
+  const bundleIssues = await lintBundleReferences(xml, filePath);
+  return [
+    ...lint(xml, filePath, specs, ignored),
+    ...bundleIssues.filter(issue => !ignored.has(issue.rule)),
+  ];
 }
 
 /** Returns whether an error reports a missing file or directory. */
