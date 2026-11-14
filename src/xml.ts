@@ -132,7 +132,7 @@ export function parseXml(text: string): XmlDocument {
     .flatMap(misc => misc.children.Comment ?? [])
     .map(toComment);
   const rootCst = document.children.element?.[0];
-  const root = rootCst ? toNode(rootCst, comments) : undefined;
+  const root = rootCst ? toNode(rootCst, comments, syntaxIssues) : undefined;
   return {
     root,
     comments: comments.sort((a, b) => a.start - b.start),
@@ -153,11 +153,28 @@ function toComment(token: Token): XmlComment {
   };
 }
 
-/** Converts an attribute, or returns nothing for one without a name. */
-function toAttribute(attribute: AttributeCstNode): XmlAttribute | undefined {
+/**
+ * Converts an attribute, or returns nothing for one without a name. An
+ * ampersand that starts no reference is added to `issues`, as Apigee rejects
+ * it; the parser accepts it in attribute values.
+ */
+function toAttribute(
+  attribute: AttributeCstNode,
+  issues: SyntaxIssue[],
+): XmlAttribute | undefined {
   const key = attribute.children.Name?.[0];
   if (!key) return undefined;
   const raw = attribute.children.STRING?.[0];
+  const ampersands = raw?.image.matchAll(
+    /&(?![A-Za-z_][\w.-]*;|#\d+;|#x[\dA-Fa-f]+;)/g,
+  );
+  for (const { index } of ampersands ?? []) {
+    issues.push({
+      message: 'Unescaped "&" in an attribute value; write &amp; instead.',
+      start: raw!.startOffset + index,
+      end: raw!.startOffset + index + 1,
+    });
+  }
   const quote = raw?.image[0];
   return {
     name: key.image,
@@ -174,14 +191,36 @@ function toAttribute(attribute: AttributeCstNode): XmlAttribute | undefined {
 
 /**
  * Converts an element and its descendants, or returns nothing for one without
- * a name. Comments inside the element are appended to `comments`.
+ * a name. Comments inside the element are appended to `comments`, and a
+ * closing tag with another name, which the parser accepts, to `issues`.
  */
 function toNode(
   cst: ElementCstNode,
   comments: XmlComment[],
+  issues: SyntaxIssue[],
 ): XmlNode | undefined {
   const name = cst.children.Name?.[0];
   if (!name) return undefined;
+  // Recovery from another syntax error invents or borrows closing names
+  const closing = cst.children.END_NAME?.[0];
+  const slash = cst.children.SLASH_OPEN?.[0];
+  const recovered =
+    !closing ||
+    closing.isInsertedInRecovery ||
+    name.isInsertedInRecovery ||
+    issues.some(
+      issue =>
+        slash &&
+        issue.start >= slash.startOffset &&
+        issue.start < tokenEnd(closing),
+    );
+  if (!recovered && closing.image !== name.image) {
+    issues.push({
+      message: `Expected </${name.image}> but found </${closing.image}>.`,
+      start: closing.startOffset,
+      end: tokenEnd(closing),
+    });
+  }
   const open = cst.children.OPEN?.[0];
 
   // Incomplete elements end at their start tag or, failing that, their name
@@ -193,7 +232,7 @@ function toNode(
 
   // Convert attributes, comments, and child elements in document order
   const attributes = (cst.children.attribute ?? [])
-    .map(toAttribute)
+    .map(attribute => toAttribute(attribute, issues))
     .filter(isDefined);
   const content = cst.children.content ?? [];
   comments.push(
@@ -201,7 +240,7 @@ function toNode(
   );
   const children = content
     .flatMap(item => item.children.element ?? [])
-    .map(child => toNode(child, comments))
+    .map(child => toNode(child, comments, issues))
     .filter(isDefined);
   return {
     name: name.image,
