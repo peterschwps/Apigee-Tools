@@ -248,14 +248,27 @@ export function testOrg(context: Context) {
     /** Adds the test environment and group and deploys the test fixtures. */
     async populate(project: string): Promise<void> {
       const organizationPath = `/organizations/${encode(project)}`;
-      const { instances = [] } = await request<{
-        instances?: { name: string }[];
-      }>('GET', `${organizationPath}/instances`);
-      const instance = instances[0]?.name;
-      if (!instance) {
-        throw new Error(
-          `${project} has no runtime instance; wait until provisioning finished.`,
-        );
+      // The runtime instance is still being created when the organization
+      // already reports active; attachments need it ready
+      let instance: string | undefined;
+      for (let minutes = 0; !instance; minutes++) {
+        const { instances = [] } = await request<{
+          instances?: { name: string; state?: string }[];
+        }>('GET', `${organizationPath}/instances`);
+        if (instances[0]?.state === 'ACTIVE') {
+          instance = instances[0].name;
+        } else if (minutes === 60) {
+          throw new Error(
+            `The runtime instance of ${project} is not ready after an hour (${instances[0]?.state ?? 'missing'}).`,
+          );
+        } else {
+          if (minutes % 5 === 0) {
+            log(
+              `Waiting for the runtime instance (${instances[0]?.state ?? 'not created yet'})…`,
+            );
+          }
+          await context.sleep(60_000);
+        }
       }
 
       // A second environment, attached to the instance and to a group of its own

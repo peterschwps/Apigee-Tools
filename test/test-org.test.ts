@@ -107,10 +107,21 @@ test('provision leaves an existing organization alone', async t => {
 
 test('populate adds the test environment and group and deploys the fixtures', async t => {
   let revision = 0;
+  let instanceChecks = 0;
   const requests = serve(t, ({ method, path }) => {
     switch (`${method} ${path.split('?')[0]}`) {
       case 'GET /organizations/acme-test/instances':
-        return { body: { instances: [{ name: 'europe-west3' }] } };
+        // The instance is still being created on the first request
+        return {
+          body: {
+            instances: [
+              {
+                name: 'europe-west3',
+                state: ++instanceChecks === 1 ? 'CREATING' : 'ACTIVE',
+              },
+            ],
+          },
+        };
       case 'GET /organizations/acme-test/environments':
         return { body: ['eval'] };
       case 'GET /organizations/acme-test/envgroups':
@@ -126,6 +137,7 @@ test('populate adds the test environment and group and deploys the fixtures', as
     }
   });
   await testOrg(context()).populate('acme-test');
+  assert.equal(instanceChecks, 2);
   const posts = requests.filter(request => request.method === 'POST');
   assert.deepEqual(
     posts.map(request => request.path),
