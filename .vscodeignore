@@ -12,6 +12,7 @@ prototypes/**
 src/**
 scripts/**
 dist/**/*.map
+dist/meta-*.json
 dist/cli.js
 test/**
 npm/**
