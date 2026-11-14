@@ -18,6 +18,8 @@ async function main(): Promise<void> {
       await readFile(path.join(root, metafile), 'utf8'),
     ) as { inputs: Record<string, unknown> };
     for (const input of Object.keys(inputs)) {
+      // A file that a package's browser field disables adds no code
+      if (input.startsWith('(disabled):')) continue;
       const match = /^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(input);
       if (match) directories.add(match[1]);
     }
@@ -27,15 +29,33 @@ async function main(): Promise<void> {
   const packages: string[] = [];
   const texts = new Map<string, string[]>();
   for (const directory of [...directories].sort()) {
-    const { name, version, license } = JSON.parse(
+    const { name, version, license, licenses } = JSON.parse(
       await readFile(path.join(root, directory, 'package.json'), 'utf8'),
-    ) as { name: string; version: string; license: string };
-    packages.push(`${name} ${version} (${license})`);
+    ) as {
+      name: string;
+      version: string;
+      license?: string | { type?: string };
+      licenses?: { type?: string }[];
+    };
+    const type =
+      typeof license === 'string'
+        ? license
+        : (license?.type ??
+          licenses?.map(item => item.type).join(' OR ') ??
+          'UNKNOWN');
+    packages.push(`${name} ${version} (${type})`);
     const entries = await readdir(path.join(root, directory), {
       withFileTypes: true,
     });
-    for (const entry of entries) {
-      if (!entry.isFile() || !licenseFile.test(entry.name)) continue;
+    const files = entries.filter(
+      entry => entry.isFile() && licenseFile.test(entry.name),
+    );
+    if (!files.length) {
+      throw new Error(
+        `${name} ${version} has no license file in ${directory}.`,
+      );
+    }
+    for (const entry of files) {
       const text = (
         await readFile(path.join(root, directory, entry.name), 'utf8')
       )
