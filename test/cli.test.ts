@@ -36,6 +36,17 @@ before(async () => {
     path.join(warnings, 'SA-Test.xml'),
     '<SpikeArrest name="SA-Test">\n  <Rate>10ps</Rate>\n  <UseEffectiveCount>false</UseEffectiveCount>\n</SpikeArrest>\n',
   );
+  const bom = path.join(workspace, 'bom', 'apiproxy');
+  await mkdir(path.join(bom, 'policies'), { recursive: true });
+  await mkdir(path.join(bom, 'proxies'));
+  await writeFile(
+    path.join(bom, 'policies', 'SA-Bom.xml'),
+    '\uFEFF<?xml version="1.0" encoding="UTF-8"?>\n<SpikeArrest name="SA-Bom"><Rate>10ps</Rate></SpikeArrest>\n',
+  );
+  await writeFile(
+    path.join(bom, 'proxies', 'default.xml'),
+    '\uFEFF<ProxyEndpoint name="default"><PreFlow><Request><Step><Name>SA-Bom</Name></Step></Request></PreFlow><HTTPProxyConnection><BasePath>/bom</BasePath></HTTPProxyConnection><RouteRule name="default"/></ProxyEndpoint>\n',
+  );
   const ignoredDirectory = path.join(
     workspace,
     'errors',
@@ -58,6 +69,13 @@ test('cli exits 0 for clean fixture bundles', async () => {
   assert.equal(result.code, 0);
   assert.deepEqual(result.out, []);
   assert.match(result.err[0], /^1\d files checked: 0 errors, 0 warnings\.$/);
+});
+
+test('cli ignores a byte order mark, also in referenced policies', async () => {
+  const result = await capture([path.join(workspace, 'bom')]);
+  assert.deepEqual(result.out, []);
+  assert.equal(result.err[0], '2 files checked: 0 errors, 0 warnings.');
+  assert.equal(result.code, 0);
 });
 
 test('cli reports errors with line and column and exits 1', async () => {

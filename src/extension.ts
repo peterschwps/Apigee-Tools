@@ -1,8 +1,7 @@
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { minimatch } from 'minimatch';
 import * as vscode from 'vscode';
-import { bundlePolicyNames, findBundleRoot, lintFile } from './bundle';
+import { bundlePolicyNames, findBundleRoot, lintFile, readXml } from './bundle';
 import { complete, type Suggestion } from './completion';
 import { registerDashboard, type WorkspaceBundle } from './dashboard';
 import { disableDirectiveEdit, type TextEdit } from './fixes';
@@ -305,9 +304,7 @@ async function scanWorkspace(
     let xml: string;
     try {
       // The editor hides a byte order mark, so the linter does not see one
-      xml =
-        open.get(uri.toString())?.getText() ??
-        (await readFile(uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
+      xml = open.get(uri.toString())?.getText() ?? (await readXml(uri.fsPath));
     } catch {
       return;
     }

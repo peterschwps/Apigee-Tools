@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { version } from '../package.json';
-import { lintFile } from './bundle';
+import { lintFile, readXml } from './bundle';
 import { classifyDocument, type LintIssue } from './linter';
 import { loadSpecifications, type DocumentSpec } from './spec';
 import { lineColumn } from './xml';
@@ -87,7 +87,7 @@ export async function run(
   let errors = 0;
   let warnings = 0;
   for (const file of [...files].sort()) {
-    const xml = await readFile(file, 'utf8');
+    const xml = await readXml(file);
     const issues = await reportedIssues(xml, file, specs, { ignored, only });
     for (const issue of issues) {
       const severity = issue.severity ?? 'error';

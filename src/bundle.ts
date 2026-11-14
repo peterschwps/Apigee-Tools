@@ -70,6 +70,11 @@ export async function lintFile(
   ];
 }
 
+/** Reads an XML file as text without the byte order mark that editors hide. */
+export async function readXml(file: string): Promise<string> {
+  return (await readFile(file, 'utf8')).replace(/^\uFEFF/, '');
+}
+
 /** Returns whether an error reports a missing file or directory. */
 export function isNotFound(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === 'ENOENT';
@@ -256,7 +261,7 @@ async function bundleNames(
 
       // Files that cannot be read contribute only their file name
       try {
-        const xml = await readFile(path.join(directory, entry.name), 'utf8');
+        const xml = await readXml(path.join(directory, entry.name));
         const name = parseXml(xml).root?.attributes.find(
           attribute => attribute.name === 'name',
         )?.value;
