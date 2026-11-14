@@ -1,7 +1,7 @@
 import { execFile, type ExecFileException } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 
 /** Runs gcloud with the given arguments and resolves to its standard output. */
 export type Gcloud = (args: readonly string[]) => Promise<string>;
@@ -86,17 +86,16 @@ export function gcloudRunner(setting: string, configuration = ''): Gcloud {
       `"${configuration}" is not a valid gcloud configuration name.`,
     );
   }
-  const path = expandHome(setting);
+  const path = gcloudCommand(setting);
   const extra = configuration ? [`--configuration=${configuration}`] : [];
   return args =>
-    new Promise((resolve, reject) => {
-      // A configured path is checked directly, independent of the shell's
-      // language and of how it reports a missing program
-      if (/[\\/]/.test(path) && !existsSync(path)) {
+    new Promise((resolveOutput, reject) => {
+      // The invocation rejects paths that cmd.exe cannot take
+      const invocation = gcloudInvocation(path, [...args, ...extra]);
+      if (!installed(path)) {
         reject(new GcloudError('missing', `gcloud was not found ("${path}").`));
         return;
       }
-      const invocation = gcloudInvocation(path, [...args, ...extra]);
       const child = execFile(
         invocation.file,
         invocation.args,
@@ -109,7 +108,7 @@ export function gcloudRunner(setting: string, configuration = ''): Gcloud {
         },
         (error, stdout, stderr) => {
           if (error) reject(gcloudError(error, stderr, path));
-          else resolve(stdout);
+          else resolveOutput(stdout);
         },
       );
       child.stdin?.end();
@@ -165,11 +164,37 @@ export async function gcloudConfig(gcloud: Gcloud): Promise<GcloudConfig> {
   };
 }
 
-/** Expands a leading `~`, which settings often contain but no shell sees. */
-function expandHome(path: string): string {
-  return path === '~' || /^~[\\/]/.test(path)
-    ? join(homedir(), path.slice(2))
-    : path;
+/**
+ * Returns the command for a gcloudPath setting: a leading `~` means the home
+ * directory, which no shell expands here, and a relative path is relative to
+ * the home directory, where gcloud runs.
+ */
+export function gcloudCommand(setting: string): string {
+  const path =
+    setting === '~' || /^~[\\/]/.test(setting)
+      ? join(homedir(), setting.slice(2))
+      : setting;
+  return /[\\/]/.test(path) ? resolve(homedir(), path) : path;
+}
+
+/**
+ * Returns whether gcloud exists, checked directly rather than through the
+ * shell's language-dependent message: a path as it is, and on Windows a bare
+ * command in the home directory and on the PATH, with each PATHEXT ending,
+ * as cmd.exe looks it up. Elsewhere a missing command fails with ENOENT.
+ */
+function installed(command: string): boolean {
+  const windows = process.platform === 'win32';
+  const endings = windows
+    ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';')]
+    : [''];
+  const exists = (file: string) =>
+    endings.some(ending => existsSync(file + ending));
+  if (/[\\/]/.test(command)) return exists(command);
+  if (!windows) return true;
+  return [homedir(), ...(process.env.PATH ?? '').split(delimiter)].some(
+    directory => directory && exists(join(directory, command)),
+  );
 }
 
 /** Translates a failed gcloud run into a reason the dashboard can act on. */
@@ -178,12 +203,7 @@ function gcloudError(
   stderr: string,
   path: string,
 ): GcloudError {
-  // cmd.exe exits with 9009 for an unknown command, in every language
-  if (
-    error.code === 'ENOENT' ||
-    error.code === 9009 ||
-    notFoundOnWindows.test(stderr)
-  ) {
+  if (error.code === 'ENOENT' || notFoundOnWindows.test(stderr)) {
     return new GcloudError('missing', `gcloud was not found ("${path}").`);
   }
   if (signedOutPattern.test(stderr)) {

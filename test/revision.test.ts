@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
@@ -160,4 +169,21 @@ test('files in other encodings compare by their bytes', () => {
     new Map([['apiproxy/resources/jsc/a.js', latin1('var s = "\u00f6";')]]),
   );
   assert.equal(differs(remote, local), true);
+});
+
+test('linked directories are read and link cycles end', async t => {
+  if (process.platform === 'win32') return t.skip('needs symbolic links');
+  const directory = await editedCopy('links', async copy => {
+    // resources/oas lives elsewhere and is linked back, next to a cycle
+    const outside = path.join(copy, '..', 'oas-elsewhere');
+    await rename(path.join(copy, 'resources', 'oas'), outside);
+    await symlink(outside, path.join(copy, 'resources', 'oas'));
+    await symlink(copy, path.join(copy, 'resources', 'loop'));
+  });
+  const local = await readBundle(directory, 'apis');
+  assert.ok(local.has('apiproxy/resources/oas/hello.yaml'));
+  assert.equal(
+    differs(fingerprints(await revision()), fingerprints(local)),
+    false,
+  );
 });

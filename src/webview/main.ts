@@ -95,17 +95,31 @@ class ApigeeDashboard extends LitElement {
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       if (event.data?.type === 'snapshot') this.snapshot = event.data.snapshot;
     });
+    // A held-down key repeats clicks on buttons; one refresh is enough
+    this.addEventListener(
+      'keydown',
+      event => {
+        const target = event.composedPath()[0] as Element;
+        if (event.repeat && target.localName === 'vscode-button') {
+          event.stopPropagation();
+          event.preventDefault();
+        }
+      },
+      true,
+    );
     send({ type: 'ready' });
   }
 
   /** Moves focus to Refresh once a notice with the focused button is gone. */
-  protected override updated(): void {
+  protected override async updated(): Promise<void> {
     if (!refocus) return;
-    const refresh = this.renderRoot.querySelector<HTMLElement>(
+    const refresh = this.renderRoot.querySelector<LitElement>(
       '.session vscode-button',
     );
     if (!refresh) return;
     refocus = false;
+    // A new button renders its inner element first, then takes the focus
+    await refresh.updateComplete;
     refresh.focus();
   }
 

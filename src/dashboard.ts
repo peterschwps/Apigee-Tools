@@ -13,8 +13,10 @@ import {
   type ApigeeClient,
 } from './apigee';
 import {
+  gcloudCommand,
   gcloudConfig,
   GcloudError,
+  gcloudInvocation,
   gcloudRunner,
   isConfigurationName,
   tokenSource,
@@ -97,6 +99,8 @@ export function registerDashboard(
   let bundles: WorkspaceBundle[] = [];
   let session: Session | undefined;
   let loading: AbortController | undefined;
+  // The organization chosen in the selector; only such a choice is remembered
+  let picked: string | undefined;
   let postTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Deployed revisions never change: files are kept for the last few, their
@@ -179,6 +183,7 @@ export function registerDashboard(
       loading?.abort();
       panel = undefined;
       ready = false;
+      picked = undefined;
       // Opening the dashboard again loads fresh data
       snapshot = {
         trusted: vscode.workspace.isTrusted,
@@ -216,6 +221,7 @@ export function registerDashboard(
           snapshot.organizations.includes(message.name) &&
           message.name !== snapshot.organization
         ) {
+          picked = message.name;
           snapshot = {
             ...snapshot,
             organization: message.name,
@@ -230,14 +236,20 @@ export function registerDashboard(
         break;
       case 'openBundle': {
         const bundle = bundles.find(item => relative(item) === message.path);
-        if (bundle?.descriptor) {
-          await vscode.window.showTextDocument(
-            vscode.Uri.file(bundle.descriptor),
-          );
-        } else if (bundle) {
-          await vscode.commands.executeCommand(
-            'revealInExplorer',
-            vscode.Uri.file(bundle.directory),
+        try {
+          if (bundle?.descriptor) {
+            await vscode.window.showTextDocument(
+              vscode.Uri.file(bundle.descriptor),
+            );
+          } else if (bundle) {
+            await vscode.commands.executeCommand(
+              'revealInExplorer',
+              vscode.Uri.file(bundle.directory),
+            );
+          }
+        } catch (error) {
+          void vscode.window.showErrorMessage(
+            `Opening ${bundle?.name} failed: ${messageOf(error)}`,
           );
         }
         break;
@@ -273,11 +285,13 @@ export function registerDashboard(
     loading?.abort();
     const controller = new AbortController();
     loading = controller;
+    // Each load has notes of its own, so an aborted load cannot add to them
+    const notes: string[] = [];
     snapshot = {
       ...snapshot,
       loading: true,
       problem: undefined,
-      notes: [],
+      notes,
     };
     post();
     try {
@@ -311,9 +325,14 @@ export function registerDashboard(
         return;
       }
 
-      // Publish the choice first, so the selector stays if loading it fails
+      // Publish the choice first, so the selector stays if loading it fails;
+      // data of another organization or account must not stay next to it
+      const changed =
+        organization !== snapshot.organization ||
+        current.account !== snapshot.account;
       snapshot = {
         ...snapshot,
+        ...(changed && { overview: undefined, rows: undefined }),
         account: current.account,
         organizations: organizations.includes(organization)
           ? organizations
@@ -331,7 +350,7 @@ export function registerDashboard(
       for (const row of rows) row.local = Boolean(localBundle(row));
       const ambiguous = rows.filter(row => localBundles(row).length > 1);
       if (ambiguous.length) {
-        snapshot.notes?.push(
+        notes.push(
           `Several bundles in the workspace are named ${ambiguous.map(row => row.name).join(', ')}, so they are not compared. Exclude the extra copies with apigeeTools.exclude.`,
         );
       }
@@ -343,11 +362,13 @@ export function registerDashboard(
       };
       post();
 
-      // Only an organization that loaded is remembered for the next start
-      await context.workspaceState.update(organizationKey, organization);
+      // Only an organization chosen in the selector that loaded is remembered
+      if (organization === picked) {
+        await context.workspaceState.update(organizationKey, organization);
+      }
       await Promise.all([
-        checkStatus(client, organization, rows, controller),
-        checkDrift(client, organization, rows, controller.signal),
+        checkStatus(client, organization, rows, controller, notes),
+        checkDrift(client, organization, rows, controller, notes),
       ]);
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -380,20 +401,18 @@ export function registerDashboard(
   }
 
   /**
-   * Picks the requested or shown organization, then the last one that loaded,
-   * the gcloud project, or the first listed. Without a list, which the account
-   * may not be allowed to read, the gcloud project comes before the stored one.
+   * Picks the organization chosen in the selector, then the last chosen one
+   * that loaded, the gcloud project, or the first listed. Without a list,
+   * which the account may not be allowed to read, the project comes first.
    */
   function chooseOrganization(
     organizations: string[],
     project?: string,
   ): string | undefined {
     const stored = context.workspaceState.get<string>(organizationKey);
-    if (!organizations.length) {
-      return project ?? snapshot.organization ?? stored;
-    }
+    if (!organizations.length) return project ?? picked ?? stored;
     return (
-      [snapshot.organization, stored, project].find(
+      [picked, stored, project].find(
         name => name && organizations.includes(name),
       ) ?? organizations[0]
     );
@@ -409,6 +428,7 @@ export function registerDashboard(
     organization: string,
     rows: Row[],
     controller: AbortController,
+    notes: string[],
   ): Promise<void> {
     const total = rows.reduce(
       (sum, row) => sum + Object.keys(row.cells).length,
@@ -454,7 +474,6 @@ export function registerDashboard(
         }
       }),
     );
-    const notes = snapshot.notes ?? [];
     if (stopped) {
       notes.push(
         `Status checks stopped: ${stopped.message} ${stopped.hint ?? ''}`.trim(),
@@ -475,14 +494,19 @@ export function registerDashboard(
     }
   }
 
-  /** Marks the deployments that differ from the bundle in the workspace. */
+  /**
+   * Marks the deployments that differ from the bundle in the workspace. Like
+   * the status checks, it stops on a network failure or an exhausted quota.
+   */
   async function checkDrift(
     client: ApigeeClient,
     organization: string,
     rows: Row[],
-    signal: AbortSignal,
+    controller: AbortController,
+    notes: string[],
   ): Promise<void> {
     const failed: string[] = [];
+    let firstFailure: unknown;
     await Promise.all(
       rows
         .filter(row => row.local)
@@ -505,18 +529,25 @@ export function registerDashboard(
               }),
             );
           } catch (error) {
-            if (signal.aborted) return;
+            if (controller.signal.aborted) return;
             host.log.warn(
               `Comparing ${row.name} with the local bundle:`,
               messageOf(error),
             );
-            failed.push(`${row.name} (${messageOf(error)})`);
+            failed.push(row.name);
+            firstFailure ??= error;
+            if (
+              error instanceof ApigeeError &&
+              (error.status === undefined || error.status === 429)
+            ) {
+              controller.abort();
+            }
           }
         }),
     );
     if (failed.length) {
-      snapshot.notes?.push(
-        `Differences from the local bundle could not be checked for ${failed.join(', ')}.`,
+      notes.push(
+        `Differences from the local bundle could not be checked for ${failed.join(', ')}: ${messageOf(firstFailure)}`,
       );
     }
   }
@@ -646,28 +677,43 @@ export function registerDashboard(
     );
   }
 
-  /** Starts `gcloud auth login` in a terminal, where it can open a browser. */
+  /**
+   * Starts `gcloud auth login` in a terminal, where it can open a browser.
+   * gcloud runs directly, so no shell interprets the configured path; on
+   * Windows, cmd.exe runs gcloud.cmd. The home directory keeps cmd.exe from
+   * running a gcloud.cmd of the workspace.
+   */
   function signIn(): void {
     const settings = vscode.workspace.getConfiguration('apigeeTools');
-    const gcloud = settings.get<string>('gcloudPath') || 'gcloud';
     const configuration = settings.get<string>('gcloudConfiguration', '');
-    // ponytail: quotes suit bash, zsh, and PowerShell; cmd.exe users type it
-    const command =
-      gcloud === 'gcloud'
-        ? 'gcloud'
-        : process.platform === 'win32'
-          ? `& "${gcloud}"`
-          : `"${gcloud}"`;
-    const flag = isConfigurationName(configuration)
-      ? ` --configuration=${configuration}`
-      : '';
-    // The home directory keeps cmd.exe from running a gcloud.cmd of the workspace
-    const terminal = vscode.window.createTerminal({
-      name: 'gcloud auth login',
-      cwd: homedir(),
-    });
-    terminal.show();
-    terminal.sendText(`${command} auth login${flag}`);
+    const args = [
+      'auth',
+      'login',
+      ...(isConfigurationName(configuration)
+        ? [`--configuration=${configuration}`]
+        : []),
+    ];
+    try {
+      const invocation = gcloudInvocation(
+        gcloudCommand(settings.get<string>('gcloudPath') || 'gcloud'),
+        args,
+      );
+      const terminal = vscode.window.createTerminal({
+        name: 'gcloud auth login',
+        cwd: homedir(),
+        shellPath: invocation.shell
+          ? (process.env.ComSpec ?? 'cmd.exe')
+          : invocation.file,
+        shellArgs: invocation.shell
+          ? `/d /s /c "${invocation.file}"`
+          : invocation.args,
+      });
+      terminal.show();
+    } catch (error) {
+      void vscode.window.showErrorMessage(
+        `Signing in with gcloud failed: ${messageOf(error)}`,
+      );
+    }
   }
 
   function localBundles(row: Pick<Row, 'kind' | 'name'>) {

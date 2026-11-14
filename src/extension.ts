@@ -296,51 +296,62 @@ async function scanWorkspace(
     ]),
   );
   const bundles = new Map<string, WorkspaceBundle>();
-  await Promise.all(
-    files.map(async uri => {
-      const directory = findBundleRoot(uri.fsPath);
-      const kind = classifyDocument(uri.fsPath);
-      if (!directory || !kind || matchesExclude(uri)) return;
-      const bundle = bundles.get(directory) ?? {
-        kind:
-          path.basename(directory).toLowerCase() === 'apiproxy'
-            ? 'apis'
-            : 'sharedflows',
-        name: path.basename(path.dirname(directory)),
-        directory,
-        linted: false,
-        errors: 0,
-        warnings: 0,
-      };
-      bundles.set(directory, bundle);
-      let xml: string;
-      try {
-        // The editor hides a byte order mark, so the linter does not see one
-        xml =
-          open.get(uri.toString())?.getText() ??
-          (await readFile(uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
-      } catch {
-        return;
-      }
 
-      // The descriptor names the bundle, as Apigee does
-      if (kind === 'apiProxy' || kind === 'sharedFlowBundle') {
-        bundle.descriptor = uri.fsPath;
-        bundle.name =
-          parseXml(xml).root?.attributes.find(
-            attribute => attribute.name === 'name',
-          )?.value || path.basename(uri.fsPath, path.extname(uri.fsPath));
-      }
-      if (excluded(uri)) return;
-      bundle.linted = true;
-      const ignored = new Set(
-        vscode.workspace
-          .getConfiguration(setting, uri)
-          .get<string[]>('ignore', []),
-      );
-      for (const issue of await lintFile(xml, uri.fsPath, specs, ignored)) {
-        if ((issue.severity ?? 'error') === 'error') bundle.errors++;
-        else bundle.warnings++;
+  /** Reads and lints one file and adds it to its bundle. */
+  const scanFile = async (uri: vscode.Uri) => {
+    const directory = findBundleRoot(uri.fsPath);
+    const kind = classifyDocument(uri.fsPath);
+    if (!directory || !kind || matchesExclude(uri)) return;
+    let xml: string;
+    try {
+      // The editor hides a byte order mark, so the linter does not see one
+      xml =
+        open.get(uri.toString())?.getText() ??
+        (await readFile(uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
+    } catch {
+      return;
+    }
+    const bundle = bundles.get(directory) ?? {
+      kind:
+        path.basename(directory).toLowerCase() === 'apiproxy'
+          ? 'apis'
+          : 'sharedflows',
+      name: path.basename(path.dirname(directory)),
+      directory,
+      linted: false,
+      errors: 0,
+      warnings: 0,
+    };
+    bundles.set(directory, bundle);
+
+    // The descriptor names the bundle, as Apigee does
+    if (kind === 'apiProxy' || kind === 'sharedFlowBundle') {
+      bundle.descriptor = uri.fsPath;
+      bundle.name =
+        parseXml(xml).root?.attributes.find(
+          attribute => attribute.name === 'name',
+        )?.value || path.basename(uri.fsPath, path.extname(uri.fsPath));
+    }
+    if (excluded(uri)) return;
+    bundle.linted = true;
+    const ignored = new Set(
+      vscode.workspace
+        .getConfiguration(setting, uri)
+        .get<string[]>('ignore', []),
+    );
+    for (const issue of await lintFile(xml, uri.fsPath, specs, ignored)) {
+      if ((issue.severity ?? 'error') === 'error') bundle.errors++;
+      else bundle.warnings++;
+    }
+  };
+
+  // A few files at a time: each lint also reads its bundle's other files, and
+  // too many at once run out of file handles
+  const queue = [...files];
+  await Promise.all(
+    Array.from({ length: 16 }, async () => {
+      for (let uri = queue.shift(); uri; uri = queue.shift()) {
+        await scanFile(uri);
       }
     }),
   );

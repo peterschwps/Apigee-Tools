@@ -169,7 +169,13 @@ function organizationCard(organization: Overview) {
                       html`<li><vscode-badge>${addon}</vscode-badge></li>`,
                   )}
                 </ul>`
-              : html`<span class="muted">None</span>`
+              : html`<span class="muted"
+                  >${
+                    organization.billingType === 'PAYG'
+                      ? 'Per environment'
+                      : 'None'
+                  }</span
+                >`
           }
         </dd>
       </dl>

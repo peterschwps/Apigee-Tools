@@ -16,7 +16,7 @@ To build a VSIX from source, see the [development guide](docs/development.md).
 
 Run **Apigee Tools: Open Dashboard** from the Command Palette, or click **Apigee** in the status bar. The dashboard opens as an editor tab:
 
-- **Overview:** environments, environment groups with their hostnames, add-ons, and the lint findings of the bundles in your workspace.
+- **Overview:** environments, environment groups with their hostnames, add-ons (per environment under pay-as-you-go), and the lint findings of the bundles in your workspace.
 - **Deployments:** every API proxy and shared flow by environment, with revision and status, failures and route conflicts, and a marker where a deployed revision differs from your local bundle. **Compare with local** opens the differing files side by side.
 
 The dashboard needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), signed in with `gcloud auth login`, and a role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`). The access token stays in memory and is sent only to the Apigee API. Data loads when you open or refresh the dashboard, never in the background, and nothing is deployed or changed. See the [dashboard section](docs/index.md#dashboard) for details.

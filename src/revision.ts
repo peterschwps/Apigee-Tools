@@ -1,6 +1,6 @@
 import { isUtf8 } from 'node:buffer';
 import { createHash } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { classifyDocument } from './linter';
@@ -115,38 +115,27 @@ export async function readBundle(
   directory: string,
   kind: Kind,
 ): Promise<BundleFiles> {
-  const entries = await readdir(directory, {
-    recursive: true,
-    withFileTypes: true,
-  });
   const files: BundleFiles = new Map();
-  await Promise.all(
-    entries
-      // Linked files count like files
-      .filter(entry => entry.isFile() || entry.isSymbolicLink())
-      .map(async entry => {
-        const file = path.join(entry.parentPath, entry.name);
-        const relative = path
-          .relative(directory, file)
-          .split(path.sep)
-          .join('/');
 
-        // Hidden files such as .DS_Store are never part of a bundle
-        if (relative.split('/').some(segment => segment.startsWith('.'))) {
-          return;
-        }
-        try {
-          files.set(
-            `${bundleDirectory(kind)}/${relative}`,
-            await readFile(file),
-          );
-        } catch (error) {
-          // A link to a directory or a broken link is not a bundle file
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code !== 'EISDIR' && code !== 'ENOENT') throw error;
-        }
-      }),
-  );
+  // Links count like what they point to; a set of visited directories ends
+  // link cycles, and hidden files such as .DS_Store are never bundle files
+  const visited = new Set<string>();
+  const walk = async (current: string, relative: string): Promise<void> => {
+    const real = await realpath(current);
+    if (visited.has(real)) return;
+    visited.add(real);
+    for (const name of await readdir(current)) {
+      if (name.startsWith('.')) continue;
+      const file = path.join(current, name);
+      const key = relative ? `${relative}/${name}` : name;
+      const info = await stat(file).catch(() => undefined);
+      if (info?.isDirectory()) await walk(file, key);
+      else if (info?.isFile()) {
+        files.set(`${bundleDirectory(kind)}/${key}`, await readFile(file));
+      }
+    }
+  };
+  await walk(directory, '');
   return files;
 }
 
@@ -206,10 +195,11 @@ export function differs(
  * tree, other text with normalized line endings, and binaries as they are.
  */
 function comparableForm(file: string, content: Buffer): Buffer | string {
-  // Binaries and other encodings compare byte by byte
-  if (content.includes(0) || !isUtf8(content)) return content;
+  if (content.includes(0)) return content;
+
+  // Latin-1 keeps every byte of other encodings, so changes still show
   const text = content
-    .toString('utf8')
+    .toString(isUtf8(content) ? 'utf8' : 'latin1')
     .replace(/^\uFEFF/, '')
     .replace(/\r\n?/g, '\n');
   if (!classifyDocument(file)) return text;

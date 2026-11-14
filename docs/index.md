@@ -183,11 +183,11 @@ The dashboard shows what is deployed in an Apigee X organization next to the bun
 - A sign-in with `gcloud auth login`. Without one, the dashboard offers a button that runs the command in a terminal.
 - A role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`).
 
-The dashboard selects the organization that loaded last in this workspace, otherwise the project of your gcloud configuration, otherwise the first organization the account can access. If the account may not list organizations, the gcloud project comes first. The header switches between organizations and filters the environments.
+The dashboard selects the organization you chose last in this workspace, otherwise the project of your gcloud configuration, otherwise the first organization the account can access. If the account may not list organizations, the gcloud project comes first. The header switches between organizations and filters the environments.
 
 ### Overview and deployments
 
-- **Overview** counts environments, API proxies, shared flows, deployments, and problems. It lists the organization's runtime, billing type, and add-ons, the environments with their type, the environment groups with their hostnames, and the bundles in the workspace with their lint findings.
+- **Overview** counts environments, API proxies, shared flows, deployments, and problems. It lists the organization's runtime, billing type, and add-ons, the environments with their type and, under pay-as-you-go, their add-ons, the environment groups with their hostnames, and the bundles in the workspace with their lint findings.
 - **Deployments** lists every API proxy and shared flow with the deployed revision per environment. Each deployment shows its status as an icon and a label: Ready, Deploying, Failed, Route conflict, or Status not checked. Failure messages and route conflicts are listed below the table. Filter by name, or show only problems and differences. A name opens the proxy or shared flow in the Apigee console.
 
 ### Comparing with local bundles

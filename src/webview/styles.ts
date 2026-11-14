@@ -572,10 +572,7 @@ export const styles = css`
     width: 16px;
     height: 16px;
     margin: 0;
-    accent-color: var(
-      --vscode-checkbox-selectBackground,
-      var(--vscode-focusBorder)
-    );
+    accent-color: var(--vscode-focusBorder);
   }
 
   .checkbox input:focus-visible {

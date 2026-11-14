@@ -45,7 +45,7 @@ const legend: StatusInfo[] = [
   { label: 'Route conflict', icon: 'warning', tone: 'warning' },
   { label: 'Failed', icon: 'error', tone: 'error' },
   { label: 'Deploying', icon: 'sync', tone: 'neutral' },
-  { label: 'Status not checked yet', icon: 'clock', tone: 'neutral' },
+  { label: 'Status not checked', icon: 'clock', tone: 'neutral' },
 ];
 
 /** Returns whether a deployment failed or has a route conflict. */
@@ -106,7 +106,10 @@ export function deployments(
       (!view.onlyProblems ||
         environments.some(environment => {
           const cell = row.cells[environment];
-          return cell && (isProblem(cell) || cell.drift);
+          // A failed comparison is a difference that is not known yet
+          const unknown =
+            row.local && cell?.drift === undefined && !snapshot.loading;
+          return cell && (isProblem(cell) || cell.drift || unknown);
         })),
   );
   return html`

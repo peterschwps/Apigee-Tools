@@ -48,3 +48,9 @@ body.vscode-high-contrast apigee-dashboard {
   --vscode-settings-headerBorder: transparent;
   --vscode-list-activeSelectionForeground: var(--vscode-foreground);
 }
+
+/* Native controls such as the filter checkbox follow dark themes */
+body.vscode-dark apigee-dashboard,
+body.vscode-high-contrast:not(.vscode-high-contrast-light) apigee-dashboard {
+  color-scheme: dark;
+}

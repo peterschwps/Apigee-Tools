@@ -102,12 +102,16 @@ export function apigeeClient(
   const get = (path: string, accept = 'application/json') =>
     limit(async (): Promise<Buffer> => {
       const url = `${base}${path}`;
-      const timeout = AbortSignal.timeout(timeoutMs);
-      const send = (token: string) =>
-        fetch(url, {
+
+      // Each attempt gets its own timeout, which waiting for gcloud does not use
+      let timeout: AbortSignal | undefined;
+      const send = (token: string) => {
+        timeout = AbortSignal.timeout(timeoutMs);
+        return fetch(url, {
           headers: { authorization: `Bearer ${token}`, accept },
           signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
         });
+      };
       try {
         let token = tokens.token();
         let response = await send(await token);
@@ -124,12 +128,12 @@ export function apigeeClient(
     });
 
   /** Translates failures of fetch; other errors pass through unchanged. */
-  function requestError(error: unknown, url: string, timeout: AbortSignal) {
+  function requestError(error: unknown, url: string, timeout?: AbortSignal) {
     const fetchFailure =
       error instanceof TypeError || error instanceof DOMException;
     if (signal?.aborted || !fetchFailure) return error;
     const hint = 'Check the network connection and the proxy settings.';
-    if (timeout.aborted) {
+    if (timeout?.aborted) {
       return new ApigeeError(
         `The Apigee API did not answer within ${timeoutMs / 1000} seconds.`,
         undefined,
