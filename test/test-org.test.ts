@@ -305,3 +305,31 @@ test('provision waits until a newly enabled Apigee API is available', async t =>
   assert.equal(attempts, 2);
   assert.ok(run.lines.some(line => line.startsWith('Waiting until')));
 });
+
+test('changes locked by another operation are retried', async t => {
+  const fake = evaluation(true);
+  let rejected = 0;
+  serve(t, request => {
+    const importing =
+      request.method === 'POST' && request.path.includes('action=import');
+    if (importing && rejected < 2) {
+      rejected++;
+      return {
+        status: 400,
+        body: {
+          error: {
+            message:
+              'the resource is locked by another operation that is 25 percent completed so far',
+          },
+        },
+      };
+    }
+    return fake.answer(request);
+  });
+  const run = context();
+  await testOrg(run).populate('acme-test');
+  assert.equal(rejected, 2);
+  assert.ok(
+    run.lines.some(line => line.startsWith('Waiting for another operation')),
+  );
+});

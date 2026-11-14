@@ -71,13 +71,40 @@ export function testOrg(context: Context) {
   const { log } = context;
   const encode = encodeURIComponent;
 
-  /** Sends a request, renewing a rejected token once, and returns the JSON body. */
+  /**
+   * Sends a request and returns the JSON body. A change that another running
+   * operation locks out, such as provisioning still attaching an environment,
+   * is retried for up to 20 minutes.
+   */
   async function request<T>(
     method: string,
     resource: string,
     body?: unknown,
   ): Promise<T> {
-    const send = async (token: string) => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await send<T>(method, resource, body);
+      } catch (error) {
+        const locked =
+          method !== 'GET' &&
+          error instanceof ApiError &&
+          /locked by another operation/i.test(error.message);
+        if (!locked || attempt === 40) throw error;
+        if (attempt % 5 === 1) {
+          log('Waiting for another operation of the organization to finish…');
+        }
+        await context.sleep(30_000);
+      }
+    }
+  }
+
+  /** Sends a request, renewing a rejected token once, and returns the JSON body. */
+  async function send<T>(
+    method: string,
+    resource: string,
+    body?: unknown,
+  ): Promise<T> {
+    const attempt = async (token: string) => {
       const headers: Record<string, string> = {
         authorization: `Bearer ${token}`,
       };
@@ -94,10 +121,10 @@ export function testOrg(context: Context) {
       });
     };
     let token = context.tokens.token();
-    let response = await send(await token);
+    let response = await attempt(await token);
     if (response.status === 401) {
       token = context.tokens.renew(token);
-      response = await send(await token);
+      response = await attempt(await token);
     }
     const text = await response.text();
     let json: {
