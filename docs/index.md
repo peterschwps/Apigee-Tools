@@ -183,16 +183,16 @@ The dashboard shows what is deployed in an Apigee X organization next to the bun
 - A sign-in with `gcloud auth login`. Without one, the dashboard offers a button that runs the command in a terminal.
 - A role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`).
 
-The dashboard selects the organization you chose last in this workspace, otherwise the project of your gcloud configuration, otherwise the first organization the account can access. The header switches between organizations and filters the environments.
+The dashboard selects the organization that loaded last in this workspace, otherwise the project of your gcloud configuration, otherwise the first organization the account can access. If the account may not list organizations, the gcloud project comes first. The header switches between organizations and filters the environments.
 
 ### Overview and deployments
 
 - **Overview** counts environments, API proxies, shared flows, deployments, and problems. It lists the organization's runtime, billing type, and add-ons, the environments with their type, the environment groups with their hostnames, and the bundles in the workspace with their lint findings.
-- **Deployments** lists every API proxy and shared flow with the deployed revision per environment. Each deployment shows its status as an icon and a label: Ready, Deploying, Failed, or Route conflict. Failure messages and route conflicts are listed below the table. Filter by name, or show only problems and differences. A name opens the proxy or shared flow in the Apigee console.
+- **Deployments** lists every API proxy and shared flow with the deployed revision per environment. Each deployment shows its status as an icon and a label: Ready, Deploying, Failed, Route conflict, or Status not checked. Failure messages and route conflicts are listed below the table. Filter by name, or show only problems and differences. A name opens the proxy or shared flow in the Apigee console.
 
 ### Comparing with local bundles
 
-A bundle in the workspace matches a deployed proxy or shared flow by name: the `name` attribute of the top-level XML file under `apiproxy` or `sharedflowbundle`. The dashboard downloads each deployed revision of such a bundle once per session and compares it with the saved files. **≠ local** marks a deployment that differs, and **Compare with local** opens the differing files in VS Code's multi-file diff editor.
+A bundle in the workspace matches a deployed proxy or shared flow by name: the `name` attribute of the top-level XML file under `apiproxy` or `sharedflowbundle`. Bundles under `node_modules` or `target` and files matching `apigeeTools.exclude` are not counted, and bundles that share a name are not compared; exclude the extra copies. The dashboard downloads each deployed revision of such a bundle once per session and compares it with the saved files. **≠ local** marks a deployment that differs, **local ?** one whose comparison failed, and **Compare with local** opens the differing files in VS Code's multi-file diff editor.
 
 XML files of the bundle structure count as different only when their elements, attributes, or values differ; indentation, line endings, attribute order, and comments are ignored. The top-level XML file and `manifests/` are not compared, since Apigee writes them anew on import.
 
@@ -200,7 +200,7 @@ XML files of the bundle structure count as different only when their elements, a
 
 | Setting | Use |
 | --- | --- |
-| `apigeeTools.gcloudPath` | Path to `gcloud` when it is not on the `PATH`. It applies only from user or remote settings, never from a workspace. |
+| `apigeeTools.gcloudPath` | Path to `gcloud` when it is not on the `PATH`, such as `~/google-cloud-sdk/bin/gcloud`. It applies only from user or remote settings, never from a workspace. |
 | `apigeeTools.gcloudConfiguration` | A named gcloud configuration, such as one per customer, instead of the active one. |
 
 Organizations with data residency work when gcloud uses their regional endpoint through `gcloud config set api_endpoint_overrides/apigee`; the dashboard uses the same endpoint.
@@ -209,7 +209,7 @@ Organizations with data residency work when gcloud uses their regional endpoint 
 
 The dashboard runs `gcloud config list` and `gcloud auth print-access-token`, without prompts. The access token stays in memory, is never written to disk or shown, and is sent only to the Apigee API at `apigee.googleapis.com` or a regional Apigee endpoint. The dashboard only reads; it never deploys, undeploys, or changes anything.
 
-Data loads when you open the dashboard, refresh it, or switch the organization; a dashboard restored after restarting VS Code waits until you load it. To spare the API quota, the status is checked for at most 200 deployments per load, local bundles and recent deployments first.
+Data loads when you open the dashboard, refresh it, or switch the organization; a dashboard restored after restarting VS Code waits until you load it. To spare the API quota, the status is checked for at most 200 deployments per load, local bundles and recent deployments first. A network failure or an exhausted quota stops the remaining checks, and a notice says so.
 
 In Restricted Mode, linting keeps working. The dashboard then lists only the workspace bundles and needs a trusted workspace for everything else.
 

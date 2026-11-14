@@ -1,6 +1,5 @@
 // The Deployments tab: proxies and shared flows by environment, with their
 // deployment status, differences from local bundles, and problems.
-import type { VscodeCheckbox } from '@vscode-elements/elements/dist/vscode-checkbox/index.js';
 import type { VscodeTextfield } from '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import { html, nothing } from 'lit';
 import type {
@@ -124,14 +123,17 @@ export function deployments(
         >
           <vscode-icon slot="content-before" name="filter"></vscode-icon>
         </vscode-textfield>
-        <vscode-checkbox
-          label="Only problems and differences"
-          ?checked=${view.onlyProblems}
-          @change=${(event: Event) =>
-            actions.setView({
-              onlyProblems: (event.target as VscodeCheckbox).checked,
-            })}
-        ></vscode-checkbox>
+        <label class="checkbox">
+          <input
+            type="checkbox"
+            .checked=${view.onlyProblems}
+            @change=${(event: Event) =>
+              actions.setView({
+                onlyProblems: (event.target as HTMLInputElement).checked,
+              })}
+          />
+          Only problems and differences
+        </label>
         <span class="count" aria-live="polite" aria-atomic="true">
           ${rows.length} of ${snapshot.rows.length} shown
         </span>
@@ -219,6 +221,10 @@ function matrix(
         <vscode-badge class="drift" aria-hidden="true">≠ local</vscode-badge>
         Differs from the local bundle
       </li>
+      <li>
+        <vscode-badge aria-hidden="true">local ?</vscode-badge>
+        Comparison failed
+      </li>
       <li><span aria-hidden="true">—</span>Not deployed</li>
     </ul>
   `;
@@ -244,17 +250,29 @@ function statusCell(
   }
   const status = deploymentStatus(cell, loading);
   const messages = details(cell);
+  const unknownDrift = row.local && cell.drift === undefined && !loading;
   return html`
     <td title=${messages.join('\n') || nothing}>
       <span class="status">
         ${statusIcon(status)}
-        <span class="sr-only">${status.label}</span>
-        <span>rev ${cell.revision}</span>
+        <span>${status.label}</span>
+        <span class="muted">rev ${cell.revision}</span>
         ${
           cell.drift
             ? html`<vscode-badge class="drift" aria-hidden="true"
                   >≠ local</vscode-badge
                 ><span class="sr-only">differs from the local bundle</span>`
+            : nothing
+        }
+        ${
+          unknownDrift
+            ? html`<vscode-badge
+                  aria-hidden="true"
+                  title="The comparison with the local bundle failed"
+                  >local ?</vscode-badge
+                ><span class="sr-only"
+                  >comparison with the local bundle failed</span
+                >`
             : nothing
         }
         ${

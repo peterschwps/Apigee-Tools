@@ -199,6 +199,11 @@ const tests: [string, () => Promise<void>][] = [
   [
     'the dashboard loads deployments through gcloud and the Apigee API',
     async () => {
+      // The fake gcloud is a shell script, which Windows cannot run
+      if (process.platform === 'win32') {
+        console.log('  skipped on Windows: the fake gcloud is a shell script');
+        return;
+      }
       // The extension shares the global fetch of the extension host
       const requests: { path: string; authorization?: string }[] = [];
       const original = globalThis.fetch;

@@ -23,8 +23,8 @@ The dashboard needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/ins
 
 ## Settings
 
-- `apigeeTools.enabled`: enable or disable the extension.
-- `apigeeTools.exclude`: ignore matching file paths.
+- `apigeeTools.enabled`: enable or disable diagnostics and completion.
+- `apigeeTools.exclude`: ignore matching file paths, also as bundles in the dashboard.
 - `apigeeTools.ignore`: suppress selected diagnostic IDs, such as `AX110`.
 - `apigeeTools.gcloudPath`: path to `gcloud` for the dashboard, if it is not on the `PATH`.
 - `apigeeTools.gcloudConfiguration`: a named gcloud configuration for the dashboard instead of the active one.

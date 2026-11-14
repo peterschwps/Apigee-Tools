@@ -14,9 +14,13 @@ TypeScript sources are formatted with Prettier. Run `npm run format` before comm
 - `src/directives.ts` applies inline `apigee-tools disable` comments.
 - `src/fixes.ts` computes quick-fix edits without depending on VS Code.
 - `src/extension.ts` handles VS Code settings, events, and diagnostics.
+- `src/gcloud.ts` runs `gcloud` for the dashboard and keeps the access token in memory; `src/apigee.ts` is the read-only Apigee API client; `src/revision.ts` unzips deployed revisions and compares them with local bundles. None of them depends on VS Code.
+- `src/dashboard.ts` hosts the dashboard webview, and `src/protocol.ts` types the messages between the extension and the webview.
+- `src/webview/` contains the dashboard UI (Lit and VS Code Elements). It has its own `tsconfig.json` with DOM types, and `npm run build:webview` bundles it into `dist/webview`.
 - `src/cli.ts` runs the same checks from the command line; it is built to `dist/cli.js` and excluded from the VSIX. `npm run package:npm` stages the npm package of the CLI and checks its contents and the installed command; CI runs this check on every push.
 - `scripts/docs.ts` maintains the documentation inventory and candidates; `scripts/validate-reviewed.ts` checks the reviewed rule data for `npm run check`.
-- `test/` contains `node:test` suites; `test/fixtures/bundle` and `test/fixtures/sharedflow` are a proxy and a shared flow bundle that must lint without findings.
+- `test/` contains `node:test` suites; `test/fixtures/bundle` and `test/fixtures/sharedflow` are a proxy and a shared flow bundle that must lint without findings. `test/fixtures/revision.zip` is the fixture bundle as a deployed revision; after changing the bundle, rebuild it from `test/fixtures/bundle` with `zip -r -X -fd ../revision.zip apiproxy`.
+- `ThirdPartyNotices.txt` lists the licenses of the bundled dependencies; update it when they change.
 
 TypeScript strict mode is enabled, together with checks for unused code and implicit returns. Rule data stays separate from behavior, and documentation tooling stays outside the runtime package. Keep code, comments, diagnostics, documentation, and commit messages in English.
 
@@ -43,4 +47,4 @@ uv tool run --with "mkdocs-material>=9,<10" "mkdocs>=1.6,<2" build --strict
 
 `npm test` runs the suites with Node's built-in test runner. Add a failing case before fixing a bug, and extend the fixture bundle only with XML that Apigee X accepts. CI runs `check`, `test`, and `build` on pushes to `main` and on pull requests.
 
-`npm run test:integration` builds the extension, downloads VS Code 1.96.0 (the engine floor) into `.cache/vscode-test`, and runs `test/integration/suite.ts` in a real extension host against a temporary workspace. It covers diagnostics, quick fixes, and Step/Name completion through the VS Code API. CI runs it in a separate job under `xvfb-run`; locally on Linux without a display, prefix the command with `xvfb-run -a`.
+`npm run test:integration` builds the extension, downloads VS Code 1.96.0 (the engine floor) into `.cache/vscode-test`, and runs `test/integration/suite.ts` in a real extension host against a temporary workspace. It covers diagnostics, quick fixes, and Step/Name completion through the VS Code API, and opens the dashboard with a fake `gcloud` script and a stubbed Apigee API, so it never needs a network or an Apigee organization. The dashboard case is skipped on Windows, where the fake `gcloud` cannot run. CI runs it in a separate job under `xvfb-run`; locally on Linux without a display, prefix the command with `xvfb-run -a`.

@@ -37,7 +37,13 @@ export type Overview = {
   billingType?: string;
   state?: string;
   addons: string[];
-  environments: { name: string; type?: string; state?: string }[];
+  environments: {
+    name: string;
+    type?: string;
+    state?: string;
+    /** Pay-as-you-go configures add-ons per environment. */
+    addons?: string[];
+  }[];
   groups: { name: string; hostnames: string[]; environments: string[] }[];
 };
 
@@ -47,6 +53,8 @@ export type LocalBundle = {
   name: string;
   /** Workspace-relative path of the bundle directory. */
   path: string;
+  /** Whether the linter checked it; the settings can turn linting off. */
+  linted: boolean;
   errors: number;
   warnings: number;
 };
@@ -72,7 +80,7 @@ export type Snapshot = {
   bundles?: LocalBundle[];
   problem?: Problem;
   /** Additional information, such as deployments without a status check. */
-  note?: string;
+  notes?: string[];
 };
 
 export type HostMessage = { type: 'snapshot'; snapshot: Snapshot };

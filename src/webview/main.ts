@@ -42,6 +42,9 @@ const vscode = acquireVsCodeApi();
 const send = (message: WebviewMessage) => vscode.postMessage(message);
 const installUrl = 'https://cloud.google.com/sdk/docs/install';
 
+// Set when a button that starts loading will disappear, taking the focus along
+let refocus = false;
+
 const reducedMotion = () =>
   matchMedia('(prefers-reduced-motion: reduce)').matches ||
   document.body.classList.contains('vscode-reduce-motion');
@@ -93,6 +96,17 @@ class ApigeeDashboard extends LitElement {
       if (event.data?.type === 'snapshot') this.snapshot = event.data.snapshot;
     });
     send({ type: 'ready' });
+  }
+
+  /** Moves focus to Refresh once a notice with the focused button is gone. */
+  protected override updated(): void {
+    if (!refocus) return;
+    const refresh = this.renderRoot.querySelector<HTMLElement>(
+      '.session vscode-button',
+    );
+    if (!refresh) return;
+    refocus = false;
+    refresh.focus();
   }
 
   override render() {
@@ -185,9 +199,11 @@ class ApigeeDashboard extends LitElement {
         <div class="session">
           ${
             snapshot?.account
-              ? html`<span class="account" title="Signed in with gcloud"
+              ? html`<span
+                  class="account"
+                  title=${`Signed in with gcloud as ${snapshot.account}`}
                   ><vscode-icon name="account"></vscode-icon
-                  >${snapshot.account}</span
+                  ><span class="address">${snapshot.account}</span></span
                 >`
               : nothing
           }
@@ -197,10 +213,7 @@ class ApigeeDashboard extends LitElement {
                   <vscode-button
                     icon="refresh"
                     ?icon-spin=${snapshot.loading && !reducedMotion()}
-                    @click=${() => {
-                      // The button stays enabled while loading, so keyboard focus is not lost
-                      if (!snapshot.loading) send({ type: 'refresh' });
-                    }}
+                    @click=${() => send({ type: 'refresh' })}
                     @keydown=${keepScroll}
                   >
                     ${snapshot.loading ? 'Refreshing…' : 'Refresh'}
@@ -226,7 +239,7 @@ class ApigeeDashboard extends LitElement {
           )}
         </div>
         <div class="content">
-          ${workspace(snapshot.bundles ?? [], undefined, this.actions)}
+          ${workspace(snapshot.bundles, undefined, this.actions)}
         </div>
       `;
     }
@@ -246,7 +259,7 @@ class ApigeeDashboard extends LitElement {
     const { overview: organization, rows } = snapshot;
     const messages = [
       snapshot.problem ? problemNotice(snapshot.problem) : undefined,
-      snapshot.note ? notice('info', 'info', '', snapshot.note) : undefined,
+      ...(snapshot.notes ?? []).map(note => notice('info', 'info', '', note)),
     ].filter(Boolean);
     return html`
       ${messages.length ? html`<div class="messages">${messages}</div>` : nothing}
@@ -325,7 +338,11 @@ function button(label: string, message: WebviewMessage, secondary = false) {
   return html`
     <vscode-button
       ?secondary=${secondary}
-      @click=${() => send(message)}
+      @click=${() => {
+        // The notice with this button disappears when loading starts
+        refocus = message.type === 'refresh';
+        send(message);
+      }}
       @keydown=${keepScroll}
       >${label}</vscode-button
     >

@@ -260,14 +260,19 @@ function applicable(
 
 /** Returns whether the settings turn the extension off for a file. */
 function excluded(uri: vscode.Uri): boolean {
-  const config = vscode.workspace.getConfiguration(setting, uri);
-  if (!config.get<boolean>('enabled', true)) return true;
+  const enabled = vscode.workspace
+    .getConfiguration(setting, uri)
+    .get<boolean>('enabled', true);
+  return !enabled || matchesExclude(uri);
+}
 
-  // Match exclude patterns against the workspace-relative path
+/** Returns whether a file's workspace-relative path matches `exclude`. */
+function matchesExclude(uri: vscode.Uri): boolean {
   const relative = vscode.workspace
     .asRelativePath(uri, false)
     .replace(/\\/g, '/');
-  return config
+  return vscode.workspace
+    .getConfiguration(setting, uri)
     .get<string[]>('exclude', [])
     .some(pattern => minimatch(relative, pattern, { dot: true }));
 }
@@ -275,13 +280,14 @@ function excluded(uri: vscode.Uri): boolean {
 /**
  * Finds the bundles in the workspace and lints their files like the editor
  * does, honoring the settings; open documents count with unsaved changes.
+ * Excluded files and build output under `target` are not bundles.
  */
 async function scanWorkspace(
   specs: readonly DocumentSpec[],
 ): Promise<WorkspaceBundle[]> {
   const files = await vscode.workspace.findFiles(
     '**/{apiproxy,sharedflowbundle}/**/*.xml',
-    '**/node_modules/**',
+    '**/{node_modules,target}/**',
   );
   const open = new Map(
     vscode.workspace.textDocuments.map(document => [
@@ -290,50 +296,60 @@ async function scanWorkspace(
     ]),
   );
   const bundles = new Map<string, WorkspaceBundle>();
-  for (const uri of files) {
-    const directory = findBundleRoot(uri.fsPath);
-    const kind = classifyDocument(uri.fsPath);
-    if (!directory || !kind) continue;
-    let xml: string;
-    try {
-      xml =
-        open.get(uri.toString())?.getText() ??
-        (await readFile(uri.fsPath, 'utf8'));
-    } catch {
-      continue;
-    }
-    const bundle = bundles.get(directory) ?? {
-      kind:
-        path.basename(directory).toLowerCase() === 'apiproxy'
-          ? 'apis'
-          : 'sharedflows',
-      name: path.basename(path.dirname(directory)),
-      directory,
-      errors: 0,
-      warnings: 0,
-    };
-    bundles.set(directory, bundle);
+  await Promise.all(
+    files.map(async uri => {
+      const directory = findBundleRoot(uri.fsPath);
+      const kind = classifyDocument(uri.fsPath);
+      if (!directory || !kind || matchesExclude(uri)) return;
+      const bundle = bundles.get(directory) ?? {
+        kind:
+          path.basename(directory).toLowerCase() === 'apiproxy'
+            ? 'apis'
+            : 'sharedflows',
+        name: path.basename(path.dirname(directory)),
+        directory,
+        linted: false,
+        errors: 0,
+        warnings: 0,
+      };
+      bundles.set(directory, bundle);
+      let xml: string;
+      try {
+        // The editor hides a byte order mark, so the linter does not see one
+        xml =
+          open.get(uri.toString())?.getText() ??
+          (await readFile(uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
+      } catch {
+        return;
+      }
 
-    // The descriptor names the bundle, as Apigee does
-    if (kind === 'apiProxy' || kind === 'sharedFlowBundle') {
-      bundle.descriptor = uri.fsPath;
-      bundle.name =
-        parseXml(xml).root?.attributes.find(
-          attribute => attribute.name === 'name',
-        )?.value || path.basename(uri.fsPath, path.extname(uri.fsPath));
-    }
-    if (excluded(uri)) continue;
-    const ignored = new Set(
-      vscode.workspace
-        .getConfiguration(setting, uri)
-        .get<string[]>('ignore', []),
-    );
-    for (const issue of await lintFile(xml, uri.fsPath, specs, ignored)) {
-      if ((issue.severity ?? 'error') === 'error') bundle.errors++;
-      else bundle.warnings++;
-    }
-  }
-  return [...bundles.values()].sort((a, b) => a.name.localeCompare(b.name));
+      // The descriptor names the bundle, as Apigee does
+      if (kind === 'apiProxy' || kind === 'sharedFlowBundle') {
+        bundle.descriptor = uri.fsPath;
+        bundle.name =
+          parseXml(xml).root?.attributes.find(
+            attribute => attribute.name === 'name',
+          )?.value || path.basename(uri.fsPath, path.extname(uri.fsPath));
+      }
+      if (excluded(uri)) return;
+      bundle.linted = true;
+      const ignored = new Set(
+        vscode.workspace
+          .getConfiguration(setting, uri)
+          .get<string[]>('ignore', []),
+      );
+      for (const issue of await lintFile(xml, uri.fsPath, specs, ignored)) {
+        if ((issue.severity ?? 'error') === 'error') bundle.errors++;
+        else bundle.warnings++;
+      }
+    }),
+  );
+
+  // Shallow directories first, so a source bundle precedes nested copies
+  return [...bundles.values()].sort(
+    (a, b) =>
+      a.name.localeCompare(b.name) || a.directory.length - b.directory.length,
+  );
 }
 
 /** Converts a finding to a diagnostic whose code links the documentation. */

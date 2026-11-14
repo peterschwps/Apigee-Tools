@@ -1,5 +1,7 @@
 import { execFile, type ExecFileException } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 /** Runs gcloud with the given arguments and resolves to its standard output. */
 export type Gcloud = (args: readonly string[]) => Promise<string>;
@@ -77,16 +79,23 @@ export function gcloudInvocation(
  * never picks up a `gcloud` file from a workspace, and it never waits for a
  * prompt.
  */
-export function gcloudRunner(path: string, configuration = ''): Gcloud {
+export function gcloudRunner(setting: string, configuration = ''): Gcloud {
   if (configuration && !isConfigurationName(configuration)) {
     throw new GcloudError(
       'failed',
       `"${configuration}" is not a valid gcloud configuration name.`,
     );
   }
+  const path = expandHome(setting);
   const extra = configuration ? [`--configuration=${configuration}`] : [];
   return args =>
     new Promise((resolve, reject) => {
+      // A configured path is checked directly, independent of the shell's
+      // language and of how it reports a missing program
+      if (/[\\/]/.test(path) && !existsSync(path)) {
+        reject(new GcloudError('missing', `gcloud was not found ("${path}").`));
+        return;
+      }
       const invocation = gcloudInvocation(path, [...args, ...extra]);
       const child = execFile(
         invocation.file,
@@ -156,13 +165,25 @@ export async function gcloudConfig(gcloud: Gcloud): Promise<GcloudConfig> {
   };
 }
 
+/** Expands a leading `~`, which settings often contain but no shell sees. */
+function expandHome(path: string): string {
+  return path === '~' || /^~[\\/]/.test(path)
+    ? join(homedir(), path.slice(2))
+    : path;
+}
+
 /** Translates a failed gcloud run into a reason the dashboard can act on. */
 function gcloudError(
   error: ExecFileException,
   stderr: string,
   path: string,
 ): GcloudError {
-  if (error.code === 'ENOENT' || notFoundOnWindows.test(stderr)) {
+  // cmd.exe exits with 9009 for an unknown command, in every language
+  if (
+    error.code === 'ENOENT' ||
+    error.code === 9009 ||
+    notFoundOnWindows.test(stderr)
+  ) {
     return new GcloudError('missing', `gcloud was not found ("${path}").`);
   }
   if (signedOutPattern.test(stderr)) {

@@ -167,3 +167,22 @@ test('the configuration provides account, project, and endpoint', async () => {
     endpoint: 'https://eu-apigee.googleapis.com/',
   });
 });
+
+test('a configured path that does not exist is missing without running', async () => {
+  const gcloud = gcloudRunner(path.join(scripts, 'no-such-folder', 'gcloud'));
+  await assert.rejects(gcloud(['version']), { reason: 'missing' });
+});
+
+test('a leading ~ in the configured path means the home directory', async () => {
+  const gcloud = gcloudRunner('~/no-such-folder-for-apigee-tools/gcloud');
+  const expected = path.join(
+    homedir(),
+    'no-such-folder-for-apigee-tools',
+    'gcloud',
+  );
+  await assert.rejects(gcloud(['version']), (error: GcloudError) => {
+    assert.equal(error.reason, 'missing');
+    assert.ok(error.message.includes(expected), error.message);
+    return true;
+  });
+});

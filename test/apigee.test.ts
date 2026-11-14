@@ -348,3 +348,70 @@ test('a status keeps the state and readable messages', () => {
     routeConflicts: ['Base path /orders conflicts with legacy in public.'],
   });
 });
+
+test('network failures name their cause', async t => {
+  serve(t, () => {
+    throw new TypeError('fetch failed', {
+      cause: new Error('unable to get local issuer certificate'),
+    });
+  });
+  await assert.rejects(client().organization('acme'), {
+    message:
+      'Cannot reach apigee.googleapis.com (unable to get local issuer certificate).',
+    hint: /network connection/,
+  });
+});
+
+test('a connection that drops while the body arrives is a network failure', async t => {
+  serve(
+    t,
+    () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new TypeError('terminated'));
+          },
+        }),
+      ),
+  );
+  await assert.rejects(client().organization('acme'), {
+    message: /^Cannot reach apigee\.googleapis\.com/,
+  });
+});
+
+test('pay-as-you-go organizations list add-ons per environment', async t => {
+  serve(t, path => {
+    switch (path) {
+      case '/organizations/acme':
+        return reply({
+          name: 'acme',
+          billingType: 'PAYG',
+          environments: ['dev', 'prod'],
+        });
+      case '/organizations/acme/environments/dev':
+        return reply({ name: 'dev', type: 'BASE' });
+      case '/organizations/acme/environments/prod':
+        return reply({ name: 'prod', type: 'COMPREHENSIVE' });
+      case '/organizations/acme/environments/prod/addonsConfig':
+        return reply({
+          apiSecurityConfig: { enabled: true },
+          analyticsConfig: { enabled: true },
+        });
+      case '/organizations/acme/envgroups':
+        return reply({});
+      default:
+        // dev cannot read its add-ons, which must not break the overview
+        return reply({}, 403);
+    }
+  });
+  const { environments } = await loadOverview(client(), 'acme');
+  assert.deepEqual(environments, [
+    { name: 'dev', type: 'BASE', state: undefined },
+    {
+      name: 'prod',
+      type: 'COMPREHENSIVE',
+      state: undefined,
+      addons: ['Advanced API Security', 'Analytics'],
+    },
+  ]);
+});

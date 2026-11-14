@@ -94,45 +94,59 @@ export function apigeeClient(
   const encode = encodeURIComponent;
   const organization = (name: string) => `/organizations/${encode(name)}`;
 
-  /** Sends a request with a token; network failures become API errors. */
-  async function send(url: string, token: string, accept: string) {
-    const timeout = AbortSignal.timeout(timeoutMs);
-    try {
-      return await fetch(url, {
-        headers: { authorization: `Bearer ${token}`, accept },
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-      });
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      if (timeout.aborted) {
-        throw new ApigeeError(
-          `The Apigee API did not answer within ${timeoutMs / 1000} seconds.`,
-        );
-      }
-      throw new ApigeeError(
-        `Cannot reach ${new URL(url).host}.`,
-        undefined,
-        'Check the network connection and the proxy settings.',
-      );
-    }
-  }
-
-  /** Requests a path and renews the token once if it was rejected. */
+  /**
+   * Requests a path and reads the body, renewing the token once if it was
+   * rejected. Network failures and timeouts, also while the body arrives,
+   * become API errors.
+   */
   const get = (path: string, accept = 'application/json') =>
-    limit(async () => {
+    limit(async (): Promise<Buffer> => {
       const url = `${base}${path}`;
-      let token = tokens.token();
-      let response = await send(url, await token, accept);
-      if (response.status === 401) {
-        token = tokens.renew(token);
-        response = await send(url, await token, accept);
+      const timeout = AbortSignal.timeout(timeoutMs);
+      const send = (token: string) =>
+        fetch(url, {
+          headers: { authorization: `Bearer ${token}`, accept },
+          signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        });
+      try {
+        let token = tokens.token();
+        let response = await send(await token);
+        if (response.status === 401) {
+          token = tokens.renew(token);
+          response = await send(await token);
+        }
+        const body = Buffer.from(await response.arrayBuffer());
+        if (!response.ok) throw responseError(response, body);
+        return body;
+      } catch (error) {
+        throw requestError(error, url, timeout);
       }
-      if (!response.ok) throw await responseError(response);
-      return response;
     });
 
+  /** Translates failures of fetch; other errors pass through unchanged. */
+  function requestError(error: unknown, url: string, timeout: AbortSignal) {
+    const fetchFailure =
+      error instanceof TypeError || error instanceof DOMException;
+    if (signal?.aborted || !fetchFailure) return error;
+    const hint = 'Check the network connection and the proxy settings.';
+    if (timeout.aborted) {
+      return new ApigeeError(
+        `The Apigee API did not answer within ${timeoutMs / 1000} seconds.`,
+        undefined,
+        hint,
+      );
+    }
+    // The cause tells a refused connection from a certificate problem
+    const cause = (error as { cause?: { message?: string } }).cause?.message;
+    return new ApigeeError(
+      `Cannot reach ${new URL(url).host}${cause ? ` (${cause})` : ''}.`,
+      undefined,
+      hint,
+    );
+  }
+
   const json = async <T>(path: string): Promise<T> =>
-    (await (await get(path)).json()) as T;
+    JSON.parse((await get(path)).toString('utf8')) as T;
 
   /** Collects the items of all pages of a list request. */
   async function pages<T>(path: string, key: string): Promise<T[]> {
@@ -157,6 +171,12 @@ export function apigeeClient(
     },
 
     organization: (name: string) => json<Organization>(organization(name)),
+
+    /** Returns the add-ons of an environment under pay-as-you-go. */
+    environmentAddons: (name: string, environment: string) =>
+      json<NonNullable<Organization['addonsConfig']>>(
+        `${organization(name)}/environments/${encode(environment)}/addonsConfig`,
+      ),
 
     environment: (name: string, environment: string) =>
       json<Environment>(
@@ -213,11 +233,10 @@ export function apigeeClient(
       resource: string,
       revision: string,
     ): Promise<Buffer> {
-      const response = await get(
+      return get(
         `${organization(name)}/${kind}/${encode(resource)}/revisions/${encode(revision)}?format=bundle`,
         '*/*',
       );
-      return Buffer.from(await response.arrayBuffer());
     },
   };
 }
@@ -228,11 +247,19 @@ export async function loadOverview(
   name: string,
 ): Promise<Overview> {
   const organization = await client.organization(name);
+  const payAsYouGo = organization.billingType === 'PAYG';
   const [environments, groups] = await Promise.all([
     Promise.all(
-      (organization.environments ?? []).map(environment =>
-        client.environment(name, environment),
-      ),
+      (organization.environments ?? []).map(async environment => {
+        const [details, addons] = await Promise.all([
+          client.environment(name, environment),
+          // Missing permissions for add-ons must not break the overview
+          payAsYouGo
+            ? client.environmentAddons(name, environment).catch(() => undefined)
+            : undefined,
+        ]);
+        return { ...details, ...(addons && { addons: enabledAddons(addons) }) };
+      }),
     ),
     client.environmentGroups(name).then(list =>
       Promise.all(
@@ -252,12 +279,14 @@ export async function loadOverview(
     runtimeType: organization.runtimeType,
     billingType: organization.billingType,
     state: organization.state,
-    addons: Object.entries(organization.addonsConfig ?? {})
-      .filter(([, addon]) => addon?.enabled)
-      .map(([key]) => addonNames[key] ?? key)
-      .sort(),
+    addons: enabledAddons(organization.addonsConfig ?? {}),
     environments: environments
-      .map(({ name, type, state }) => ({ name, type, state }))
+      .map(({ name, type, state, addons }) => ({
+        name,
+        type,
+        state,
+        ...(addons && { addons }),
+      }))
       .sort(byName),
     groups: groups.sort(byName),
   };
@@ -307,6 +336,16 @@ export async function loadRows(
     rows.push(...[...rowsByName.values()].sort(byName));
   });
   return rows;
+}
+
+/** Returns the readable names of the enabled add-ons. */
+function enabledAddons(
+  config: NonNullable<Organization['addonsConfig']>,
+): string[] {
+  return Object.entries(config)
+    .filter(([, addon]) => addon?.enabled)
+    .map(([key]) => addonNames[key] ?? key)
+    .sort();
 }
 
 /** Copies a deployment status into its cell, reduced to readable messages. */
@@ -367,11 +406,18 @@ function limiter(size: number) {
 }
 
 /** Builds an error from a failed response and Google's error body. */
-async function responseError(response: Response): Promise<ApigeeError> {
-  const body = (await response.json().catch(() => undefined)) as
-    { error?: { message?: string } } | undefined;
+function responseError(response: Response, body: Buffer): ApigeeError {
+  let message: string | undefined;
+  try {
+    const parsed = JSON.parse(body.toString('utf8')) as {
+      error?: { message?: string };
+    };
+    message = parsed.error?.message;
+  } catch {
+    // Not a Google error body; the status line describes the failure
+  }
   return new ApigeeError(
-    body?.error?.message || `${response.status} ${response.statusText}`,
+    message || `${response.status} ${response.statusText}`,
     response.status,
     hints[response.status],
   );

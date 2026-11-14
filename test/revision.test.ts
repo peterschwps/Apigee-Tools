@@ -137,3 +137,27 @@ test('changed, added, and removed files are reported', async () => {
   });
   assert.equal(differs(remote, local), true);
 });
+
+test('hidden files such as .DS_Store are not part of a bundle', async () => {
+  const directory = await editedCopy('hidden', async copy => {
+    await writeFile(path.join(copy, '.DS_Store'), 'Finder');
+    await writeFile(path.join(copy, 'policies', '.SA-Limit.xml.swp'), 'vim');
+  });
+  const local = await readBundle(directory, 'apis');
+  assert.ok([...local.keys()].every(file => !file.includes('/.')));
+  assert.equal(
+    differs(fingerprints(await revision()), fingerprints(local)),
+    false,
+  );
+});
+
+test('files in other encodings compare by their bytes', () => {
+  const latin1 = (text: string) => Buffer.from(text, 'latin1');
+  const remote = fingerprints(
+    new Map([['apiproxy/resources/jsc/a.js', latin1('var s = "\u00e4";')]]),
+  );
+  const local = fingerprints(
+    new Map([['apiproxy/resources/jsc/a.js', latin1('var s = "\u00f6";')]]),
+  );
+  assert.equal(differs(remote, local), true);
+});

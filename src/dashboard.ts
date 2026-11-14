@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {
@@ -210,12 +211,17 @@ export function registerDashboard(
         await load();
         break;
       case 'organization':
+        // Compare with the requested organization, which may still be loading
         if (
           snapshot.organizations.includes(message.name) &&
           message.name !== snapshot.organization
         ) {
-          await context.workspaceState.update(organizationKey, message.name);
-          snapshot = { ...snapshot, overview: undefined, rows: undefined };
+          snapshot = {
+            ...snapshot,
+            organization: message.name,
+            overview: undefined,
+            rows: undefined,
+          };
           await load();
         }
         break;
@@ -224,9 +230,14 @@ export function registerDashboard(
         break;
       case 'openBundle': {
         const bundle = bundles.find(item => relative(item) === message.path);
-        if (bundle) {
+        if (bundle?.descriptor) {
           await vscode.window.showTextDocument(
-            vscode.Uri.file(bundle.descriptor ?? bundle.directory),
+            vscode.Uri.file(bundle.descriptor),
+          );
+        } else if (bundle) {
+          await vscode.commands.executeCommand(
+            'revealInExplorer',
+            vscode.Uri.file(bundle.directory),
           );
         }
         break;
@@ -266,12 +277,13 @@ export function registerDashboard(
       ...snapshot,
       loading: true,
       problem: undefined,
-      note: undefined,
+      notes: [],
     };
     post();
     try {
-      session ??= await startSession();
-      const client = apigeeClient(session.tokens, session.base, {
+      // A settings change may reset the session while this load runs
+      const current = (session ??= await startSession());
+      const client = apigeeClient(current.tokens, current.base, {
         signal: controller.signal,
       });
       const organizations: string[] = await client
@@ -281,11 +293,15 @@ export function registerDashboard(
           if (error instanceof ApigeeError && error.status === 403) return [];
           throw error;
         });
-      const organization = chooseOrganization(organizations, session.project);
+      const organization = chooseOrganization(organizations, current.project);
       if (!organization) {
         snapshot = {
           ...snapshot,
-          account: session.account,
+          account: current.account,
+          organizations: [],
+          organization: undefined,
+          overview: undefined,
+          rows: undefined,
           problem: {
             reason: 'noOrganization',
             message: 'No Apigee organization was found for this account.',
@@ -294,6 +310,17 @@ export function registerDashboard(
         };
         return;
       }
+
+      // Publish the choice first, so the selector stays if loading it fails
+      snapshot = {
+        ...snapshot,
+        account: current.account,
+        organizations: organizations.includes(organization)
+          ? organizations
+          : [organization, ...organizations],
+        organization,
+      };
+      post();
       const [overview, rows, scanned] = await Promise.all([
         loadOverview(client, organization),
         loadRows(client, organization),
@@ -302,18 +329,22 @@ export function registerDashboard(
       if (controller.signal.aborted) return;
       bundles = scanned;
       for (const row of rows) row.local = Boolean(localBundle(row));
+      const ambiguous = rows.filter(row => localBundles(row).length > 1);
+      if (ambiguous.length) {
+        snapshot.notes?.push(
+          `Several bundles in the workspace are named ${ambiguous.map(row => row.name).join(', ')}, so they are not compared. Exclude the extra copies with apigeeTools.exclude.`,
+        );
+      }
       snapshot = {
         ...snapshot,
-        account: session.account,
-        organizations: organizations.includes(organization)
-          ? organizations
-          : [organization, ...organizations],
-        organization,
         overview,
         rows,
         bundles: bundles.map(toLocalBundle),
       };
       post();
+
+      // Only an organization that loaded is remembered for the next start
+      await context.workspaceState.update(organizationKey, organization);
       await Promise.all([
         checkStatus(client, organization, rows, controller),
         checkDrift(client, organization, rows, controller.signal),
@@ -348,25 +379,30 @@ export function registerDashboard(
     };
   }
 
-  /** Picks the last chosen organization, the gcloud project, or the first. */
+  /**
+   * Picks the requested or shown organization, then the last one that loaded,
+   * the gcloud project, or the first listed. Without a list, which the account
+   * may not be allowed to read, the gcloud project comes before the stored one.
+   */
   function chooseOrganization(
     organizations: string[],
     project?: string,
   ): string | undefined {
-    const candidates = [
-      context.workspaceState.get<string>(organizationKey),
-      project,
-    ];
+    const stored = context.workspaceState.get<string>(organizationKey);
+    if (!organizations.length) {
+      return project ?? snapshot.organization ?? stored;
+    }
     return (
-      candidates.find(
-        name => name && (!organizations.length || organizations.includes(name)),
+      [snapshot.organization, stored, project].find(
+        name => name && organizations.includes(name),
       ) ?? organizations[0]
     );
   }
 
   /**
    * Loads the status of the deployments, local bundles and recent ones first.
-   * An exhausted quota ends the load, so other users of the API keep theirs.
+   * A network failure or an exhausted quota stops the remaining requests, so
+   * the dashboard neither waits for timeouts nor uses up the quota of others.
    */
   async function checkStatus(
     client: ApigeeClient,
@@ -379,9 +415,10 @@ export function registerDashboard(
       0,
     );
     const targets = statusTargets(rows, statusLimit);
-    if (targets.length < total) {
-      snapshot.note = `Status was checked for ${targets.length} of ${total} deployments, local bundles and recent deployments first, to spare the API quota.`;
-    }
+    let checked = 0;
+    let failed = 0;
+    let firstFailure: unknown;
+    let stopped: ApigeeError | undefined;
     await Promise.all(
       targets.map(async ({ row, environment }) => {
         const cell = row.cells[environment];
@@ -396,14 +433,20 @@ export function registerDashboard(
               cell.revision,
             ),
           );
+          checked++;
           schedulePost();
         } catch (error) {
           if (controller.signal.aborted) return;
-          if (error instanceof ApigeeError && error.status === 429) {
-            snapshot.note = `${error.message} ${error.hint ?? ''}`.trim();
+          if (
+            error instanceof ApigeeError &&
+            (error.status === undefined || error.status === 429)
+          ) {
+            stopped = error;
             controller.abort();
             return;
           }
+          failed++;
+          firstFailure ??= error;
           host.log.warn(
             `Status of ${row.name} in ${environment}:`,
             messageOf(error),
@@ -411,6 +454,25 @@ export function registerDashboard(
         }
       }),
     );
+    const notes = snapshot.notes ?? [];
+    if (stopped) {
+      notes.push(
+        `Status checks stopped: ${stopped.message} ${stopped.hint ?? ''}`.trim(),
+      );
+    } else if (failed) {
+      const hint =
+        firstFailure instanceof ApigeeError
+          ? ` ${firstFailure.hint ?? ''}`
+          : '';
+      notes.push(
+        `Status could not be checked for ${failed} deployments: ${messageOf(firstFailure)}${hint}`.trim(),
+      );
+    }
+    if (!stopped && targets.length < total) {
+      notes.push(
+        `Status was checked for ${checked} of ${total} deployments, local bundles and recent deployments first, to spare the API quota.`,
+      );
+    }
   }
 
   /** Marks the deployments that differ from the bundle in the workspace. */
@@ -420,6 +482,7 @@ export function registerDashboard(
     rows: Row[],
     signal: AbortSignal,
   ): Promise<void> {
+    const failed: string[] = [];
     await Promise.all(
       rows
         .filter(row => row.local)
@@ -442,15 +505,20 @@ export function registerDashboard(
               }),
             );
           } catch (error) {
-            if (!signal.aborted) {
-              host.log.warn(
-                `Comparing ${row.name} with the local bundle:`,
-                messageOf(error),
-              );
-            }
+            if (signal.aborted) return;
+            host.log.warn(
+              `Comparing ${row.name} with the local bundle:`,
+              messageOf(error),
+            );
+            failed.push(`${row.name} (${messageOf(error)})`);
           }
         }),
     );
+    if (failed.length) {
+      snapshot.notes?.push(
+        `Differences from the local bundle could not be checked for ${failed.join(', ')}.`,
+      );
+    }
   }
 
   /** Downloads a revision once; the last few stay for comparisons. */
@@ -509,15 +577,18 @@ export function registerDashboard(
     const cell = row?.cells[environment];
     const bundle = row && localBundle(row);
     const organization = snapshot.organization;
-    if (!row || !cell || !bundle || !session || !organization) return;
+    if (!row || !cell || !bundle || !organization) return;
     try {
-      const client = apigeeClient(session.tokens, session.base);
-      const remote = await revisionFiles(
-        client,
-        organization,
-        row,
-        cell.revision,
-      );
+      const current = (session ??= await startSession());
+      const client = apigeeClient(current.tokens, current.base);
+
+      // An aborted load may have shared the download; then fetch it again
+      const download = () =>
+        revisionFiles(client, organization, row, cell.revision);
+      const remote = await download().catch(error => {
+        if ((error as Error)?.name !== 'AbortError') throw error;
+        return download();
+      });
       const local = await readBundle(bundle.directory, kind);
       const { changed, added, removed } = compareBundles(
         fingerprints(remote),
@@ -590,15 +661,25 @@ export function registerDashboard(
     const flag = isConfigurationName(configuration)
       ? ` --configuration=${configuration}`
       : '';
-    const terminal = vscode.window.createTerminal('gcloud auth login');
+    // The home directory keeps cmd.exe from running a gcloud.cmd of the workspace
+    const terminal = vscode.window.createTerminal({
+      name: 'gcloud auth login',
+      cwd: homedir(),
+    });
     terminal.show();
     terminal.sendText(`${command} auth login${flag}`);
   }
 
-  function localBundle(row: Pick<Row, 'kind' | 'name'>) {
-    return bundles.find(
+  function localBundles(row: Pick<Row, 'kind' | 'name'>) {
+    return bundles.filter(
       bundle => bundle.kind === row.kind && bundle.name === row.name,
     );
+  }
+
+  /** Returns the local bundle of a row, unless several share its name. */
+  function localBundle(row: Pick<Row, 'kind' | 'name'>) {
+    const matches = localBundles(row);
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   function post(): void {
@@ -657,8 +738,8 @@ function relative(bundle: WorkspaceBundle): string {
 }
 
 function toLocalBundle(bundle: WorkspaceBundle): LocalBundle {
-  const { kind, name, errors, warnings } = bundle;
-  return { kind, name, path: relative(bundle), errors, warnings };
+  const { kind, name, linted, errors, warnings } = bundle;
+  return { kind, name, path: relative(bundle), linted, errors, warnings };
 }
 
 /** Explains an error in terms of what the user can do about it. */

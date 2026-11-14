@@ -130,6 +130,7 @@ export const styles = css`
     display: flex;
     align-items: center;
     gap: 16px;
+    min-width: 0;
   }
 
   /* Logo motif: a red and a yellow dot and a larger green one, joined by short connectors */
@@ -177,9 +178,11 @@ export const styles = css`
     font-weight: normal;
   }
 
+  /* Wide enough for 30-character project IDs; the option list copies the width */
   #organization,
   #environment {
-    width: 170px;
+    width: 250px;
+    max-width: 100%;
   }
 
   @media (max-width: 1099px) {
@@ -197,12 +200,20 @@ export const styles = css`
     }
   }
 
+  /* A long account name shortens, so Refresh always stays in view */
   .account {
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    overflow: hidden;
     color: var(--at-text-muted);
     white-space: nowrap;
+  }
+
+  .address {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .account vscode-icon {
@@ -400,6 +411,12 @@ export const styles = css`
     gap: 4px;
   }
 
+  .hosts li,
+  .path,
+  .item-name {
+    overflow-wrap: anywhere;
+  }
+
   .hosts,
   .path {
     margin-top: 2px;
@@ -422,7 +439,9 @@ export const styles = css`
   }
 
   /* Tables */
+  /* Positioned, so screen-reader-only text cannot widen the page */
   .table-scroll {
+    position: relative;
     overflow-x: auto;
   }
 
@@ -540,6 +559,28 @@ export const styles = css`
     flex-wrap: wrap;
     align-items: center;
     gap: 8px 20px;
+  }
+
+  .checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .checkbox input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(
+      --vscode-checkbox-selectBackground,
+      var(--vscode-focusBorder)
+    );
+  }
+
+  .checkbox input:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: 2px;
   }
 
   .toolbar vscode-textfield {

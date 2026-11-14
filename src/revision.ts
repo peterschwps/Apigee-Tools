@@ -1,3 +1,4 @@
+import { isUtf8 } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -121,14 +122,29 @@ export async function readBundle(
   const files: BundleFiles = new Map();
   await Promise.all(
     entries
-      .filter(entry => entry.isFile())
+      // Linked files count like files
+      .filter(entry => entry.isFile() || entry.isSymbolicLink())
       .map(async entry => {
         const file = path.join(entry.parentPath, entry.name);
         const relative = path
           .relative(directory, file)
           .split(path.sep)
           .join('/');
-        files.set(`${bundleDirectory(kind)}/${relative}`, await readFile(file));
+
+        // Hidden files such as .DS_Store are never part of a bundle
+        if (relative.split('/').some(segment => segment.startsWith('.'))) {
+          return;
+        }
+        try {
+          files.set(
+            `${bundleDirectory(kind)}/${relative}`,
+            await readFile(file),
+          );
+        } catch (error) {
+          // A link to a directory or a broken link is not a bundle file
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== 'EISDIR' && code !== 'ENOENT') throw error;
+        }
       }),
   );
   return files;
@@ -190,10 +206,11 @@ export function differs(
  * tree, other text with normalized line endings, and binaries as they are.
  */
 function comparableForm(file: string, content: Buffer): Buffer | string {
-  if (content.includes(0)) return content;
+  // Binaries and other encodings compare byte by byte
+  if (content.includes(0) || !isUtf8(content)) return content;
   const text = content
     .toString('utf8')
-    .replace(/^﻿/, '')
+    .replace(/^\uFEFF/, '')
     .replace(/\r\n?/g, '\n');
   if (!classifyDocument(file)) return text;
 
