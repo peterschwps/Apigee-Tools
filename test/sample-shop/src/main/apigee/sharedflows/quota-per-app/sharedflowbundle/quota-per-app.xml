@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SharedFlowBundle revision="1" name="quota-per-app">
+    <DisplayName>quota-per-app</DisplayName>
+    <Description>Quota per developer app with the limits of its API product.</Description>
+</SharedFlowBundle>

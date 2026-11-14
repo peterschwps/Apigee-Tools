@@ -1,0 +1,111 @@
+openapi: 3.0.3
+info:
+  title: Catalog API
+  description: Product catalog of the sample shop.
+  version: 2.3.0
+servers:
+  - url: https://api.shop.example/catalog/v2
+paths:
+  /products:
+    get:
+      operationId: listProducts
+      summary: List products one page at a time
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: One page of products
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductList'
+  /products/{sku}:
+    get:
+      operationId: getProduct
+      summary: Get one product
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: No product has this SKU
+  /categories:
+    get:
+      operationId: listCategories
+      summary: List all categories
+      responses:
+        '200':
+          description: The categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+components:
+  schemas:
+    Product:
+      type: object
+      required: [sku, name, price, currency]
+      properties:
+        sku:
+          type: string
+          example: MUG-0042
+        name:
+          type: string
+          example: Coffee mug
+        price:
+          type: number
+          example: 12.9
+        currency:
+          type: string
+          example: EUR
+        category:
+          type: string
+          example: kitchen
+    ProductList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        total:
+          type: integer
+          example: 240
+    Category:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          example: kitchen
+        name:
+          type: string
+          example: Kitchen

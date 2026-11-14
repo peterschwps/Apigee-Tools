@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<MessageLogging continueOnError="true" enabled="true" name="ML-AccessLog">
+    <DisplayName>ML-AccessLog</DisplayName>
+    <Syslog>
+        <Message>shop-api env={environment.name} proxy={apiproxy.name} app={developer.app.name} client={client.ip} verb={request.verb} path={request.path} status={response.status.code} agent="{request.header.user-agent}" id={messageid}</Message>
+        <Host>logs.shop.example</Host>
+        <Port>514</Port>
+        <Protocol>TCP</Protocol>
+        <FormatMessage>true</FormatMessage>
+    </Syslog>
+    <logLevel>INFO</logLevel>
+</MessageLogging>

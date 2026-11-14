@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<RaiseFault continueOnError="false" enabled="true" name="RF-InvalidCustomerId">
+    <DisplayName>RF-InvalidCustomerId</DisplayName>
+    <FaultResponse>
+        <Set>
+            <Payload contentType="application/json">{"error": "invalid_request", "message": "A customer id consists of digits only."}</Payload>
+            <StatusCode>400</StatusCode>
+            <ReasonPhrase>Bad Request</ReasonPhrase>
+        </Set>
+    </FaultResponse>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</RaiseFault>

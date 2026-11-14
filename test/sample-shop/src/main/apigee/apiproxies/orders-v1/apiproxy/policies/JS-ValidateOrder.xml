@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Javascript continueOnError="false" enabled="true" name="JS-ValidateOrder" timeLimit="200">
+    <DisplayName>JS-ValidateOrder</DisplayName>
+    <ResourceURL>jsc://validate-order.js</ResourceURL>
+</Javascript>

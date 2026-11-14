@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+    <Description>Read-only product catalog, validated against its OpenAPI description.</Description>
+    <PreFlow name="PreFlow">
+        <Request>
+            <Step>
+                <Name>FC-Cors</Name>
+            </Step>
+        </Request>
+        <Response/>
+    </PreFlow>
+    <Flows>
+        <Flow name="getProducts">
+            <Description>Lists products one page at a time; pages are cached for five minutes.</Description>
+            <Request>
+                <Step>
+                    <Name>OAS-ValidateRequest</Name>
+                </Step>
+                <Step>
+                    <Name>EV-PagingParams</Name>
+                </Step>
+                <Step>
+                    <Name>RC-ProductList</Name>
+                </Step>
+            </Request>
+            <Response>
+                <Step>
+                    <Name>JS-PageLinks</Name>
+                </Step>
+                <Step>
+                    <Name>RC-ProductList</Name>
+                </Step>
+            </Response>
+            <Condition>(proxy.pathsuffix MatchesPath "/products") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="getProduct">
+            <Request>
+                <Step>
+                    <Name>OAS-ValidateRequest</Name>
+                </Step>
+            </Request>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/products/*") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="getCategories">
+            <Request>
+                <Step>
+                    <Name>OAS-ValidateRequest</Name>
+                </Step>
+            </Request>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/categories") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="unknownResource">
+            <Description>Answers every other path or verb with 404.</Description>
+            <Request>
+                <Step>
+                    <Name>RF-UnknownResource</Name>
+                </Step>
+            </Request>
+            <Response/>
+        </Flow>
+    </Flows>
+    <PostFlow name="PostFlow">
+        <Request/>
+        <Response>
+            <Step>
+                <Name>AM-CatalogVersion</Name>
+            </Step>
+        </Response>
+    </PostFlow>
+    <HTTPProxyConnection>
+        <BasePath>/catalog/v2</BasePath>
+    </HTTPProxyConnection>
+    <RouteRule name="default">
+        <TargetEndpoint>default</TargetEndpoint>
+    </RouteRule>
+</ProxyEndpoint>

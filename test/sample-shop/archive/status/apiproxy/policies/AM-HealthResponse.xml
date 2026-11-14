@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage continueOnError="false" enabled="true" name="AM-HealthResponse">
+    <DisplayName>AM-HealthResponse</DisplayName>
+    <Set>
+        <Headers>
+            <Header name="Cache-Control">no-store</Header>
+        </Headers>
+        <Payload contentType="application/json">{"status":"ok"}</Payload>
+        <StatusCode>200</StatusCode>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" transport="http" type="response"/>
+</AssignMessage>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- expect AX114: the file name has an extra s -->
+<AssignMessage continueOnError="false" enabled="true" name="AM-ReviewDefault">
+    <DisplayName>AM-ReviewDefault</DisplayName>
+    <Set>
+        <QueryParams>
+            <QueryParam name="limit">{firstnonnull(request.queryparam.limit,'20')}</QueryParam>
+            <QueryParam name="sort">{firstnonnull(request.queryparam.sort,'newest')}</QueryParam>
+        </QueryParams>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" transport="http" type="request"/>
+</AssignMessage>

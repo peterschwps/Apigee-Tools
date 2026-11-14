@@ -1,0 +1,26 @@
+[
+  {
+    "name": "storefront-web",
+    "developerEmail": "storefront-team@example.com",
+    "apiProducts": ["catalog-free"],
+    "callbackUrl": "",
+    "keyExpiresIn": "",
+    "attributes": [{ "name": "channel", "value": "web" }]
+  },
+  {
+    "name": "partner-portal",
+    "developerEmail": "partner-integrations@example.com",
+    "apiProducts": ["partner-gold"],
+    "callbackUrl": "https://partner.shop.example/callback",
+    "keyExpiresIn": "",
+    "attributes": [{ "name": "tier", "value": "gold" }]
+  },
+  {
+    "name": "mobile-app",
+    "developerEmail": "mobile-squad@example.com",
+    "apiProducts": ["catalog-free"],
+    "callbackUrl": "",
+    "keyExpiresIn": "",
+    "attributes": [{ "name": "channel", "value": "mobile" }]
+  }
+]

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OASValidation continueOnError="false" enabled="true" name="OAS-ValidateRequest">
+    <DisplayName>OAS-ValidateRequest</DisplayName>
+    <OASResource>oas://catalog-v2.yaml</OASResource>
+    <Source>request</Source>
+</OASValidation>

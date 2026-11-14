@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- expect AX104: the Rate element is missing -->
+<SpikeArrest continueOnError="false" enabled="true" name="SA-ShippingTraffic">
+    <DisplayName>SA-ShippingTraffic</DisplayName>
+    <Identifier ref="client_id"/>
+    <UseEffectiveCount>true</UseEffectiveCount>
+</SpikeArrest>

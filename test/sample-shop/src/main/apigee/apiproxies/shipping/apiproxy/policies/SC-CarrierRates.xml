@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ServiceCallout continueOnError="false" enabled="true" name="SC-CarrierRates">
+    <DisplayName>SC-CarrierRates</DisplayName>
+    <Request clearPayload="true" variable="carrier.request">
+        <Set>
+            <QueryParams>
+                <QueryParam name="zip">{request.queryparam.zip}</QueryParam>
+                <QueryParam name="weight">{request.queryparam.weight}</QueryParam>
+                <!-- The new checkout also offers express delivery -->
+                <QueryParam name="express">{shop.newCheckout}</QueryParam>
+            </QueryParams>
+            <Verb>GET</Verb>
+        </Set>
+        <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    </Request>
+    <Response>carrier.response</Response>
+    <HTTPTargetConnection>
+        <LoadBalancer>
+            <Server name="carrier-api"/>
+        </LoadBalancer>
+        <Path>/rates</Path>
+    </HTTPTargetConnection>
+</ServiceCallout>

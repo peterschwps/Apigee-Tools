@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<JSONToXML continueOnError="false" enabled="true" name="J2X-StockRequest">
+    <DisplayName>J2X-StockRequest</DisplayName>
+    <Source>request</Source>
+    <OutputVariable>inventory.stockRequest</OutputVariable>
+    <Options>
+        <OmitXmlDeclaration>true</OmitXmlDeclaration>
+        <ObjectRootElementName>StockRequest</ObjectRootElementName>
+    </Options>
+</JSONToXML>

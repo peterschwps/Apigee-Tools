@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage continueOnError="false" enabled="true" name="AM-RemoveCardData">
+    <DisplayName>AM-RemoveCardData</DisplayName>
+    <!-- Rebuild the body from the extracted fields, so card details never reach the client -->
+    <Set>
+        <Payload contentType="application/json">{"paymentId":"{payment.id}","status":"{payment.status}","cardBrand":"{payment.cardBrand}","cardLast4":"{payment.cardLast4}"}</Payload>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" transport="http" type="response"/>
+</AssignMessage>

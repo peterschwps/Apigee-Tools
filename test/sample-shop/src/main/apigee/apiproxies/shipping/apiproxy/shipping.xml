@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<APIProxy revision="1" name="shipping">
+    <DisplayName>Shipping</DisplayName>
+    <Description>Shipping rates, shipments and parcel tracking of the sample shop.</Description>
+</APIProxy>

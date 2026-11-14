@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ResponseCache continueOnError="false" enabled="true" name="RC-ShippingRates">
+    <DisplayName>RC-ShippingRates</DisplayName>
+    <CacheKey>
+        <KeyFragment ref="request.queryparam.zip"/>
+        <KeyFragment ref="request.queryparam.weight"/>
+        <KeyFragment ref="shop.newCheckout"/>
+    </CacheKey>
+    <Scope>Exclusive</Scope>
+    <ExpirySettings>
+        <TimeoutInSeconds>600</TimeoutInSeconds>
+    </ExpirySettings>
+    <ExcludeErrorResponse>true</ExcludeErrorResponse>
+</ResponseCache>

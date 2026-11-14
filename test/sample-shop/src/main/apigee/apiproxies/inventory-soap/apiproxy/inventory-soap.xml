@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<APIProxy revision="1" name="inventory-soap">
+    <DisplayName>Inventory SOAP</DisplayName>
+    <Description>JSON facade for the SOAP inventory service of the sample shop.</Description>
+</APIProxy>

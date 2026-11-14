@@ -1,0 +1,7 @@
+{
+  "PreProxyFlowHook": {
+    "continueOnError": false,
+    "sharedFlow": "security-baseline",
+    "description": "API key check and threat protection for every proxy"
+  }
+}

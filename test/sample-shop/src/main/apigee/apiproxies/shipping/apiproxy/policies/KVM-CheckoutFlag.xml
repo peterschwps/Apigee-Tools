@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<KeyValueMapOperations continueOnError="false" enabled="true" mapIdentifier="shop-settings" name="KVM-CheckoutFlag">
+    <DisplayName>KVM-CheckoutFlag</DisplayName>
+    <Scope>environment</Scope>
+    <ExpiryTimeInSecs>300</ExpiryTimeInSecs>
+    <!-- expect AX110: ExclusiveCache is deprecated in favor of Scope -->
+    <ExclusiveCache>true</ExclusiveCache>
+    <Get assignTo="shop.newCheckout">
+        <Key>
+            <Parameter>feature.new-checkout</Parameter>
+        </Key>
+    </Get>
+</KeyValueMapOperations>

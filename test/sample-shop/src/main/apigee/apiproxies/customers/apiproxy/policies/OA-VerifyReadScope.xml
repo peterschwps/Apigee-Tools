@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OAuthV2 continueOnError="false" enabled="true" name="OA-VerifyReadScope">
+    <DisplayName>OA-VerifyReadScope</DisplayName>
+    <Operation>VerifyAccessToken</Operation>
+    <Scope>customers.read</Scope>
+</OAuthV2>

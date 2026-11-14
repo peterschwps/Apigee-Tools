@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<APIProxy revision="14" name="LegacyStorefront">
+    <ConfigurationVersion majorVersion="4" minorVersion="0"/>
+    <Description>SOAP services of the old storefront, exported from Edge.</Description>
+    <DisplayName>LegacyStorefront</DisplayName>
+    <Policies>
+        <Policy>AM-BackendUnavailable</Policy>
+        <Policy>GetSessionId</Policy>
+        <Policy>KVM-GetCheckoutFlag</Policy>
+        <Policy>RF-CheckoutMoved</Policy>
+        <Policy>RF-UnknownResource</Policy>
+        <Policy>SA-LegacyTraffic</Policy>
+        <Policy>SetLegacyHeaders</Policy>
+        <!-- expect AX112: deleted when the security-baseline flow hook took over the key check -->
+        <Policy>Verify-API-Key-1</Policy>
+    </Policies>
+    <ProxyEndpoints>
+        <ProxyEndpoint>default</ProxyEndpoint>
+    </ProxyEndpoints>
+    <Resources/>
+    <TargetServers/>
+    <TargetEndpoints>
+        <TargetEndpoint>default</TargetEndpoint>
+    </TargetEndpoints>
+</APIProxy>
