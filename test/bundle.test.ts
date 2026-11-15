@@ -1,9 +1,21 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { bundlePolicyNames, lintBundleReferences } from '../src/bundle';
-import { classifyDocument, lint } from '../src/linter';
+import {
+  bundlePolicyNames,
+  lintBundleReferences,
+  lintFile,
+} from '../src/bundle';
+import { classifyDocument } from '../src/linter';
 import {
   fixtureBundle,
   policyFile,
@@ -23,11 +35,11 @@ for (const bundle of [fixtureBundle, sharedFlowBundle]) {
     assert.ok(files.length >= 4);
     for (const file of files) {
       const xml = await readFile(file, 'utf8');
-      const issues = [
-        ...lint(xml, file, specs),
-        ...(await lintBundleReferences(xml, file)),
-      ];
-      assert.deepEqual(issues, [], path.relative(bundle, file));
+      assert.deepEqual(
+        await lintFile(xml, file, specs),
+        [],
+        path.relative(bundle, file),
+      );
     }
   });
 }
@@ -92,13 +104,7 @@ test('AX109 resolves resources against the shared flow bundle', async () => {
 });
 
 test('AX111 reports a route rule referencing a missing target endpoint', async () => {
-  const routes = [
-    'default',
-    'backend',
-    'backend-v2',
-    'missing',
-    '{dynamic}',
-  ].map(
+  const routes = ['default', 'missing', '{dynamic}'].map(
     target =>
       `<RouteRule name="${target}"><TargetEndpoint>${target}</TargetEndpoint></RouteRule>`,
   );
@@ -108,6 +114,24 @@ test('AX111 reports a route rule referencing a missing target endpoint', async (
     issues.map(issue => [issue.rule, xml.slice(issue.start, issue.end)]),
     [['AX111', 'missing']],
   );
+});
+
+test('AX111 also accepts the file name of a target endpoint', async () => {
+  // Apigee rejects such bundles on import, so the shared fixture cannot have one
+  const root = await mkdtemp(path.join(tmpdir(), 'apigee-tools-targets-'));
+  try {
+    await mkdir(path.join(root, 'apiproxy', 'targets'), { recursive: true });
+    await writeFile(
+      path.join(root, 'apiproxy', 'targets', 'backend-v2.xml'),
+      '<TargetEndpoint name="backend"/>',
+    );
+    const xml =
+      '<ProxyEndpoint name="t"><RouteRule name="r"><TargetEndpoint>backend-v2</TargetEndpoint></RouteRule></ProxyEndpoint>';
+    const file = path.join(root, 'apiproxy', 'proxies', 'default.xml');
+    assert.deepEqual(await lintBundleReferences(xml, file), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('AX112 warns about manifest policies without a file and offers both fixes', async () => {

@@ -1,15 +1,17 @@
+import path from 'node:path';
 import { minimatch } from 'minimatch';
 import * as vscode from 'vscode';
-import { bundlePolicyNames, lintBundleReferences } from './bundle';
+import { bundlePolicyNames, findBundleRoot, lintFile, readXml } from './bundle';
 import { complete, type Suggestion } from './completion';
+import { registerDashboard, type WorkspaceBundle } from './dashboard';
 import { disableDirectiveEdit, type TextEdit } from './fixes';
-import { classifyDocument, lint, type LintIssue } from './linter';
+import { classifyDocument, type LintIssue } from './linter';
 import {
   loadSpecifications,
   type DocumentKind,
   type DocumentSpec,
 } from './spec';
-import { rootElementName } from './xml';
+import { parseXml, rootElementName } from './xml';
 
 /** Lint results of one document version, kept for its quick fixes. */
 type Published = { version: number; issues: LintIssue[] };
@@ -67,9 +69,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     const ignored = new Set(settings(document).get<string[]>('ignore', []));
     const version = document.version;
-    const xml = document.getText();
-    const issues = lint(xml, document.uri.fsPath, specs, ignored);
-    const bundleIssues = await lintBundleReferences(xml, document.uri.fsPath);
+    const issues = await lintFile(
+      document.getText(),
+      document.uri.fsPath,
+      specs,
+      ignored,
+    );
 
     // Discard the result if the document changed, closed, or became excluded
     // while bundle files were read
@@ -80,7 +85,6 @@ export function activate(context: vscode.ExtensionContext): void {
     ) {
       return;
     }
-    issues.push(...bundleIssues.filter(issue => !ignored.has(issue.rule)));
     diagnostics.set(
       document.uri,
       issues.map(issue => toDiagnostic(document, issue)),
@@ -169,6 +173,11 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   for (const document of vscode.workspace.textDocuments) schedule(document, 0);
+
+  registerDashboard(context, {
+    log,
+    scanWorkspace,
+  });
 }
 
 export function deactivate(): void {
@@ -240,22 +249,95 @@ function applicable(
   if (document.languageId !== 'xml' || document.uri.scheme !== 'file') {
     return false;
   }
-  const config = settings(document);
-  if (!config.get<boolean>('enabled', true)) return false;
-
-  // Match exclude patterns against the workspace-relative path
-  const relative = vscode.workspace
-    .asRelativePath(document.uri, false)
-    .replace(/\\/g, '/');
-  const excluded = config
-    .get<string[]>('exclude', [])
-    .some(pattern => minimatch(relative, pattern, { dot: true }));
-  if (excluded) return false;
+  if (excluded(document.uri)) return false;
   if (classifyDocument(document.uri.fsPath)) return true;
 
   // Outside a bundle, a documented root element qualifies the file
   const root = rootElementName(document.getText());
   return Boolean(root && specs.some(spec => spec.root === root));
+}
+
+/** Returns whether the settings turn the extension off for a file. */
+function excluded(uri: vscode.Uri): boolean {
+  const enabled = vscode.workspace
+    .getConfiguration(setting, uri)
+    .get<boolean>('enabled', true);
+  return !enabled || matchesExclude(uri);
+}
+
+/** Returns whether a file's workspace-relative path matches `exclude`. */
+function matchesExclude(uri: vscode.Uri): boolean {
+  const relative = vscode.workspace
+    .asRelativePath(uri, false)
+    .replace(/\\/g, '/');
+  return vscode.workspace
+    .getConfiguration(setting, uri)
+    .get<string[]>('exclude', [])
+    .some(pattern => minimatch(relative, pattern, { dot: true }));
+}
+
+/**
+ * Finds the bundles in the workspace; an open descriptor counts with unsaved
+ * changes. Excluded files and build output under `target` are not bundles.
+ */
+async function scanWorkspace(): Promise<WorkspaceBundle[]> {
+  const files = await vscode.workspace.findFiles(
+    '**/{apiproxy,sharedflowbundle}/**/*.xml',
+    '**/{node_modules,target}/**',
+  );
+  const open = new Map(
+    vscode.workspace.textDocuments.map(document => [
+      document.uri.toString(),
+      document,
+    ]),
+  );
+  const bundles = new Map<string, WorkspaceBundle>();
+
+  /** Adds a file to its bundle; the descriptor names the bundle. */
+  const scanFile = async (uri: vscode.Uri) => {
+    const directory = findBundleRoot(uri.fsPath);
+    const kind = classifyDocument(uri.fsPath);
+    if (!directory || !kind || matchesExclude(uri)) return;
+    const bundle = bundles.get(directory) ?? {
+      kind:
+        path.basename(directory).toLowerCase() === 'apiproxy'
+          ? 'apis'
+          : 'sharedflows',
+      name: path.basename(path.dirname(directory)),
+      directory,
+    };
+    bundles.set(directory, bundle);
+    if (kind !== 'apiProxy' && kind !== 'sharedFlowBundle') return;
+
+    // The descriptor names the bundle, as Apigee does
+    bundle.descriptor = uri.fsPath;
+    try {
+      const xml =
+        open.get(uri.toString())?.getText() ?? (await readXml(uri.fsPath));
+      bundle.name =
+        parseXml(xml).root?.attributes.find(
+          attribute => attribute.name === 'name',
+        )?.value || path.basename(uri.fsPath, path.extname(uri.fsPath));
+    } catch {
+      bundle.name = path.basename(uri.fsPath, path.extname(uri.fsPath));
+    }
+  };
+
+  // A few files at a time, so that large workspaces keep file handles free
+  const queue = [...files];
+  await Promise.all(
+    Array.from({ length: 16 }, async () => {
+      for (let uri = queue.shift(); uri; uri = queue.shift()) {
+        await scanFile(uri);
+      }
+    }),
+  );
+
+  // Shallow directories first, so a source bundle precedes nested copies
+  return [...bundles.values()].sort(
+    (a, b) =>
+      a.name.localeCompare(b.name) || a.directory.length - b.directory.length,
+  );
 }
 
 /** Converts a finding to a diagnostic whose code links the documentation. */

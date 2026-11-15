@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { lintBundleReferences } from '../src/bundle';
-import { classifyDocument, lint } from '../src/linter';
+import { lintFile, readXml } from '../src/bundle';
+import { classifyDocument } from '../src/linter';
 import { loadSpecifications, type DocumentSpec } from '../src/spec';
 import { lineColumn } from '../src/xml';
 
@@ -264,12 +264,9 @@ async function lintLocally(
   const local: LocalFinding[] = [];
   const durations: number[] = [];
   for (const file of await filesIn(bundle)) {
-    const xml = await readFile(file, 'utf8');
+    const xml = await readXml(file);
     const start = performance.now();
-    const issues = [
-      ...lint(xml, file, specs),
-      ...(await lintBundleReferences(xml, file)),
-    ];
+    const issues = await lintFile(xml, file, specs);
     durations.push(performance.now() - start);
     for (const issue of issues) {
       const { line, column } = lineColumn(xml, issue.start);

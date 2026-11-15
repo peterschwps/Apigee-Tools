@@ -6,10 +6,13 @@
 mkdocs.yml
 site/**
 .vscode/**
+prototypes/**
+.claude/**
 .cache/**
 src/**
 scripts/**
 dist/**/*.map
+dist/meta-*.json
 dist/cli.js
 test/**
 npm/**

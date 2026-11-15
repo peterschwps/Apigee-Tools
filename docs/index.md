@@ -1,6 +1,6 @@
 # Apigee Tools
 
-Apigee Tools provides XML diagnostics and context-aware completion in VS Code. The current alpha is for feedback; it does not replace deployment validation.
+Apigee Tools provides XML diagnostics and context-aware completion in VS Code, and a read-only [dashboard](#dashboard) of an Apigee organization's deployments. The current alpha is for feedback; it does not replace deployment validation.
 
 ## Getting started
 
@@ -172,6 +172,49 @@ npx @peterschwps/apigee-tools --only AX112 path/to/bundles
 | 1 | At least one error |
 | 2 | Invalid option or unreadable path |
 
+
+## Dashboard
+
+The dashboard shows what is deployed in an Apigee X organization next to the bundles in your workspace. Open it with **Apigee Tools: Open Dashboard** from the Command Palette, or with **Apigee** in the status bar, which appears in workspaces that contain bundles.
+
+### Requirements
+
+- The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) where the extension runs: on your computer, or on the remote host, in WSL, or in the container when you work remotely.
+- A sign-in with `gcloud auth login`. Without one, the dashboard offers a button that runs the command in a terminal.
+- A role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`).
+
+The dashboard selects the organization you chose last in this workspace, otherwise the project of your gcloud configuration, otherwise the first organization the account can access. If the account may not list organizations, the gcloud project comes first. The header switches between organizations and filters the environments.
+
+### Overview and deployments
+
+- **Overview** counts environments, API proxies, shared flows, deployments, and problems. It lists the failed deployments and warnings with their messages; a name opens the details.
+- **Deployments** lists the API proxies and the shared flows of the environment chosen at the top, each in a tab that counts the rows shown. Icons show the status of each deployment (Ready, Warnings, Failed, Deploying, Unknown, or Not deployed) and how it compares with the workspace (Same, Differs, Not compared, or Not in workspace). Hovering over an icon names it. Filter by name above the table, and by status or workspace with the filter icon in their column header. The Name header sorts ascending or descending, and a name opens the details of the proxy or shared flow.
+- **Details** show the deployments of a proxy or shared flow in every environment with status, revision, deployment time, base paths, and the comparison with the workspace, followed by their errors and warnings in full. The header names the proxy type, Standard or Extensible, which sets the price of a call under pay-as-you-go, and the path of its bundle in the workspace; its buttons open the Apigee console and the local bundle.
+- **Warnings:** the deployment is ready, but Apigee reports a base path conflict: another environment in the same environment group serves the same base path, and Apigee routes the requests for it to only one environment. Give the proxies different base paths, or attach the environments to different groups.
+- **Unknown:** the status was not checked; a notice above the tabs says why. Opening the details checks it.
+
+### Comparing with local bundles
+
+A bundle in the workspace matches a deployed proxy or shared flow by name: the `name` attribute of the top-level XML file under `apiproxy` or `sharedflowbundle`. Bundles under `node_modules` or `target` and files matching `apigeeTools.exclude` are not counted, and bundles that share a name are not compared; exclude the extra copies. The dashboard downloads each deployed revision of such a bundle once per session and compares it with the saved files. The **Workspace** column shows whether a deployment is the same as the local bundle, differs from it, was not compared, or has no bundle in the workspace. Where it differs, clicking the icon opens the differing files in VS Code's multi-file diff editor.
+
+XML files of the bundle structure count as different only when their elements, attributes, or values differ; indentation, line endings, attribute order, and comments are ignored. The top-level XML file and `manifests/` are not compared, since Apigee writes them anew on import.
+
+### Settings
+
+| Setting | Use |
+| --- | --- |
+| `apigeeTools.gcloudPath` | Path to `gcloud` when it is not on the `PATH`, such as `~/google-cloud-sdk/bin/gcloud`. It applies only from user or remote settings, never from a workspace. |
+| `apigeeTools.gcloudConfiguration` | A named gcloud configuration, such as one per customer, instead of the active one. |
+
+Organizations with data residency work when gcloud uses their regional endpoint through `gcloud config set api_endpoint_overrides/apigee`; the dashboard uses the same endpoint.
+
+### Data and access
+
+The dashboard runs `gcloud config list` and `gcloud auth print-access-token`, without prompts. The access token stays in memory, is never written to disk or shown, and is sent only to the Apigee API at `apigee.googleapis.com` or a regional Apigee endpoint. The dashboard only reads; it never deploys, undeploys, or changes anything.
+
+Data loads when you open the dashboard, refresh it, or switch the organization; a dashboard restored after restarting VS Code waits until you load it. To spare the API quota, the status is checked for at most 200 deployments per load, local bundles and recent deployments first. A network failure or an exhausted quota stops the remaining checks, and a notice says so. Notes above the tabs close with their × button and stay hidden until you close the dashboard; a note whose text changes shows again.
+
+In Restricted Mode, linting keeps working, and the dashboard asks for a trusted workspace.
 
 ## Scope and limitations
 

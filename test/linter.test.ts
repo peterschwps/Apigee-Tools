@@ -31,6 +31,30 @@ const cases: { name: string; xml: string; file?: string; rules: string[] }[] = [
     rules: ['AX001'],
   },
   {
+    name: 'AX001 closing tag with another name',
+    xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundl>'),
+    rules: ['AX001'],
+  },
+  {
+    name: 'AX001 unescaped ampersand in an attribute value',
+    xml: flowCallout(
+      '<SharedFlowBundle>s</SharedFlowBundle><Parameters><Parameter name="p" value="a && b"/></Parameters>',
+    ),
+    rules: ['AX001', 'AX001'],
+  },
+  {
+    name: 'AX001 once for a closing tag without a name',
+    xml: flowCallout('<SharedFlowBundle>s</>'),
+    rules: ['AX001'],
+  },
+  {
+    name: 'references in an attribute value',
+    xml: flowCallout(
+      '<SharedFlowBundle>s</SharedFlowBundle><Parameters><Parameter name="p" value="a &amp;&amp; b &#38; &#x26;"/></Parameters>',
+    ),
+    rules: [],
+  },
+  {
     name: 'AX101 unknown element',
     xml: flowCallout('<SharedFlowBundle>s</SharedFlowBundle><Bogus/>'),
     rules: ['AX101'],

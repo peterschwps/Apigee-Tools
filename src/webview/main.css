@@ -1,0 +1,55 @@
+/*
+ * Design tokens of the Apigee Tools dashboard and fixes for VS Code Elements.
+ * Surfaces, text, borders, focus, and buttons come from the active theme.
+ */
+body {
+  /* The logo colors, exact in every theme; never used as text color */
+  --at-success: #34a853;
+  --at-warning: #fbbc04;
+  --at-error: #ea4335;
+  --at-neutral: #7c7a72;
+  /* Unknowns, in the theme's own info blue, which no logo color means */
+  --at-info: var(--vscode-editorInfo-foreground, #1a85ff);
+  /* Opacity of logo-colored fills behind theme-colored text */
+  --at-fill: 16%;
+  --at-outline: 0px;
+  --at-surface-raised: var(--vscode-editorWidget-background, #f8f8f8);
+  --at-border: var(--vscode-widget-border, var(--vscode-panel-border, #e5e5e5));
+  --at-text: var(--vscode-foreground, #3b3b3b);
+  --at-text-muted: var(--vscode-descriptionForeground, #616161);
+
+  /* VS Code pads webview bodies; the dashboard brings its own spacing */
+  padding: 0;
+}
+
+body.vscode-dark {
+  --at-neutral: #b4b2a9;
+}
+
+/* High contrast keeps the logo colors but draws borders instead of fills */
+body.vscode-high-contrast {
+  --at-neutral: var(--vscode-disabledForeground, #a5a5a5);
+  --at-border: var(--vscode-contrastBorder, #6fc3df);
+  --at-fill: 0%;
+  --at-outline: 1px;
+}
+
+/* VS Code leaves the list hover text undefined; VS Code Elements would draw it white */
+apigee-dashboard {
+  --vscode-list-hoverForeground: var(--vscode-foreground);
+}
+
+/*
+ * High contrast: no full-width line under the tabs, as in VS Code's panel, and
+ * the selected option keeps the text color instead of the library's white.
+ */
+body.vscode-high-contrast apigee-dashboard {
+  --vscode-settings-headerBorder: transparent;
+  --vscode-list-activeSelectionForeground: var(--vscode-foreground);
+}
+
+/* Native parts, such as the input of the filter field, follow dark themes */
+body.vscode-dark apigee-dashboard,
+body.vscode-high-contrast:not(.vscode-high-contrast-light) apigee-dashboard {
+  color-scheme: dark;
+}

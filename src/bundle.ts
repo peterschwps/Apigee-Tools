@@ -3,7 +3,8 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { applyDirectives } from './directives';
 import { removeElementEdit } from './fixes';
-import type { LintIssue } from './linter';
+import { lint, type LintIssue } from './linter';
+import type { DocumentSpec } from './spec';
 import { parseXml, type XmlNode, type XmlText } from './xml';
 
 /** Describes how a policy references a resource: element and URL schemes. */
@@ -50,6 +51,28 @@ export async function lintBundleReferences(
   if (document.syntaxIssues.length || !document.root) return [];
   const issues = await referenceIssues(xml, document.root, bundleRoot);
   return applyDirectives(xml, document.comments, issues);
+}
+
+/**
+ * Lints a document together with its references to other files of its
+ * bundle, leaving out the ignored rules.
+ */
+export async function lintFile(
+  xml: string,
+  filePath: string,
+  specs: readonly DocumentSpec[],
+  ignored: ReadonlySet<string> = new Set(),
+): Promise<LintIssue[]> {
+  const bundleIssues = await lintBundleReferences(xml, filePath);
+  return [
+    ...lint(xml, filePath, specs, ignored),
+    ...bundleIssues.filter(issue => !ignored.has(issue.rule)),
+  ];
+}
+
+/** Reads an XML file as text without the byte order mark that editors hide. */
+export async function readXml(file: string): Promise<string> {
+  return (await readFile(file, 'utf8')).replace(/^\uFEFF/, '');
 }
 
 /** Returns whether an error reports a missing file or directory. */
@@ -211,7 +234,7 @@ function collectReferences(root: XmlNode): {
 }
 
 /** Returns the enclosing `apiproxy` or `sharedflowbundle` directory. */
-function findBundleRoot(filePath: string): string | undefined {
+export function findBundleRoot(filePath: string): string | undefined {
   let directory = path.dirname(filePath);
   while (path.dirname(directory) !== directory) {
     const name = path.basename(directory).toLowerCase();
@@ -238,7 +261,7 @@ async function bundleNames(
 
       // Files that cannot be read contribute only their file name
       try {
-        const xml = await readFile(path.join(directory, entry.name), 'utf8');
+        const xml = await readXml(path.join(directory, entry.name));
         const name = parseXml(xml).root?.attributes.find(
           attribute => attribute.name === 'name',
         )?.value;

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { version } from '../package.json';
-import { lintBundleReferences } from './bundle';
-import { classifyDocument, lint, type LintIssue } from './linter';
+import { lintFile, readXml } from './bundle';
+import { classifyDocument, type LintIssue } from './linter';
 import { loadSpecifications, type DocumentSpec } from './spec';
 import { lineColumn } from './xml';
 
@@ -87,8 +87,9 @@ export async function run(
   let errors = 0;
   let warnings = 0;
   for (const file of [...files].sort()) {
-    const xml = await readFile(file, 'utf8');
-    for (const issue of await lintFile(xml, file, specs, { ignored, only })) {
+    const xml = await readXml(file);
+    const issues = await reportedIssues(xml, file, specs, { ignored, only });
+    for (const issue of issues) {
       const severity = issue.severity ?? 'error';
       if (severity === 'error') errors++;
       else warnings++;
@@ -151,16 +152,13 @@ async function lintableFiles(target: string): Promise<string[]> {
 }
 
 /** Returns the selected findings of a file, ordered by position. */
-async function lintFile(
+async function reportedIssues(
   xml: string,
   file: string,
   specs: readonly DocumentSpec[],
   { ignored, only }: RuleSelection,
 ): Promise<LintIssue[]> {
-  const bundleIssues = (await lintBundleReferences(xml, file)).filter(
-    issue => !ignored.has(issue.rule),
-  );
-  return [...lint(xml, file, specs, ignored), ...bundleIssues]
+  return (await lintFile(xml, file, specs, ignored))
     .filter(issue => !only || only.has(issue.rule))
     .sort((a, b) => a.start - b.start);
 }

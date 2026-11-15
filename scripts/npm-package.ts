@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 const stageDirectory = path.join(root, '.cache', 'npm-package');
 const repository = 'https://github.com/peterschwps/Apigee-Tools';
 const expectedFiles =
-  /^(?:package\.json|README\.md|LICENSE|dist\/cli\.js|data\/reviewed\/[a-z0-9-]+\.json)$/;
+  /^(?:package\.json|README\.md|LICENSE|ThirdPartyNotices\.txt|dist\/cli\.js|data\/reviewed\/[a-z0-9-]+\.json)$/;
 
 async function main(): Promise<void> {
   const [command] = process.argv.slice(2);
@@ -49,6 +49,10 @@ async function stage(): Promise<void> {
     path.join(stageDirectory, 'README.md'),
   );
   await cp(path.join(root, 'LICENSE'), path.join(stageDirectory, 'LICENSE'));
+  await cp(
+    path.join(root, 'dist', 'ThirdPartyNotices.txt'),
+    path.join(stageDirectory, 'ThirdPartyNotices.txt'),
+  );
   const packageManifest = {
     name: '@peterschwps/apigee-tools',
     version: manifest.version,
@@ -60,7 +64,7 @@ async function stage(): Promise<void> {
     bugs: { url: `${repository}/issues` },
     repository: { type: 'git', url: `git+${repository}.git` },
     bin: { 'apigee-tools': 'dist/cli.js' },
-    files: ['dist/cli.js', 'data/reviewed'],
+    files: ['dist/cli.js', 'data/reviewed', 'ThirdPartyNotices.txt'],
     engines: { node: '>=20.1' },
     publishConfig: { access: 'public' },
   };
@@ -101,6 +105,9 @@ async function check(): Promise<void> {
       throw new Error(
         `Unexpected files in the npm package: ${unexpected.join(', ')}`,
       );
+    }
+    if (!tarball.files.some(file => file.path === 'ThirdPartyNotices.txt')) {
+      throw new Error('The npm package lacks ThirdPartyNotices.txt.');
     }
 
     // Install the tarball like a user would
