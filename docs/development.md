@@ -40,8 +40,10 @@ TypeScript strict mode is enabled, together with checks for unused code and impl
 Build the pages locally with an isolated MkDocs 1.x environment:
 
 ```sh
-uv tool run --with "mkdocs-material>=9,<10" "mkdocs>=1.6,<2" build --strict
+uv tool run --with "mkdocs-material[imaging]>=9,<10" "mkdocs>=1.6,<2" build --strict
 ```
+
+The social cards need the Cairo graphics library, on macOS `brew install cairo`.
 
 ## Tests
 
