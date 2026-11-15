@@ -133,7 +133,7 @@ export const styles = css`
     grid-area: session;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
     min-width: 0;
   }
 
@@ -159,9 +159,15 @@ export const styles = css`
   /* Only the icon, which the tooltip names; a line sets it apart from Refresh */
   .account {
     display: flex;
-    padding-right: 16px;
+    padding-right: 8px;
     border-right: 1px solid var(--at-border);
     color: var(--at-text-muted);
+  }
+
+  /* Without Refresh, while the first load runs, no line */
+  .account:last-child {
+    padding-right: 0;
+    border-right: 0;
   }
 
   .account vscode-icon {

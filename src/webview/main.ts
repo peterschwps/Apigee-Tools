@@ -86,6 +86,9 @@ class ApigeeDashboard extends LitElement {
   /** Hides the tooltip once a render removed its element. */
   private syncTooltip = () => {};
 
+  /** Whether a load has finished; Refresh shows only from then on. */
+  private loaded = false;
+
   /** The element to focus after the next render, as a selector. */
   private focusNext?: string;
 
@@ -133,7 +136,9 @@ class ApigeeDashboard extends LitElement {
       ...vscode.getState(),
     };
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
-      if (event.data?.type === 'snapshot') this.snapshot = event.data.snapshot;
+      if (event.data?.type !== 'snapshot') return;
+      this.loaded ||= !event.data.snapshot.loading;
+      this.snapshot = event.data.snapshot;
     });
     // A held-down key repeats clicks on buttons; one refresh is enough
     this.addEventListener(
@@ -277,18 +282,18 @@ class ApigeeDashboard extends LitElement {
               : nothing
           }
           ${
-            snapshot?.trusted && snapshot.requested
+            snapshot?.trusted && snapshot.requested && this.loaded
               ? html`
                   <button
-                    class="icon-button labeled refresh"
-                    aria-busy=${snapshot.loading ? 'true' : 'false'}
+                    class="icon-button refresh"
+                    data-tooltip=${snapshot.loading ? 'Refreshing…' : 'Refresh'}
+                    aria-label=${snapshot.loading ? 'Refreshing…' : 'Refresh'}
                     @click=${() => send({ type: 'refresh' })}
                   >
                     <vscode-icon
                       name="refresh"
                       ?spin=${snapshot.loading && !reducedMotion()}
-                    ></vscode-icon
-                    >Refresh
+                    ></vscode-icon>
                   </button>
                 `
               : nothing
