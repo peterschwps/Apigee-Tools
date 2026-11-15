@@ -27,7 +27,7 @@ export const styles = css`
   }
 
   h1 {
-    font-size: 20px;
+    font-size: 22px;
     white-space: nowrap;
   }
 
@@ -108,8 +108,8 @@ export const styles = css`
     grid-template-columns: 1fr auto;
     grid-template-areas: 'brand session' 'context context';
     align-items: center;
-    gap: 10px 24px;
-    padding: 14px 20px 10px;
+    gap: 18px 24px;
+    padding: 20px 20px 0;
     /* Keyboard focus follows the rows: the selects come after Refresh */
     reading-flow: grid-rows;
   }
@@ -145,6 +145,7 @@ export const styles = css`
 
   .field-label {
     color: var(--at-text-muted);
+    font-size: 12px;
     font-weight: normal;
   }
 
@@ -180,6 +181,11 @@ export const styles = css`
     padding: 0 20px;
   }
 
+  /* Space sets the page tabs apart from the header above them */
+  :host > vscode-tabs {
+    margin-top: 28px;
+  }
+
   .card vscode-tabs {
     padding: 0;
   }
@@ -207,7 +213,7 @@ export const styles = css`
   .messages {
     display: grid;
     gap: 12px;
-    padding: 4px 20px 0;
+    padding: 20px 20px 0;
   }
 
   .messages:empty {
