@@ -212,7 +212,7 @@ Organizations with data residency work when gcloud uses their regional endpoint 
 
 The dashboard runs `gcloud config list` and `gcloud auth print-access-token`, without prompts. The access token stays in memory, is never written to disk or shown, and is sent only to the Apigee API at `apigee.googleapis.com` or a regional Apigee endpoint. The dashboard only reads; it never deploys, undeploys, or changes anything.
 
-Data loads when you open the dashboard, refresh it, or switch the organization; a dashboard restored after restarting VS Code waits until you load it. To spare the API quota, the status is checked for at most 200 deployments per load, local bundles and recent deployments first. A network failure or an exhausted quota stops the remaining checks, and a notice says so.
+Data loads when you open the dashboard, refresh it, or switch the organization; a dashboard restored after restarting VS Code waits until you load it. To spare the API quota, the status is checked for at most 200 deployments per load, local bundles and recent deployments first. A network failure or an exhausted quota stops the remaining checks, and a notice says so. Notes above the tabs close with their × button and stay hidden until you close the dashboard; a note whose text changes shows again.
 
 In Restricted Mode, linting keeps working, and the dashboard asks for a trusted workspace.
 

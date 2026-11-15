@@ -32,7 +32,11 @@ import { styles } from './styles';
 import { tooltips } from './tooltip';
 
 /** The view state that survives reloads of the webview. */
-type ViewState = DeploymentView & { tab: number };
+type ViewState = DeploymentView & {
+  tab: number;
+  /** Notes closed by the user, hidden until the dashboard closes. */
+  dismissed: string[];
+};
 
 declare function acquireVsCodeApi(): {
   postMessage(message: WebviewMessage): void;
@@ -94,6 +98,13 @@ class ApigeeDashboard extends LitElement {
     },
   };
 
+  /** Hides a note; keyboard focus moves on to Refresh. */
+  private dismiss(text: string): void {
+    this.focusNext = '.refresh';
+    // ponytail: keeps the last 20 texts, plenty for the notes of a load
+    this.setView({ dismissed: [...this.view.dismissed, text].slice(-20) });
+  }
+
   /** Changes the view and keeps it for a reload of the webview. */
   private setView(patch: Partial<ViewState>): void {
     // Keyboard focus moves into the details, and back to the row they show
@@ -118,6 +129,7 @@ class ApigeeDashboard extends LitElement {
       comparison: '',
       sort: 'asc',
       detail: '',
+      dismissed: [],
       ...vscode.getState(),
     };
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
@@ -314,14 +326,18 @@ class ApigeeDashboard extends LitElement {
     const { overview: organization, rows } = snapshot;
     const messages = [
       snapshot.problem ? problemNotice(snapshot.problem) : undefined,
-      ...(snapshot.notes ?? []).map(note =>
-        notice(
-          note.tone,
-          note.tone === 'warning' ? signs.warning.icon : 'info',
-          '',
-          note.text,
+      ...(snapshot.notes ?? [])
+        .filter(note => !this.view.dismissed.includes(note.text))
+        .map(note =>
+          notice(
+            note.tone,
+            note.tone === 'warning' ? signs.warning.icon : 'info',
+            '',
+            note.text,
+            undefined,
+            () => this.dismiss(note.text),
+          ),
         ),
-      ),
     ].filter(Boolean);
     return html`
       ${messages.length ? html`<div class="messages">${messages}</div>` : nothing}
@@ -376,6 +392,7 @@ function notice(
   title: string,
   text?: string,
   actions?: TemplateResult,
+  close?: () => void,
 ) {
   return html`
     <div class="notice ${tone}" role=${tone === 'error' ? 'alert' : 'status'}>
@@ -383,6 +400,18 @@ function notice(
       ${title ? html`<strong>${title}</strong>` : nothing}
       ${text ? html`<p>${text}</p>` : nothing}
       ${actions ? html`<div class="actions">${actions}</div>` : nothing}
+      ${
+        close
+          ? html`<button
+              class="icon-button close"
+              data-tooltip="Dismiss"
+              aria-label="Dismiss"
+              @click=${close}
+            >
+              <vscode-icon name="close"></vscode-icon>
+            </button>`
+          : nothing
+      }
     </div>
   `;
 }

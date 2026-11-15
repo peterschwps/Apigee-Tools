@@ -231,7 +231,7 @@ export const styles = css`
   /* Notices: a colored edge and icon, theme-colored text */
   .notice {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto;
     gap: 4px 10px;
     padding: 10px 12px;
     border: 1px solid var(--vscode-contrastBorder, transparent);
@@ -259,6 +259,19 @@ export const styles = css`
   .notice > vscode-icon {
     grid-row: span 3;
     color: var(--notice-color);
+  }
+
+  .notice > strong,
+  .notice > p,
+  .notice > .actions {
+    grid-column: 2;
+  }
+
+  /* Dismiss, at the top right, without making the first line taller */
+  .notice > .close {
+    grid-column: 3;
+    grid-row: 1;
+    margin: -3px -6px -3px 0;
   }
 
   .notice .actions {
