@@ -145,7 +145,8 @@ export const styles = css`
 
   .field-label {
     color: var(--at-text-muted);
-    font-size: 12px;
+    /* The dropdown's size, so the label does not get lost beside it */
+    font-size: var(--vscode-font-size, 13px);
     font-weight: normal;
   }
 
