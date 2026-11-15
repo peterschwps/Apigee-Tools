@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { watch } from 'node:fs';
 import { homedir } from 'node:os';
@@ -148,8 +149,24 @@ export function registerDashboard(
     { dispose: () => loading?.abort() },
   );
 
-  // While developing, a rebuilt webview reloads at once and keeps its data
+  // While developing, esbuild rebuilds the webview on every change, and the
+  // dashboard reloads at once and keeps its data; esbuild stops with this host,
+  // whose end closes its standard input
   if (context.extensionMode === vscode.ExtensionMode.Development) {
+    const windows = process.platform === 'win32';
+    const build = spawn(
+      windows ? 'npm.cmd' : 'npm',
+      ['run', 'build:webview', '--', '--watch'],
+      {
+        cwd: context.extensionPath,
+        stdio: ['pipe', 'ignore', 'pipe'],
+        shell: windows,
+      },
+    );
+    build.stderr.on('data', chunk => host.log.info(String(chunk).trim()));
+    build.on('error', error =>
+      host.log.warn('Watching the dashboard sources failed:', messageOf(error)),
+    );
     let reload: ReturnType<typeof setTimeout> | undefined;
     const watcher = watch(webviewRoot.fsPath, () => {
       clearTimeout(reload);
@@ -163,6 +180,7 @@ export function registerDashboard(
       dispose: () => {
         clearTimeout(reload);
         watcher.close();
+        build.kill();
       },
     });
   }

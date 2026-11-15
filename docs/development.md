@@ -1,6 +1,6 @@
 # Development
 
-Run `npm ci`, `npm run check`, `npm test`, and `npm run build`. Press F5 to launch an Extension Development Host. The `watch` task, which starts when the folder opens once automatic tasks are allowed (or with **Tasks: Run Task**), rebuilds the extension and the dashboard on every change with esbuild: an open dashboard reloads by itself and keeps its data, while changes to the extension need a restart of the debug session. `npm run package:alpha` builds a local pre-release VSIX without publishing it.
+Run `npm ci`, `npm run check`, `npm test`, and `npm run build`. Press F5 to launch an Extension Development Host. In it, esbuild rebuilds the dashboard whenever a file under `src/webview` changes, and an open dashboard reloads by itself and keeps its data; changes to the extension need a restart of the debug session. `npm run package:alpha` builds a local pre-release VSIX without publishing it.
 
 TypeScript sources are formatted with Prettier. Run `npm run format` before committing; `npm run check` fails on unformatted files.
 

@@ -102,8 +102,6 @@
     "build": "npm run typecheck && npm run build:extension && npm run build:webview && tsx scripts/notices.ts",
     "build:extension": "esbuild src/extension.ts src/cli.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --sourcemap --metafile=dist/meta-node.json --outdir=dist",
     "build:webview": "esbuild src/webview/main.ts src/webview/main.css node_modules/@vscode/codicons/dist/codicon.css --bundle --minify --sourcemap --format=iife --target=chrome128 --loader:.ttf=file \"--entry-names=[name]\" \"--asset-names=[name]\" --metafile=dist/meta-webview.json --outdir=dist/webview",
-    "watch:extension": "npm run build:extension -- --watch=forever --color=false",
-    "watch:webview": "npm run build:webview -- --watch=forever --color=false",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p src/webview/tsconfig.json --noEmit",
     "check": "npm run format:check && npm run typecheck && npm run data:validate && npm run comparison:validate",
     "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\"",
