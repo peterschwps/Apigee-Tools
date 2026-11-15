@@ -278,15 +278,15 @@ class ApigeeDashboard extends LitElement {
             snapshot?.trusted && snapshot.requested
               ? html`
                   <button
-                    class="icon-button refresh"
-                    data-tooltip=${snapshot.loading ? 'Refreshing…' : 'Refresh'}
-                    aria-label=${snapshot.loading ? 'Refreshing…' : 'Refresh'}
+                    class="icon-button labeled refresh"
+                    aria-busy=${snapshot.loading ? 'true' : 'false'}
                     @click=${() => send({ type: 'refresh' })}
                   >
                     <vscode-icon
                       name="refresh"
                       ?spin=${snapshot.loading && !reducedMotion()}
-                    ></vscode-icon>
+                    ></vscode-icon
+                    >Refresh
                   </button>
                 `
               : nothing
