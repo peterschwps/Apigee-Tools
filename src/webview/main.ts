@@ -137,8 +137,11 @@ class ApigeeDashboard extends LitElement {
     };
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       if (event.data?.type !== 'snapshot') return;
-      this.loaded ||= !event.data.snapshot.loading;
-      this.snapshot = event.data.snapshot;
+      const snapshot = event.data.snapshot;
+      // The first snapshot arrives before loading starts, without data yet
+      this.loaded ||=
+        !snapshot.loading && Boolean(snapshot.overview || snapshot.problem);
+      this.snapshot = snapshot;
     });
     // A held-down key repeats clicks on buttons; one refresh is enough
     this.addEventListener(
