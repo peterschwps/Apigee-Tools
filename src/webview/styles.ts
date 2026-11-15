@@ -575,6 +575,11 @@ export const styles = css`
     color: var(--vscode-icon-foreground, inherit);
   }
 
+  /* vscode-icon sets the icon color itself; here it follows the button */
+  .column-head vscode-icon {
+    color: inherit;
+  }
+
   /* Menus of the column filters, in VS Code's menu colors */
   .menu {
     position: fixed;
