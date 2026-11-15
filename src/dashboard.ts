@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { watch } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
@@ -146,6 +147,25 @@ export function registerDashboard(
     }),
     { dispose: () => loading?.abort() },
   );
+
+  // While developing, a rebuilt webview reloads at once and keeps its data
+  if (context.extensionMode === vscode.ExtensionMode.Development) {
+    let reload: ReturnType<typeof setTimeout> | undefined;
+    const watcher = watch(webviewRoot.fsPath, () => {
+      clearTimeout(reload);
+      reload = setTimeout(() => {
+        if (!panel) return;
+        ready = false;
+        panel.webview.html = pageHtml(panel.webview, webviewRoot);
+      }, 300);
+    });
+    context.subscriptions.push({
+      dispose: () => {
+        clearTimeout(reload);
+        watcher.close();
+      },
+    });
+  }
 
   /** Opens or reveals the dashboard and asks for data. */
   function open(): void {
