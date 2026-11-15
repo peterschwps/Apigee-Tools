@@ -342,15 +342,20 @@ function deploymentRow(
       <th scope="row">
         <a
           href=${consoleUrl(snapshot.overview.projectId, row)}
-          title="Open in the Apigee console"
+          data-tooltip="Open in the Apigee console"
           >${row.name}<span class="sr-only">
             (opens the Apigee console)</span
           ></a
         >
       </th>
-      <td class="icon-cell" title=${tooltip}>${stateIcon(status, tooltip)}</td>
+      <td class="icon-cell" data-tooltip=${tooltip}>
+        ${stateIcon(status, tooltip)}
+      </td>
       <td class="revision">${cell ? cell.revision : nothing}</td>
-      <td class="icon-cell" title=${comparison ? comparison.label : nothing}>
+      <td
+        class="icon-cell"
+        data-tooltip=${comparison ? comparison.label : nothing}
+      >
         ${comparison ? stateIcon(comparison, comparison.label) : nothing}
       </td>
       <td class="actions">
@@ -358,7 +363,7 @@ function deploymentRow(
           cell && row.local
             ? html`<button
                 class="icon-button"
-                title="Compare with local"
+                data-tooltip="Compare with local"
                 aria-label=${`Compare revision ${cell.revision} in ${environment} with the local bundle`}
                 @click=${() =>
                   actions.send({

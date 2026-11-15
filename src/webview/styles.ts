@@ -446,7 +446,7 @@ export const styles = css`
     background: var(--vscode-list-hoverBackground);
   }
 
-  td[title] {
+  td[data-tooltip] {
     cursor: help;
   }
 
@@ -548,6 +548,26 @@ export const styles = css`
   /* Wide enough for the longest options, "Not deployed" and "Not compared" */
   .toolbar vscode-single-select {
     width: 140px;
+  }
+
+  /* Tooltips in VS Code's hover colors, above everything else */
+  .tooltip {
+    position: fixed;
+    z-index: 10;
+    max-width: min(480px, calc(100vw - 16px));
+    padding: 4px 8px;
+    border: 1px solid var(--vscode-editorHoverWidget-border, var(--at-border));
+    border-radius: 4px;
+    background: var(
+      --vscode-editorHoverWidget-background,
+      var(--at-surface-raised)
+    );
+    box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+    color: var(--vscode-editorHoverWidget-foreground, var(--at-text));
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
   }
 
   .count {

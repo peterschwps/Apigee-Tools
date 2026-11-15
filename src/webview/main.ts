@@ -27,6 +27,7 @@ import {
 } from './deployments';
 import { overview, workspace } from './overview';
 import { styles } from './styles';
+import { tooltips } from './tooltip';
 
 /** The view state that survives reloads of the webview. */
 type ViewState = DeploymentView & { tab: number };
@@ -76,6 +77,9 @@ class ApigeeDashboard extends LitElement {
   declare snapshot: Snapshot | undefined;
   declare view: ViewState;
 
+  /** Hides the tooltip once a render removed its element. */
+  private syncTooltip = () => {};
+
   private readonly actions: Actions = {
     send,
     setView: patch => {
@@ -114,8 +118,16 @@ class ApigeeDashboard extends LitElement {
     send({ type: 'ready' });
   }
 
+  /** Sets up the tooltips once the shadow root exists. */
+  protected override firstUpdated(): void {
+    this.syncTooltip = tooltips(this, () =>
+      this.renderRoot.querySelector('.tooltip'),
+    );
+  }
+
   /** Moves focus to Refresh once a notice with the focused button is gone. */
   protected override async updated(): Promise<void> {
+    this.syncTooltip();
     if (!refocus) return;
     const refresh = this.renderRoot.querySelector<LitElement>(
       '.session vscode-button',
@@ -132,6 +144,7 @@ class ApigeeDashboard extends LitElement {
     return html`
       ${this.header(snapshot)}
       ${snapshot ? this.body(snapshot) : progress('Starting…')}
+      <div class="tooltip" aria-hidden="true" hidden></div>
     `;
   }
 
@@ -209,7 +222,7 @@ class ApigeeDashboard extends LitElement {
             snapshot?.account
               ? html`<span
                   class="account"
-                  title=${`Signed in with gcloud as ${snapshot.account}`}
+                  data-tooltip=${`Signed in with gcloud as ${snapshot.account}`}
                   ><vscode-icon name="account"></vscode-icon
                   ><span class="address">${snapshot.account}</span></span
                 >`
