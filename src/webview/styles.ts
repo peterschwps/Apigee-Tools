@@ -604,6 +604,13 @@ export const styles = css`
     cursor: pointer;
   }
 
+  /* Chosen states in gray, as VS Code shows a selection in an unfocused list */
+  .menu-item[aria-checked='true'] {
+    outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
+    outline-offset: -1px;
+    background: var(--vscode-list-inactiveSelectionBackground);
+  }
+
   .menu-item:hover,
   .menu-item:focus-visible {
     outline: none;
@@ -612,10 +619,6 @@ export const styles = css`
       var(--vscode-list-hoverBackground)
     );
     color: var(--vscode-menu-selectionForeground, inherit);
-  }
-
-  .menu-item .unchecked {
-    visibility: hidden;
   }
 
   /* Takes the place of a state icon in "All" */

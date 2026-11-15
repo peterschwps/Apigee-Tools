@@ -27,8 +27,8 @@ export type DeploymentView = {
   environment: string;
   kind: Kind;
   filter: string;
-  status: StatusKey | '';
-  comparison: ComparisonKey | '';
+  status: StatusKey[];
+  comparison: ComparisonKey[];
   /** The order of the names. */
   sort: 'asc' | 'desc';
   /** The proxy or shared flow of `kind` whose details show, if any. */
@@ -262,9 +262,9 @@ export function deployments(
     const cell = row.cells[environment];
     return (
       row.name.toLowerCase().includes(query) &&
-      (!view.status || statusOf(cell) === view.status) &&
-      (!view.comparison ||
-        (cell && comparisonOf(snapshot, row, cell) === view.comparison))
+      (!view.status.length || view.status.includes(statusOf(cell))) &&
+      (!view.comparison.length ||
+        (cell && view.comparison.includes(comparisonOf(snapshot, row, cell))))
     );
   });
   const count = (rows: Row[]) =>
@@ -302,35 +302,50 @@ export function deployments(
 
 /**
  * A filter in a column header: an icon button that opens a menu of the
- * column's states, with "All" first; an active filter fills the icon.
+ * column's states, with "All" first. A click turns a state on or off and
+ * leaves the menu open; an active filter fills the icon.
  */
 function columnFilter<Key extends string>(
   id: string,
   column: string,
-  selected: Key | '',
+  selected: readonly Key[],
   options: Readonly<Record<Key, StatusInfo>>,
-  select: (key: Key | '') => void,
+  select: (keys: Key[]) => void,
 ) {
-  const items: [Key | '', string, StatusInfo | undefined][] = [
-    ['', 'All', undefined],
-    ...(Object.keys(options) as Key[]).map(
-      key =>
-        [key, options[key].label, options[key]] as [Key, string, StatusInfo],
-    ),
-  ];
-  const tooltip = selected
-    ? `${column}: ${options[selected].label}`
+  const keys = Object.keys(options) as Key[];
+  // The chosen states keep the order of the menu, also in the tooltip
+  const toggle = (key: Key) =>
+    keys.filter(other =>
+      other === key ? !selected.includes(other) : selected.includes(other),
+    );
+  const item = (
+    label: string,
+    checked: boolean,
+    next: Key[],
+    sign?: StatusInfo,
+  ) => html`
+    <button
+      class="menu-item"
+      role="menuitemcheckbox"
+      aria-checked=${checked ? 'true' : 'false'}
+      @click=${() => select(next)}
+    >
+      ${sign ? statusIcon(sign) : html`<span class="no-icon"></span>`} ${label}
+    </button>
+  `;
+  const tooltip = selected.length
+    ? `${column}: ${selected.map(key => options[key].label).join(', ')}`
     : `Filter by ${column.toLowerCase()}`;
   return html`
     <button
-      class="icon-button ${selected ? 'active' : ''}"
+      class="icon-button ${selected.length ? 'active' : ''}"
       popovertarget=${id}
       aria-haspopup="menu"
       aria-label=${tooltip}
       data-tooltip=${tooltip}
     >
       <vscode-icon
-        name=${selected ? 'filter-filled' : 'filter'}
+        name=${selected.length ? 'filter-filled' : 'filter'}
         size="14"
       ></vscode-icon>
     </button>
@@ -345,27 +360,14 @@ function columnFilter<Key extends string>(
       @keydown=${moveInMenu}
       @focusout=${closeOnLeave}
     >
-      ${items.map(
-        ([key, label, sign]) => html`
-          <button
-            class="menu-item"
-            role="menuitemradio"
-            aria-checked=${key === selected ? 'true' : 'false'}
-            @click=${(event: Event) => {
-              (event.currentTarget as HTMLElement)
-                .closest<HTMLElement>('[popover]')
-                ?.hidePopover();
-              select(key);
-            }}
-          >
-            <vscode-icon
-              name="check"
-              class=${key === selected ? '' : 'unchecked'}
-            ></vscode-icon>
-            ${sign ? statusIcon(sign) : html`<span class="no-icon"></span>`}
-            ${label}
-          </button>
-        `,
+      ${item('All', !selected.length, [])}
+      ${keys.map(key =>
+        item(
+          options[key].label,
+          selected.includes(key),
+          toggle(key),
+          options[key],
+        ),
       )}
     </div>
   `;
@@ -386,8 +388,8 @@ function placeMenu(event: ToggleEvent) {
 }
 
 /**
- * Focuses the checked item of a menu that opened, and the button again when a
- * menu closes with the focus inside, such as after a choice or Escape.
+ * Focuses the first checked item of a menu that opened, and the button again
+ * when a menu closes with the focus inside, such as after Escape.
  */
 function focusOnToggle(event: ToggleEvent) {
   const menu = event.target as HTMLElement;

@@ -123,17 +123,19 @@ class ApigeeDashboard extends LitElement {
   constructor() {
     super();
     this.snapshot = undefined;
+    const saved = vscode.getState();
     this.view = {
       tab: 0,
       environment: '',
       kind: 'apis',
       filter: '',
-      status: '',
-      comparison: '',
       sort: 'asc',
       detail: '',
       dismissed: [],
-      ...vscode.getState(),
+      ...saved,
+      // Dashboards saved before filters took several states kept one or ''
+      status: Array.isArray(saved?.status) ? saved.status : [],
+      comparison: Array.isArray(saved?.comparison) ? saved.comparison : [],
     };
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       if (event.data?.type !== 'snapshot') return;
