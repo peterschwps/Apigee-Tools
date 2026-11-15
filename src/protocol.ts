@@ -59,6 +59,9 @@ export type LocalBundle = {
   path: string;
 };
 
+/** A notice above the tabs: something that needs attention, or a remark. */
+export type Note = { tone: 'warning' | 'info'; text: string };
+
 /** Why the dashboard cannot show data, and what may help. */
 export type Problem = {
   reason: 'gcloudMissing' | 'signedOut' | 'noOrganization' | 'api';
@@ -80,7 +83,7 @@ export type Snapshot = {
   bundles?: LocalBundle[];
   problem?: Problem;
   /** Additional information, such as deployments without a status check. */
-  notes?: string[];
+  notes?: Note[];
 };
 
 export type HostMessage = { type: 'snapshot'; snapshot: Snapshot };

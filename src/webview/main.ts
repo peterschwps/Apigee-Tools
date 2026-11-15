@@ -21,6 +21,7 @@ import type {
 } from '../protocol';
 import {
   deployments,
+  signs,
   type Actions,
   type DeploymentView,
   type Loaded,
@@ -309,7 +310,14 @@ class ApigeeDashboard extends LitElement {
     const { overview: organization, rows } = snapshot;
     const messages = [
       snapshot.problem ? problemNotice(snapshot.problem) : undefined,
-      ...(snapshot.notes ?? []).map(note => notice('info', 'info', '', note)),
+      ...(snapshot.notes ?? []).map(note =>
+        notice(
+          note.tone,
+          note.tone === 'warning' ? signs.warning.icon : 'info',
+          '',
+          note.text,
+        ),
+      ),
     ].filter(Boolean);
     return html`
       ${messages.length ? html`<div class="messages">${messages}</div>` : nothing}

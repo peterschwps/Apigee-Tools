@@ -26,6 +26,7 @@ import type {
   HostMessage,
   Kind,
   LocalBundle,
+  Note,
   Problem,
   Row,
   Snapshot,
@@ -282,7 +283,7 @@ export function registerDashboard(
     const controller = new AbortController();
     loading = controller;
     // Each load has notes of its own, so an aborted load cannot add to them
-    const notes: string[] = [];
+    const notes: Note[] = [];
     snapshot = {
       ...snapshot,
       loading: true,
@@ -375,9 +376,10 @@ export function registerDashboard(
       for (const row of rows) row.local = Boolean(localBundle(row));
       const ambiguous = rows.filter(row => localBundles(row).length > 1);
       if (ambiguous.length) {
-        notes.push(
-          `Several bundles in the workspace are named ${ambiguous.map(row => `"${row.name}"`).join(', ')}, so they are not compared. Exclude the extra copies with apigeeTools.exclude.`,
-        );
+        notes.push({
+          tone: 'warning',
+          text: `Several bundles in the workspace are named ${ambiguous.map(row => `"${row.name}"`).join(', ')}, so they are not compared. Exclude the extra copies with apigeeTools.exclude.`,
+        });
       }
       snapshot = {
         ...snapshot,
@@ -453,7 +455,7 @@ export function registerDashboard(
     organization: string,
     rows: Row[],
     controller: AbortController,
-    notes: string[],
+    notes: Note[],
   ): Promise<void> {
     const total = rows.reduce(
       (sum, row) => sum + Object.keys(row.cells).length,
@@ -500,22 +502,25 @@ export function registerDashboard(
       }),
     );
     if (stopped) {
-      notes.push(
-        `Status checks stopped: ${stopped.message} ${stopped.hint ?? ''}`.trim(),
-      );
+      notes.push({
+        tone: 'warning',
+        text: `Status checks stopped: ${stopped.message} ${stopped.hint ?? ''}`.trim(),
+      });
     } else if (failed) {
       const hint =
         firstFailure instanceof ApigeeError
           ? ` ${firstFailure.hint ?? ''}`
           : '';
-      notes.push(
-        `Status could not be checked for ${failed} deployments: ${messageOf(firstFailure)}${hint}`.trim(),
-      );
+      notes.push({
+        tone: 'warning',
+        text: `Status could not be checked for ${failed} deployments: ${messageOf(firstFailure)}${hint}`.trim(),
+      });
     }
     if (!stopped && targets.length < total) {
-      notes.push(
-        `Status was checked for ${checked} of ${total} deployments, local bundles and recent deployments first, to spare the API quota.`,
-      );
+      notes.push({
+        tone: 'info',
+        text: `Status was checked for ${checked} of ${total} deployments, local bundles and recent deployments first, to spare the API quota.`,
+      });
     }
   }
 
@@ -559,17 +564,19 @@ export function registerDashboard(
               `Status of ${name} in ${environment}:`,
               messageOf(error),
             );
-            snapshot.notes?.push(
-              `Status of "${name}" in ${environment} could not be checked: ${messageOf(error)}`,
-            );
+            snapshot.notes?.push({
+              tone: 'warning',
+              text: `Status of "${name}" in ${environment} could not be checked: ${messageOf(error)}`,
+            });
           }
         }),
       );
     } catch (error) {
       host.log.warn('Checking the details failed:', messageOf(error));
-      snapshot.notes?.push(
-        `Status of "${name}" could not be checked: ${messageOf(error)}`,
-      );
+      snapshot.notes?.push({
+        tone: 'warning',
+        text: `Status of "${name}" could not be checked: ${messageOf(error)}`,
+      });
     } finally {
       if (alone && !loading) snapshot = { ...snapshot, loading: false };
       post();
@@ -585,7 +592,7 @@ export function registerDashboard(
     organization: string,
     rows: Row[],
     controller: AbortController,
-    notes: string[],
+    notes: Note[],
   ): Promise<void> {
     const failed: string[] = [];
     let firstFailure: unknown;
@@ -628,9 +635,10 @@ export function registerDashboard(
         }),
     );
     if (failed.length) {
-      notes.push(
-        `Differences from the local bundle could not be checked for ${failed.map(name => `"${name}"`).join(', ')}: ${messageOf(firstFailure)}`,
-      );
+      notes.push({
+        tone: 'warning',
+        text: `Differences from the local bundle could not be checked for ${failed.map(name => `"${name}"`).join(', ')}: ${messageOf(firstFailure)}`,
+      });
     }
   }
 
