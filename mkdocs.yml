@@ -1,7 +1,11 @@
 site_name: Apigee Tools
-site_description: XML diagnostics and completion for Apigee X proxy bundles.
-repo_url: https://github.com/peterschwps/apigee-tools
-repo_name: peterschwps/apigee-tools
+site_url: https://peterschwps.com/docs/apigee/
+site_description: >-
+  Diagnostics, completion, and quick fixes for Apigee X proxy and shared flow
+  XML, based on Google's documentation, and a read-only dashboard of an
+  organization's deployments.
+repo_url: https://github.com/peterschwps/Apigee-Tools
+repo_name: peterschwps/Apigee-Tools
 
 theme:
   name: material
