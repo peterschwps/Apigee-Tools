@@ -217,9 +217,15 @@ export const styles = css`
   .loading {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     padding: 24px 20px;
     color: var(--at-text-muted);
+  }
+
+  /* The size of an icon, not the 28 px of VS Code Elements */
+  .loading vscode-progress-ring {
+    width: 16px;
+    height: 16px;
   }
 
   /* Notices: a colored edge and icon, theme-colored text */
