@@ -329,7 +329,10 @@ function columnFilter<Key extends string>(
       aria-label=${tooltip}
       data-tooltip=${tooltip}
     >
-      <vscode-icon name=${selected ? 'filter-filled' : 'filter'}></vscode-icon>
+      <vscode-icon
+        name=${selected ? 'filter-filled' : 'filter'}
+        size="14"
+      ></vscode-icon>
     </button>
     <div
       id=${id}
@@ -500,6 +503,7 @@ function table(
                 >
                   <vscode-icon
                     name=${view.sort === 'desc' ? 'arrow-down' : 'arrow-up'}
+                    size="14"
                   ></vscode-icon>
                 </button>
               </span>

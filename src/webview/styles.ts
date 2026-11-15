@@ -553,6 +553,13 @@ export const styles = css`
     gap: 2px;
   }
 
+  /* Smaller than other icon buttons, so the column names come first */
+  .column-head .icon-button {
+    width: 18px;
+    height: 18px;
+    margin-block: -1px;
+  }
+
   /* Menus of the column filters, in VS Code's menu colors */
   .menu {
     position: fixed;
