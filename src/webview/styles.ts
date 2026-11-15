@@ -133,40 +133,6 @@ export const styles = css`
     min-width: 0;
   }
 
-  /* Logo motif: a red and a yellow dot and a larger green one, joined by short connectors */
-  .logo {
-    display: flex;
-    align-items: center;
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-  }
-
-  .dot.error {
-    background: var(--at-error);
-  }
-
-  .dot.warning {
-    background: var(--at-warning);
-  }
-
-  .dot.success {
-    width: 14px;
-    height: 14px;
-    background: var(--at-success);
-  }
-
-  .connector {
-    width: 5px;
-    height: 2px;
-    margin: 0 1px;
-    border-radius: 1px;
-    background: var(--at-decor);
-  }
-
   .field {
     display: flex;
     align-items: center;
@@ -480,38 +446,73 @@ export const styles = css`
     cursor: help;
   }
 
-  /* As tall as a badge, so names and statuses line up and every row has one height */
-  .name,
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 22px;
-  }
-
-  .name {
-    gap: 8px;
-  }
-
-  /* Differs from local: a translucent logo yellow behind theme-colored text */
-  .drift {
-    --vscode-badge-background: color-mix(
-      in srgb,
-      var(--at-warning) var(--at-fill),
-      transparent
-    );
-    --vscode-badge-foreground: var(--at-text);
-
-    /* High contrast has no fills, so an outline carries the color there */
-    outline: var(--at-outline) solid var(--at-warning);
-    outline-offset: -1px;
-  }
-
   .empty {
     padding: 16px 8px;
     color: var(--at-text-muted);
     text-align: center;
     white-space: normal;
+  }
+
+  /* Deployments: proxies and shared flows under group rows, icons centered */
+  .deployments tr.group th {
+    padding-top: 14px;
+    color: var(--at-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .deployments tbody:first-of-type tr.group th {
+    padding-top: 6px;
+  }
+
+  .deployments tr.group:hover {
+    background: none;
+  }
+
+  /* Narrow columns at the right; the name takes the remaining width */
+  .deployments .icon-cell,
+  .deployments .revision {
+    width: 1%;
+    padding-inline: 16px;
+    text-align: center;
+  }
+
+  /* As narrow as the Compare button, which keeps every row one height */
+  .deployments .actions {
+    width: 1%;
+    padding-block: 2px;
+    text-align: right;
+  }
+
+  .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: none;
+    color: var(--vscode-icon-foreground, inherit);
+    cursor: pointer;
+  }
+
+  .icon-button:hover {
+    border-color: var(--vscode-toolbar-hoverOutline, transparent);
+    background: var(--vscode-toolbar-hoverBackground);
+  }
+
+  .icon-button:active {
+    background: var(
+      --vscode-toolbar-activeBackground,
+      var(--vscode-toolbar-hoverBackground)
+    );
+  }
+
+  .icon-button:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
   }
 
   .legend {

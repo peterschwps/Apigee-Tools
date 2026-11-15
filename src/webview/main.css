@@ -8,7 +8,6 @@ body {
   --at-warning: #fbbc04;
   --at-error: #ea4335;
   --at-neutral: #7c7a72;
-  --at-decor: #b4b2a9;
   /* Opacity of logo-colored fills behind theme-colored text */
   --at-fill: 16%;
   --at-outline: 0px;
@@ -23,13 +22,11 @@ body {
 
 body.vscode-dark {
   --at-neutral: #b4b2a9;
-  --at-decor: #7c7a72;
 }
 
 /* High contrast keeps the logo colors but draws borders instead of fills */
 body.vscode-high-contrast {
   --at-neutral: var(--vscode-disabledForeground, #a5a5a5);
-  --at-decor: var(--vscode-contrastBorder, #6fc3df);
   --at-border: var(--vscode-contrastBorder, #6fc3df);
   --at-fill: 0%;
   --at-outline: 1px;

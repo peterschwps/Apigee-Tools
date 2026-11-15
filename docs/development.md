@@ -60,4 +60,4 @@ npx tsx scripts/test-org.ts status PROJECT_ID
 npx tsx scripts/test-org.ts delete PROJECT_ID --yes
 ```
 
-Provisioning takes up to 40 minutes. `populate` adds an environment `test` in a group `test-group`, deploys the fixture proxy `hello` unchanged to `eval` and with one changed policy to `test`, and deploys the shared flow `traffic-shared` to `eval`. In the Extension Development Host, open the dashboard on this repository: `hello` matches the local bundle in `eval` and shows **≠ local** in `test`.
+Provisioning takes up to 40 minutes. `populate` adds an environment `test` in a group `test-group`, deploys the fixture proxy `hello` unchanged to `eval` and with one changed policy to `test`, and deploys the shared flow `traffic-shared` to `eval`. In the Extension Development Host, open the dashboard on this repository: `hello` matches the local bundle in `eval` and differs from it in `test`.

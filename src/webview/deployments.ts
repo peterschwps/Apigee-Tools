@@ -1,5 +1,6 @@
-// The Deployments tab: proxies and shared flows by environment, with their
-// deployment status, differences from local bundles, and problems.
+// The Deployments tab: the proxies and shared flows of one environment, with
+// their deployment status, revision, comparison with local bundles, and
+// problems.
 import type { VscodeTextfield } from '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import { html, nothing } from 'lit';
 import type {
@@ -27,7 +28,10 @@ export type Actions = {
   setView(patch: Partial<DeploymentView>): void;
 };
 
-/** How a status shows: never by color alone, always with an icon and a label. */
+/**
+ * How a status shows: an icon whose shape differs per status, never color
+ * alone; the label is its tooltip, its accessible name, and its legend entry.
+ */
 type StatusInfo = {
   label: string;
   /** Codicon name without the `codicon-` prefix. */
@@ -40,13 +44,47 @@ export const kindLabels: Readonly<Record<Kind, string>> = {
   sharedflows: 'Shared flow',
 };
 
-const legend: StatusInfo[] = [
-  { label: 'Ready', icon: 'pass-filled', tone: 'success' },
-  { label: 'Route conflict', icon: 'warning', tone: 'warning' },
-  { label: 'Failed', icon: 'error', tone: 'error' },
-  { label: 'Deploying', icon: 'sync', tone: 'neutral' },
-  { label: 'Status not checked', icon: 'clock', tone: 'neutral' },
+const groups: [Kind, string][] = [
+  ['apis', 'API Proxies'],
+  ['sharedflows', 'Shared Flows'],
 ];
+
+const ready: StatusInfo = {
+  label: 'Ready',
+  icon: 'pass-filled',
+  tone: 'success',
+};
+const conflict: StatusInfo = {
+  label: 'Route conflict',
+  icon: 'warning',
+  tone: 'warning',
+};
+const failed: StatusInfo = { label: 'Failed', icon: 'error', tone: 'error' };
+const deploying: StatusInfo = {
+  label: 'Deploying',
+  icon: 'sync',
+  tone: 'neutral',
+};
+const unchecked: StatusInfo = {
+  label: 'Status not checked',
+  icon: 'clock',
+  tone: 'neutral',
+};
+const matches: StatusInfo = {
+  label: 'Matches the local bundle',
+  icon: 'check',
+  tone: 'neutral',
+};
+const differs: StatusInfo = {
+  label: 'Differs from the local bundle',
+  icon: 'diff-modified',
+  tone: 'warning',
+};
+const incomparable: StatusInfo = {
+  label: 'Comparison with the local bundle failed',
+  icon: 'question',
+  tone: 'neutral',
+};
 
 /** Returns whether a deployment failed or has a route conflict. */
 export function isProblem(cell: Cell): boolean {
@@ -55,24 +93,29 @@ export function isProblem(cell: Cell): boolean {
 
 /** Returns the status of a deployment; without a state it may still load. */
 function deploymentStatus(cell: Cell, loading: boolean): StatusInfo {
-  if (cell.state === 'ERROR') {
-    return { label: 'Failed', icon: 'error', tone: 'error' };
-  }
-  if (cell.routeConflicts?.length) {
-    return { label: 'Route conflict', icon: 'warning', tone: 'warning' };
-  }
-  if (cell.state === 'READY') {
-    return { label: 'Ready', icon: 'pass-filled', tone: 'success' };
-  }
-  if (cell.state === 'PROGRESSING') {
-    return { label: 'Deploying', icon: 'sync', tone: 'neutral' };
-  }
+  if (cell.state === 'ERROR') return failed;
+  if (cell.routeConflicts?.length) return conflict;
+  if (cell.state === 'READY') return ready;
+  if (cell.state === 'PROGRESSING') return deploying;
   return loading
     ? { label: 'Checking status', icon: 'clock', tone: 'neutral' }
-    : { label: 'Status not checked', icon: 'clock', tone: 'neutral' };
+    : unchecked;
 }
 
-/** Renders a status icon, colored by tone; the label goes next to it. */
+/** Returns how a deployment compares with the local bundle of its name. */
+function localStatus(cell: Cell, loading: boolean): StatusInfo {
+  if (cell.drift) return differs;
+  if (cell.drift === false) return matches;
+  return loading
+    ? {
+        label: 'Comparing with the local bundle',
+        icon: 'clock',
+        tone: 'neutral',
+      }
+    : incomparable;
+}
+
+/** Renders a status icon, colored by tone. */
 export function statusIcon(status: Pick<StatusInfo, 'icon' | 'tone'>) {
   return html`<vscode-icon
     name=${status.icon}
@@ -96,22 +139,18 @@ export function deployments(
   view: DeploymentView,
   actions: Actions,
 ) {
-  const environments = snapshot.overview.environments
-    .map(environment => environment.name)
-    .filter(name => view.environment === 'all' || name === view.environment);
+  const { environment } = view;
   const query = view.filter.trim().toLowerCase();
-  const rows = snapshot.rows.filter(
-    row =>
+  const rows = snapshot.rows.filter(row => {
+    const cell = row.cells[environment];
+    // A failed comparison is a difference that is not known yet
+    const unknown = row.local && cell?.drift === undefined && !snapshot.loading;
+    return (
       row.name.toLowerCase().includes(query) &&
       (!view.onlyProblems ||
-        environments.some(environment => {
-          const cell = row.cells[environment];
-          // A failed comparison is a difference that is not known yet
-          const unknown =
-            row.local && cell?.drift === undefined && !snapshot.loading;
-          return cell && (isProblem(cell) || cell.drift || unknown);
-        })),
-  );
+        Boolean(cell && (isProblem(cell) || cell.drift || unknown)))
+    );
+  });
   return html`
     <div class="page">
       <div class="toolbar">
@@ -142,70 +181,62 @@ export function deployments(
         </span>
       </div>
       <section class="card">
-        ${matrix(snapshot, rows, environments, actions)}
+        ${
+          environment
+            ? table(snapshot, rows, environment, actions)
+            : html`<p class="muted">
+                This organization has no environments yet.
+              </p>`
+        }
       </section>
-      ${problemList(snapshot.rows, environments)}
+      ${problemList(snapshot.rows, environment)}
     </div>
   `;
 }
 
-/** The deployment matrix with one column per environment. */
-function matrix(
+/** The deployments of one environment, grouped into proxies and shared flows. */
+function table(
   snapshot: Loaded,
   rows: Row[],
-  environments: string[],
+  environment: string,
   actions: Actions,
 ) {
   return html`
     <div class="table-scroll">
-      <table>
+      <table class="deployments">
         <caption class="sr-only">
-          Deployments by environment
+          Deployments in ${environment}
         </caption>
         <thead>
           <tr>
             <th scope="col">Name</th>
-            ${environments.map(
-              environment => html`<th scope="col">${environment}</th>`,
-            )}
+            <th scope="col" class="icon-cell">Status</th>
+            <th scope="col" class="revision">Revision</th>
+            <th scope="col" class="icon-cell">Local bundle</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
-        <tbody>
-          ${rows.map(
-            row => html`
-              <tr>
-                <th scope="row">
-                  <span class="name">
-                    <a
-                      href=${consoleUrl(snapshot.overview.projectId, row)}
-                      title="Open in the Apigee console"
-                      >${row.name}<span class="sr-only">
-                        (opens the Apigee console)</span
-                      ></a
-                    >
-                    <vscode-badge>${kindLabels[row.kind]}</vscode-badge>
-                    ${
-                      row.local
-                        ? html`<vscode-badge
-                            title="A bundle of this name is in the workspace"
-                            >local</vscode-badge
-                          >`
-                        : nothing
-                    }
-                  </span>
-                </th>
-                ${environments.map(environment =>
-                  statusCell(row, environment, snapshot.loading, actions),
-                )}
+        ${groups.map(([kind, label]) => {
+          const members = rows.filter(row => row.kind === kind);
+          if (!members.length) return nothing;
+          return html`
+            <tbody>
+              <tr class="group">
+                <th scope="colgroup" colspan="5">${label}</th>
               </tr>
-            `,
-          )}
-          ${
-            rows.length
-              ? nothing
-              : html`
+              ${members.map(row =>
+                deploymentRow(snapshot, row, environment, actions),
+              )}
+            </tbody>
+          `;
+        })}
+        ${
+          rows.length
+            ? nothing
+            : html`
+                <tbody>
                   <tr>
-                    <td class="empty" colspan=${environments.length + 1}>
+                    <td class="empty" colspan="5">
                       ${
                         snapshot.rows.length
                           ? 'No proxies or shared flows match the filter.'
@@ -213,114 +244,106 @@ function matrix(
                       }
                     </td>
                   </tr>
-                `
-          }
-        </tbody>
+                </tbody>
+              `
+        }
       </table>
     </div>
     <ul class="legend" aria-label="Legend">
-      ${legend.map(status => html`<li>${statusIcon(status)}${status.label}</li>`)}
-      <li>
-        <vscode-badge class="drift" aria-hidden="true">≠ local</vscode-badge>
-        Differs from the local bundle
-      </li>
-      <li>
-        <vscode-badge aria-hidden="true">local ?</vscode-badge>
-        Comparison failed
-      </li>
+      ${[ready, conflict, failed, deploying, unchecked].map(
+        status => html`<li>${statusIcon(status)}${status.label}</li>`,
+      )}
       <li><span aria-hidden="true">—</span>Not deployed</li>
+      ${[matches, differs, incomparable].map(
+        status => html`<li>${statusIcon(status)}${status.label}</li>`,
+      )}
     </ul>
   `;
 }
 
-/** One cell: status icon and label, revision, difference, and comparison. */
-function statusCell(
+/** One row: name, status icon, revision, comparison icon, and Compare. */
+function deploymentRow(
+  snapshot: Loaded,
   row: Row,
   environment: string,
-  loading: boolean,
   actions: Actions,
 ) {
   const cell = row.cells[environment];
-  if (!cell) {
-    return html`
-      <td>
-        <span class="status">
-          <span class="muted" aria-hidden="true">—</span>
-          <span class="sr-only">Not deployed</span>
-        </span>
-      </td>
-    `;
-  }
-  const status = deploymentStatus(cell, loading);
-  const messages = details(cell);
-  const unknownDrift = row.local && cell.drift === undefined && !loading;
+  const status = cell && deploymentStatus(cell, snapshot.loading);
+  const local = cell && row.local && localStatus(cell, snapshot.loading);
+  const tooltip = cell && [status!.label, ...details(cell)].join('\n');
   return html`
-    <td title=${messages.join('\n') || nothing}>
-      <span class="status">
-        ${statusIcon(status)}
-        <span>${status.label}</span>
-        <span class="muted">rev ${cell.revision}</span>
+    <tr>
+      <th scope="row">
+        <a
+          href=${consoleUrl(snapshot.overview.projectId, row)}
+          title="Open in the Apigee console"
+          >${row.name}<span class="sr-only">
+            (opens the Apigee console)</span
+          ></a
+        >
+      </th>
+      <td class="icon-cell" title=${tooltip || 'Not deployed'}>
         ${
-          cell.drift
-            ? html`<vscode-badge class="drift" aria-hidden="true"
-                  >≠ local</vscode-badge
-                ><span class="sr-only">differs from the local bundle</span>`
-            : nothing
+          status
+            ? html`${statusIcon(status)}<span class="sr-only">${tooltip}</span>`
+            : html`<span class="muted" aria-hidden="true">—</span
+                ><span class="sr-only">Not deployed</span>`
         }
+      </td>
+      <td class="revision">${cell ? cell.revision : nothing}</td>
+      <td class="icon-cell" title=${local ? local.label : nothing}>
         ${
-          unknownDrift
-            ? html`<vscode-badge
-                  aria-hidden="true"
-                  title="The comparison with the local bundle failed"
-                  >local ?</vscode-badge
-                ><span class="sr-only"
-                  >comparison with the local bundle failed</span
+          local
+            ? html`${statusIcon(local)}<span class="sr-only"
+                  >${local.label}</span
                 >`
             : nothing
         }
+      </td>
+      <td class="actions">
         ${
-          row.local
-            ? html`<vscode-icon
-                action-icon
-                name="git-compare"
+          cell && row.local
+            ? html`<button
+                class="icon-button"
                 title="Compare with local"
-                label=${`Compare revision ${cell.revision} in ${environment} with the local bundle`}
-                @vsc-click=${() =>
+                aria-label=${`Compare revision ${cell.revision} in ${environment} with the local bundle`}
+                @click=${() =>
                   actions.send({
                     type: 'compare',
                     kind: row.kind,
                     name: row.name,
                     environment,
                   })}
-              ></vscode-icon>`
+              >
+                <vscode-icon name="git-compare"></vscode-icon>
+              </button>`
             : nothing
         }
-      </span>
-    </td>
+      </td>
+    </tr>
   `;
 }
 
 /** Failed deployments and route conflicts with their full messages. */
-function problemList(rows: Row[], environments: string[]) {
-  const problems = rows.flatMap(row =>
-    environments.flatMap(environment => {
-      const cell = row.cells[environment];
-      return cell && isProblem(cell) ? [{ row, environment, cell }] : [];
-    }),
-  );
+function problemList(rows: Row[], environment: string) {
+  const problems = rows.flatMap(row => {
+    const cell = row.cells[environment];
+    return cell && isProblem(cell) ? [{ row, cell }] : [];
+  });
   if (!problems.length) return nothing;
   return html`
     <section class="card">
       <div class="card-head"><h2>Problems</h2></div>
       <ul class="problems">
-        ${problems.map(({ row, environment, cell }) => {
+        ${problems.map(({ row, cell }) => {
           const status = deploymentStatus(cell, false);
           return html`
             <li>
               ${statusIcon(status)}
               <span>
-                <strong>${row.name}</strong> in ${environment}, revision
-                ${cell.revision}: ${status.label}
+                <strong>${row.name}</strong>, revision ${cell.revision}:
+                ${status.label}
               </span>
               ${details(cell).map(
                 message => html`<span class="detail">${message}</span>`,

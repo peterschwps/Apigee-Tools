@@ -87,7 +87,7 @@ class ApigeeDashboard extends LitElement {
     this.snapshot = undefined;
     this.view = {
       tab: 0,
-      environment: 'all',
+      environment: '',
       filter: '',
       onlyProblems: false,
       ...vscode.getState(),
@@ -131,12 +131,12 @@ class ApigeeDashboard extends LitElement {
     `;
   }
 
-  /** The view with an environment filter that exists in this organization. */
+  /** The view with an environment of this organization, by default the first. */
   private effectiveView(snapshot: Snapshot): ViewState {
     const environments = snapshot.overview?.environments ?? [];
     return environments.some(({ name }) => name === this.view.environment)
       ? this.view
-      : { ...this.view, environment: 'all' };
+      : { ...this.view, environment: environments[0]?.name ?? '' };
   }
 
   private header(snapshot?: Snapshot) {
@@ -185,11 +185,6 @@ class ApigeeDashboard extends LitElement {
                             .value,
                         })}
                     >
-                      <vscode-option
-                        value="all"
-                        ?selected=${view.environment === 'all'}
-                        >All environments</vscode-option
-                      >
                       ${(snapshot.overview?.environments ?? []).map(
                         ({ name }) => html`
                           <vscode-option
