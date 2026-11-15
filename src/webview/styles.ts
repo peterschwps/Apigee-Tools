@@ -19,6 +19,11 @@ export const styles = css`
     display: none !important;
   }
 
+  /*
+   * Type scale: 22 px for the page title, 18 px for the title of the details,
+   * 14 px for tabs, field labels, and card titles, 13 px for content. One
+   * bold weight, 600, which tabs, headings, and column names share.
+   */
   h1,
   h2,
   h3 {
@@ -33,7 +38,7 @@ export const styles = css`
 
   h2,
   h3 {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   p {
@@ -199,8 +204,11 @@ export const styles = css`
     box-shadow: inset 0 -2px 0 var(--vscode-panelTitle-activeForeground);
   }
 
+  /* Every tab in bold, so the active one does not change the width */
   .tab-label {
     color: var(--vscode-panelTitle-inactiveForeground);
+    font-size: 14px;
+    font-weight: 600;
   }
 
   vscode-tab-header[active] .tab-label,
@@ -383,7 +391,7 @@ export const styles = css`
   /* As VS Code's own tables: the size of the cells, in bold */
   thead th {
     color: var(--at-text);
-    font-weight: bold;
+    font-weight: 600;
   }
 
   tbody th {
@@ -633,7 +641,7 @@ export const styles = css`
   }
 
   .details-title h2 {
-    font-size: 15px;
+    font-size: 18px;
     overflow-wrap: anywhere;
   }
 
