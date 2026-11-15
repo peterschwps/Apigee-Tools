@@ -98,6 +98,10 @@ export const styles = css`
     color: var(--at-neutral);
   }
 
+  .tone-info {
+    color: var(--at-info);
+  }
+
   /* Header: brand, context selects, and session; the selects get a row of their own when narrow */
   .topbar {
     display: grid;

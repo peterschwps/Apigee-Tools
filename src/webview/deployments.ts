@@ -50,7 +50,7 @@ type StatusInfo = {
   tooltip?: string;
   /** Codicon name without the `codicon-` prefix. */
   icon: string;
-  tone: 'success' | 'warning' | 'error' | 'neutral';
+  tone: 'success' | 'warning' | 'error' | 'info' | 'neutral';
 };
 
 export const kindLabels: Readonly<Record<Kind, string>> = {
@@ -68,7 +68,7 @@ export const statuses: Readonly<Record<StatusKey, StatusInfo>> = {
   warnings: { label: 'Warnings', icon: 'warning', tone: 'warning' },
   failed: { label: 'Failed', icon: 'error', tone: 'error' },
   deploying: { label: 'Deploying', icon: 'sync', tone: 'neutral' },
-  unknown: { label: 'Unknown', icon: 'question', tone: 'neutral' },
+  unknown: { label: 'Unknown', icon: 'question', tone: 'info' },
   none: { label: 'Not deployed', icon: 'dash', tone: 'neutral' },
 };
 
@@ -77,7 +77,7 @@ export const comparisons: Readonly<Record<ComparisonKey, StatusInfo>> = {
     label: 'Same',
     tooltip: 'Same as in the workspace',
     icon: 'check',
-    tone: 'neutral',
+    tone: 'success',
   },
   differs: {
     label: 'Differs',
@@ -85,7 +85,7 @@ export const comparisons: Readonly<Record<ComparisonKey, StatusInfo>> = {
     icon: 'diff-modified',
     tone: 'warning',
   },
-  unknown: { label: 'Not compared', icon: 'question', tone: 'neutral' },
+  unknown: { label: 'Not compared', icon: 'question', tone: 'info' },
   absent: {
     label: 'Not in workspace',
     tooltip: 'Not in the workspace',

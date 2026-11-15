@@ -8,6 +8,8 @@ body {
   --at-warning: #fbbc04;
   --at-error: #ea4335;
   --at-neutral: #7c7a72;
+  /* Unknowns, in the theme's own info blue, which no logo color means */
+  --at-info: var(--vscode-editorInfo-foreground, #1a85ff);
   /* Opacity of logo-colored fills behind theme-colored text */
   --at-fill: 16%;
   --at-outline: 0px;
