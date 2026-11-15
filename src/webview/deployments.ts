@@ -21,7 +21,7 @@ type StatusKey =
   'ready' | 'warnings' | 'failed' | 'deploying' | 'unknown' | 'none';
 
 /** How a deployment compares with the local bundle of its name. */
-type ComparisonKey = 'matches' | 'differs' | 'unknown';
+type ComparisonKey = 'matches' | 'differs' | 'unknown' | 'absent';
 
 /** The tab and the filters of the Deployments tab; empty filters show all. */
 export type DeploymentView = {
@@ -86,6 +86,12 @@ export const comparisons: Readonly<Record<ComparisonKey, StatusInfo>> = {
     tone: 'warning',
   },
   unknown: { label: 'Not compared', icon: 'question', tone: 'neutral' },
+  absent: {
+    label: 'Not in workspace',
+    tooltip: 'Not in the workspace',
+    icon: 'dash',
+    tone: 'neutral',
+  },
 };
 
 // Unknown states while a load may still bring them
@@ -115,14 +121,21 @@ export function statusOf(cell: Cell | undefined): StatusKey {
   return 'unknown';
 }
 
-/** Returns how a deployment compares with its local bundle, if it has one. */
-function comparisonOf(
-  row: Row,
-  cell: Cell | undefined,
-): ComparisonKey | undefined {
-  if (!cell || !row.local) return undefined;
-  if (cell.drift === undefined) return 'unknown';
-  return cell.drift ? 'differs' : 'matches';
+/** Returns how a deployment compares with the bundle of its name, if any. */
+function comparisonOf(snapshot: Loaded, row: Row, cell: Cell): ComparisonKey {
+  if (row.local) {
+    if (cell.drift === undefined) return 'unknown';
+    return cell.drift ? 'differs' : 'matches';
+  }
+  return sharesName(snapshot, row) ? 'unknown' : 'absent';
+}
+
+/** Returns whether several bundles in the workspace have the name of a row. */
+function sharesName(snapshot: Loaded, row: Row): boolean {
+  const bundles = (snapshot.bundles ?? []).filter(
+    bundle => bundle.kind === row.kind && bundle.name === row.name,
+  );
+  return bundles.length > 1;
 }
 
 /** Renders a status icon, colored by tone. */
@@ -173,8 +186,9 @@ export function workspaceCell(
   actions: Actions,
 ) {
   const cell = row.cells[environment];
-  const key = comparisonOf(row, cell);
-  if (cell && key === 'differs') {
+  if (!cell) return stateCell(statuses.none);
+  const key = comparisonOf(snapshot, row, cell);
+  if (key === 'differs') {
     const tooltip = comparisons.differs.tooltip;
     return html`<td class="icon-cell">
       <button
@@ -193,8 +207,14 @@ export function workspaceCell(
       </button>
     </td>`;
   }
+  if (key === 'unknown' && !row.local) {
+    return stateCell({
+      ...comparisons.unknown,
+      tooltip: 'Not compared: several bundles share this name',
+    });
+  }
   return stateCell(
-    key === 'unknown' && snapshot.loading ? comparing : key && comparisons[key],
+    key === 'unknown' && snapshot.loading ? comparing : comparisons[key],
   );
 }
 
@@ -216,7 +236,8 @@ export function deployments(
     return (
       row.name.toLowerCase().includes(query) &&
       (!view.status || statusOf(cell) === view.status) &&
-      (!view.comparison || comparisonOf(row, cell) === view.comparison)
+      (!view.comparison ||
+        (cell && comparisonOf(snapshot, row, cell) === view.comparison))
     );
   });
   const count = (rows: Row[]) =>

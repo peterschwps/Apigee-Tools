@@ -546,7 +546,7 @@ export const styles = css`
     max-width: 100%;
   }
 
-  /* Wide enough for the longest options, "Not deployed" and "Not compared" */
+  /* Wide enough for the longest option, "Not in workspace" */
   .toolbar vscode-single-select {
     width: 140px;
   }
