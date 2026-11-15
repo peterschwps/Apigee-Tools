@@ -156,20 +156,10 @@ export const styles = css`
     max-width: 100%;
   }
 
-  /* A long account name shortens, so Refresh always stays in view */
+  /* Only the icon; the tooltip names the account */
   .account {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    overflow: hidden;
     color: var(--at-text-muted);
-    white-space: nowrap;
-  }
-
-  .address {
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .account vscode-icon {

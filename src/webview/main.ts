@@ -270,7 +270,9 @@ class ApigeeDashboard extends LitElement {
                   class="account"
                   data-tooltip=${`Signed in with gcloud as ${snapshot.account}`}
                   ><vscode-icon name="account"></vscode-icon
-                  ><span class="address">${snapshot.account}</span></span
+                  ><span class="sr-only"
+                    >Signed in with gcloud as ${snapshot.account}</span
+                  ></span
                 >`
               : nothing
           }
