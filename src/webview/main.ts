@@ -404,7 +404,6 @@ function notice(
         close
           ? html`<button
               class="icon-button close"
-              data-tooltip="Dismiss"
               aria-label="Dismiss"
               @click=${close}
             >
