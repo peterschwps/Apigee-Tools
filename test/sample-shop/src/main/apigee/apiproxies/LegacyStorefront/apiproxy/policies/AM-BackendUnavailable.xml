@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage async="false" continueOnError="false" enabled="true" name="AM-BackendUnavailable">
+    <DisplayName>AM-BackendUnavailable</DisplayName>
+    <Set>
+        <Headers>
+            <Header name="Retry-After">120</Header>
+        </Headers>
+        <Payload contentType="text/xml">
+            <Error>
+                <Code>StorefrontUnavailable</Code>
+                <Message>The legacy storefront is not reachable. Try again later.</Message>
+            </Error>
+        </Payload>
+        <StatusCode>503</StatusCode>
+        <ReasonPhrase>Service Unavailable</ReasonPhrase>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</AssignMessage>

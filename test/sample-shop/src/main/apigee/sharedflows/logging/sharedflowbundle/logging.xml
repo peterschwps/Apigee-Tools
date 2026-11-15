@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SharedFlowBundle revision="1" name="logging">
+    <DisplayName>logging</DisplayName>
+    <Description>Access log of every call to the shop syslog server.</Description>
+</SharedFlowBundle>

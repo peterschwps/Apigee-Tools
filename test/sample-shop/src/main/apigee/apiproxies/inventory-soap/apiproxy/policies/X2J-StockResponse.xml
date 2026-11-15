@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<XMLToJSON continueOnError="false" enabled="true" name="X2J-StockResponse">
+    <DisplayName>X2J-StockResponse</DisplayName>
+    <Source>response</Source>
+    <OutputVariable>response</OutputVariable>
+    <Options>
+        <RecognizeNumber>true</RecognizeNumber>
+        <RecognizeBoolean>true</RecognizeBoolean>
+        <TreatAsArray>
+            <Path unwrap="true">stock/variants/variant</Path>
+        </TreatAsArray>
+    </Options>
+</XMLToJSON>

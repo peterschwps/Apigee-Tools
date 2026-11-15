@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<APIProxy revision="1" name="partner-gateway">
+    <DisplayName>Partner Gateway</DisplayName>
+    <Description>Single entry point for partner integrations of the sample shop.</Description>
+</APIProxy>

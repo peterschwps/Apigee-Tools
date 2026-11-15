@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<KeyValueMapOperations continueOnError="false" enabled="true" mapIdentifier="shop-settings" name="KVM-GetMaxItems">
+    <DisplayName>KVM-GetMaxItems</DisplayName>
+    <Scope>environment</Scope>
+    <ExpiryTimeInSecs>300</ExpiryTimeInSecs>
+    <Get assignTo="private.orders.max_items">
+        <Key>
+            <Parameter>orders.max-items</Parameter>
+        </Key>
+    </Get>
+</KeyValueMapOperations>

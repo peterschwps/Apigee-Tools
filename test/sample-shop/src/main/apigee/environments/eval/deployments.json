@@ -1,0 +1,15 @@
+{
+  "proxies": [
+    "catalog-v1",
+    "catalog-v2",
+    "orders-v1",
+    "payments",
+    "customers",
+    "inventory-soap",
+    "shipping",
+    "partner-gateway",
+    "admin",
+    "status"
+  ],
+  "sharedflows": ["security-baseline", "cors", "quota-per-app", "logging"]
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "email": "storefront-team@example.com",
+    "userName": "storefront-team",
+    "firstName": "Storefront",
+    "lastName": "Team"
+  },
+  {
+    "email": "partner-integrations@example.com",
+    "userName": "partner-integrations",
+    "firstName": "Partner",
+    "lastName": "Integrations"
+  },
+  {
+    "email": "mobile-squad@example.com",
+    "userName": "mobile-squad",
+    "firstName": "Mobile",
+    "lastName": "Squad"
+  }
+]

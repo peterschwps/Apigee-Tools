@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<RaiseFault continueOnError="false" enabled="true" name="RF-InvalidRating">
+    <DisplayName>RF-InvalidRating</DisplayName>
+    <FaultResponse>
+        <Set>
+            <Payload contentType="application/json">{"error": "invalid_rating", "message": "Rate the product with 1 to 5 stars."}</Payload>
+            <StatusCode>400</StatusCode>
+            <ReasonPhrase>Bad Request</ReasonPhrase>
+        </Set>
+    </FaultResponse>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</RaiseFault>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ExtractVariables continueOnError="false" enabled="true" name="EV-ReviewRating">
+    <DisplayName>EV-ReviewRating</DisplayName>
+    <Source>request</Source>
+    <VariablePrefix>review</VariablePrefix>
+    <JSONPayload>
+        <Variable name="rating" type="integer">
+            <JSONPath>$.rating</JSONPath>
+        </Variable>
+    </JSONPayload>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</ExtractVariables>

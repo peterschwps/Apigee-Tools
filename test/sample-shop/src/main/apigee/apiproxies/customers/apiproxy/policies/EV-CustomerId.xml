@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- expect AX103: continueOnErorr is a typo that Apigee ignores silently -->
+<ExtractVariables continueOnErorr="false" enabled="true" name="EV-CustomerId">
+    <DisplayName>EV-CustomerId</DisplayName>
+    <Source>request</Source>
+    <VariablePrefix>customer</VariablePrefix>
+    <URIPath>
+        <Pattern ignoreCase="false">/{id}</Pattern>
+    </URIPath>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</ExtractVariables>

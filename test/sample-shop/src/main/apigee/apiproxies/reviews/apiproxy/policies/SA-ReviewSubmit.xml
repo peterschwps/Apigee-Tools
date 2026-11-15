@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- expect AX105: ture is a typo of true -->
+<SpikeArrest continueOnError="false" enabled="ture" name="SA-ReviewSubmit">
+    <DisplayName>SA-ReviewSubmit</DisplayName>
+    <Identifier ref="client_id"/>
+    <Rate>10pm</Rate>
+    <UseEffectiveCount>true</UseEffectiveCount>
+</SpikeArrest>

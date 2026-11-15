@@ -1,0 +1,47 @@
+[
+  {
+    "name": "catalog-backend",
+    "host": "catalog.dev.shop.example",
+    "port": 443,
+    "enabled": true,
+    "description": "Product catalog service",
+    "tlsInfo": { "enabled": true }
+  },
+  {
+    "name": "orders-backend",
+    "host": "orders.dev.shop.example",
+    "port": 443,
+    "enabled": true,
+    "description": "Order management service",
+    "tlsInfo": { "enabled": true }
+  },
+  {
+    "name": "payments-backend",
+    "host": "payments.dev.shop.example",
+    "port": 443,
+    "enabled": true,
+    "description": "Payment provider with mutual TLS",
+    "tlsInfo": {
+      "enabled": true,
+      "clientAuthEnabled": true,
+      "keyStore": "ref://payments-keystore",
+      "keyAlias": "payments-client"
+    }
+  },
+  {
+    "name": "carrier-api",
+    "host": "carrier.dev.shop.example",
+    "port": 443,
+    "enabled": true,
+    "description": "Parcel carrier rates and tracking",
+    "tlsInfo": { "enabled": true }
+  },
+  {
+    "name": "inventory-backend",
+    "host": "inventory.dev.shop.example",
+    "port": 8443,
+    "enabled": true,
+    "description": "SOAP inventory service",
+    "tlsInfo": { "enabled": true }
+  }
+]

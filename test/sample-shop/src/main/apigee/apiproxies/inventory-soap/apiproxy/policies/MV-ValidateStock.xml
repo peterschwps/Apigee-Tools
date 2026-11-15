@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<MessageValidation continueOnError="false" enabled="true" name="MV-ValidateStock">
+    <DisplayName>MV-ValidateStock</DisplayName>
+    <Source>request</Source>
+    <SOAPMessage version="1.1"/>
+    <Element namespace="urn:shop.example:inventory">StockRequest</Element>
+    <!-- expect AX109: the schema is an environment resource file in eval -->
+    <ResourceURL>xsd://inventory.xsd</ResourceURL>
+</MessageValidation>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage continueOnError="false" enabled="true" name="AM-InsufficientScope">
+    <DisplayName>AM-InsufficientScope</DisplayName>
+    <Set>
+        <Payload contentType="application/json">{"error": "insufficient_scope", "message": "The access token does not allow this operation."}</Payload>
+        <StatusCode>403</StatusCode>
+        <ReasonPhrase>Forbidden</ReasonPhrase>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" transport="http" type="response"/>
+</AssignMessage>

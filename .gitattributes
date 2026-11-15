@@ -1,2 +1,4 @@
 * text=auto eol=lf
 *.zip binary
+# Line endings, byte order marks and encodings in the sample are deliberate
+test/sample-shop/** -text

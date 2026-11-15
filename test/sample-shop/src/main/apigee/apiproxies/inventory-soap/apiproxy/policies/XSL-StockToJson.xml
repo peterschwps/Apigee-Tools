@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<XSL continueOnError="false" enabled="true" name="XSL-StockToJson">
+    <DisplayName>XSL-StockToJson</DisplayName>
+    <Source>response</Source>
+    <ResourceURL>xsl://stock-to-json.xsl</ResourceURL>
+</XSL>

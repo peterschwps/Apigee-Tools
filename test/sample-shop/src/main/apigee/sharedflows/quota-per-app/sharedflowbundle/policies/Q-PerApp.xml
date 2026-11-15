@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Quota continueOnError="false" enabled="true" name="Q-PerApp">
+    <DisplayName>Q-PerApp</DisplayName>
+    <Identifier ref="client_id"/>
+    <!-- Limits come from the API product; these values are the fallback -->
+    <Allow count="60" countRef="verifyapikey.VAK-ApiKey.apiproduct.developer.quota.limit"/>
+    <Interval ref="verifyapikey.VAK-ApiKey.apiproduct.developer.quota.interval">1</Interval>
+    <TimeUnit ref="verifyapikey.VAK-ApiKey.apiproduct.developer.quota.timeunit">minute</TimeUnit>
+    <Distributed>true</Distributed>
+    <Synchronous>false</Synchronous>
+</Quota>

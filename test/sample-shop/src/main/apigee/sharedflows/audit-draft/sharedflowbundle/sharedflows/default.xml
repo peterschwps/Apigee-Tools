@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SharedFlow name="default">
+    <Step>
+        <Name>AM-AuditRecord</Name>
+    </Step>
+    <Step>
+        <!-- expect AX108: the audit logging policy is not written yet -->
+        <Name>ML-AuditTrail</Name>
+    </Step>
+</SharedFlow>

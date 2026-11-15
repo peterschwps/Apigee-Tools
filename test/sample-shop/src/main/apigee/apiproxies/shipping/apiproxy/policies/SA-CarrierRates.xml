@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SpikeArrest continueOnError="false" enabled="true" name="SA-CarrierRates">
+    <DisplayName>SA-CarrierRates</DisplayName>
+    <!-- expect AX106: a rate is a number with ps or pm, such as 20ps -->
+    <Rate>fast</Rate>
+    <!-- expect AX110: Apigee X does not support rate smoothing -->
+    <UseEffectiveCount>false</UseEffectiveCount>
+</SpikeArrest>
