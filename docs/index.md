@@ -32,7 +32,7 @@ Checks for unknown elements and attributes apply only to complete reviewed conte
 
 AX113 checks the policy XML's root `name` attribute against the prefix selected for that policy type, in both proxy and shared flow policies and supported standalone policy XML. Prefixes are case-sensitive and include a hyphen: `AM-SetHeaders` is accepted for AssignMessage; `am-SetHeaders`, `AM_SetHeaders`, and `SA-SetHeaders` are not. File names and `DisplayName` are not checked by this rule.
 
-These prefixes are this linter's convention, not mandatory Apigee syntax. [Google recommends short type prefixes](https://docs.cloud.google.com/apigee/docs/api-platform/fundamentals/best-practices-api-proxy-design-and-development#naming-conventions), but does not define one complete binding list. The selection draws on the [Apigee naming recommendations](https://discuss.google.dev/t/apigee-naming-convention/17403), [apigeelint's catalogue](https://github.com/apigee/apigeelint/blob/main/lib/package/plugins/policyMetaData.json), and documented examples such as [HTTPModifier's HM prefix](https://docs.cloud.google.com/apigee/docs/api-platform/reference/policies/http-modifier-policy). An asterisk marks an additional project choice. Related types may share a prefix.
+These prefixes are this linter's convention, not mandatory Apigee syntax. [Google recommends short type prefixes](https://docs.cloud.google.com/apigee/docs/api-platform/fundamentals/best-practices-api-proxy-design-and-development#naming-conventions), but does not define one complete binding list. The selection draws on the [Apigee naming recommendations](https://discuss.google.dev/t/apigee-naming-convention/17403), [apigeelint's catalogue](https://github.com/apigee/apigeelint/blob/main/lib/package/plugins/policyMetaData.json), and documented examples such as [HTTPModifier's HM prefix](https://docs.cloud.google.com/apigee/docs/api-platform/reference/policies/http-modifier-policy). Related types may share a prefix.
 
 | Policy root | Prefix |
 | --- | --- |
@@ -101,6 +101,8 @@ These prefixes are this linter's convention, not mandatory Apigee syntax. [Googl
 | XMLToJSON | `X2J-` |
 | XMLThreatProtection | `XTP-` |
 | XSL | `XSL-` |
+
+\* Chosen by this project: none of the sources above names a prefix for this policy type.
 
 Use `--only AX113` in the CLI to find naming warnings, or `--ignore AX113` to suppress them. The extension's `ignore` setting and inline suppression also apply. The quick fix offers suppression; renaming a policy and its references is not automatic.
 
