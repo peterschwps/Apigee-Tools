@@ -137,14 +137,16 @@ export const styles = css`
     min-width: 0;
   }
 
-  /* The label above its dropdown, bold and sized as vscode-label draws it */
+  /* The label above its dropdown, bold as vscode-label draws it */
   .field {
     display: grid;
     gap: 4px;
   }
 
+  /* A size above the dropdown's, so the label leads */
   .field-label {
-    color: var(--at-text-muted);
+    color: var(--at-text);
+    font-size: 14px;
   }
 
   /* Wide enough for 30-character project IDs; the option list copies the width */
