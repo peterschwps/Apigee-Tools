@@ -564,8 +564,11 @@ export const styles = css`
     color: var(--vscode-icon-foreground, inherit);
   }
 
-  /* vscode-icon sets the icon color itself; here it follows the button */
-  .column-head vscode-icon {
+  /*
+   * vscode-icon sets the icon color itself; here it follows the button. Only
+   * the button's icon: the state icons in the filter menu keep their colors
+   */
+  .column-head .icon-button vscode-icon {
     color: inherit;
   }
 
