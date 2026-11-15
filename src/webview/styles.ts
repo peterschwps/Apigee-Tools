@@ -267,8 +267,8 @@ export const styles = css`
     --notice-color: var(--at-neutral);
   }
 
+  /* Only beside the first line: empty rows would add their gaps below the text */
   .notice > vscode-icon {
-    grid-row: span 3;
     color: var(--notice-color);
   }
 
