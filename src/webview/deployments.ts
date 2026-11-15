@@ -65,43 +65,58 @@ const tabs: [Kind, string][] = [
   ['sharedflows', 'Shared Flows'],
 ];
 
+type Sign = Pick<StatusInfo, 'icon' | 'tone'>;
+
+/**
+ * The icons of the dashboard, one per meaning: every view shows the same
+ * meaning with the same icon and color.
+ */
+export const signs = {
+  good: { icon: 'pass-filled', tone: 'success' },
+  warning: { icon: 'warning', tone: 'warning' },
+  error: { icon: 'error', tone: 'error' },
+  unknown: { icon: 'question', tone: 'info' },
+  /** A deployment whose files differ from the workspace. */
+  differs: { icon: 'diff-modified', tone: 'warning' },
+  /** Apigee is still working on it. */
+  busy: { icon: 'sync', tone: 'neutral' },
+  /** The dashboard is still loading it. */
+  loading: { icon: 'clock', tone: 'neutral' },
+  /** A missing value. */
+  none: { icon: 'dash', tone: 'neutral' },
+} satisfies Record<string, Sign>;
+
 export const statuses: Readonly<Record<StatusKey, StatusInfo>> = {
-  ready: { label: 'Ready', icon: 'pass-filled', tone: 'success' },
-  warnings: { label: 'Warnings', icon: 'warning', tone: 'warning' },
-  failed: { label: 'Failed', icon: 'error', tone: 'error' },
-  deploying: { label: 'Deploying', icon: 'sync', tone: 'neutral' },
-  unknown: { label: 'Unknown', icon: 'question', tone: 'info' },
-  none: { label: 'Not deployed', icon: 'dash', tone: 'neutral' },
+  ready: { label: 'Ready', ...signs.good },
+  warnings: { label: 'Warnings', ...signs.warning },
+  failed: { label: 'Failed', ...signs.error },
+  deploying: { label: 'Deploying', ...signs.busy },
+  unknown: { label: 'Unknown', ...signs.unknown },
+  none: { label: 'Not deployed', ...signs.none },
 };
 
 export const comparisons: Readonly<Record<ComparisonKey, StatusInfo>> = {
   matches: {
     label: 'Same',
     tooltip: 'Same as in the workspace',
-    icon: 'check',
-    tone: 'success',
+    ...signs.good,
   },
   differs: {
     label: 'Differs',
     tooltip: 'Differs from the workspace',
-    icon: 'diff-modified',
-    tone: 'warning',
+    ...signs.differs,
   },
-  unknown: { label: 'Not compared', icon: 'question', tone: 'info' },
+  // A comparison that failed needs attention, unlike an unknown status
+  unknown: { label: 'Not compared', ...signs.warning },
   absent: {
     label: 'Not in workspace',
     tooltip: 'Not in the workspace',
-    icon: 'dash',
-    tone: 'neutral',
+    ...signs.none,
   },
 };
 
 // Unknown states while a load may still bring them
-const checking: StatusInfo = {
-  label: 'Checking…',
-  icon: 'clock',
-  tone: 'neutral',
-};
+const checking: StatusInfo = { label: 'Checking…', ...signs.loading };
 const comparing: StatusInfo = { ...checking, label: 'Comparing…' };
 
 /** What Apigee's route conflicts mean; its own messages follow. */
@@ -150,7 +165,7 @@ function sharesName(snapshot: Loaded, row: Row): boolean {
 }
 
 /** Renders a status icon, colored by tone. */
-export function statusIcon(status: Pick<StatusInfo, 'icon' | 'tone'>) {
+export function statusIcon(status: Sign) {
   return html`<vscode-icon
     name=${status.icon}
     class="tone-${status.tone}"

@@ -5,6 +5,7 @@ import type { Cell, Overview, Row } from '../protocol';
 import {
   isProblem,
   messagesOf,
+  signs,
   statuses,
   statusIcon,
   statusOf,
@@ -35,9 +36,7 @@ export function overview(snapshot: Loaded, actions: Actions) {
           <dt>Problems</dt>
           <dd>
             ${
-              problems.length
-                ? statusIcon({ icon: 'error', tone: 'error' })
-                : nothing
+              problems.length ? statusIcon(signs.error) : nothing
             }${problems.length}
           </dd>
         </div>
