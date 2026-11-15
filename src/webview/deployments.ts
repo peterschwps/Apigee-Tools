@@ -1,6 +1,7 @@
-// The Deployments tab: the proxies and shared flows of one environment, with
-// their deployment status, revision, comparison with local bundles, and
-// problems.
+// The Deployments tab: the proxies and shared flows of one environment in a
+// tab each, with their status, revision, comparison with the local bundle,
+// and problems.
+import type { VscodeSingleSelect } from '@vscode-elements/elements/dist/vscode-single-select/index.js';
 import type { VscodeTextfield } from '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import { html, nothing } from 'lit';
 import type {
@@ -15,11 +16,20 @@ import type {
 /** A snapshot with data to show. */
 export type Loaded = Snapshot & { overview: Overview; rows: Row[] };
 
-/** The filters of the Deployments tab. */
+/** How a deployment is doing in its environment. */
+type StatusKey =
+  'ready' | 'warnings' | 'failed' | 'deploying' | 'unknown' | 'none';
+
+/** How a deployment compares with the local bundle of its name. */
+type ComparisonKey = 'matches' | 'differs' | 'unknown';
+
+/** The tab and the filters of the Deployments tab; empty filters show all. */
 export type DeploymentView = {
   environment: string;
+  kind: Kind;
   filter: string;
-  onlyProblems: boolean;
+  status: StatusKey | '';
+  comparison: ComparisonKey | '';
 };
 
 /** How the tabs report actions: messages to the extension and view changes. */
@@ -29,8 +39,8 @@ export type Actions = {
 };
 
 /**
- * How a status shows: an icon whose shape differs per status, never color
- * alone; the label is its tooltip, its accessible name, and its legend entry.
+ * How a state shows: an icon whose shape differs per state, never color
+ * alone; the label is its tooltip, its accessible name, and its filter option.
  */
 type StatusInfo = {
   label: string;
@@ -40,79 +50,57 @@ type StatusInfo = {
 };
 
 export const kindLabels: Readonly<Record<Kind, string>> = {
-  apis: 'API proxy',
-  sharedflows: 'Shared flow',
+  apis: 'API Proxy',
+  sharedflows: 'Shared Flow',
 };
 
-const groups: [Kind, string][] = [
+const tabs: [Kind, string][] = [
   ['apis', 'API Proxies'],
   ['sharedflows', 'Shared Flows'],
 ];
 
-const ready: StatusInfo = {
-  label: 'Ready',
-  icon: 'pass-filled',
-  tone: 'success',
+const statuses: Readonly<Record<StatusKey, StatusInfo>> = {
+  ready: { label: 'Ready', icon: 'pass-filled', tone: 'success' },
+  warnings: { label: 'Warnings', icon: 'warning', tone: 'warning' },
+  failed: { label: 'Failed', icon: 'error', tone: 'error' },
+  deploying: { label: 'Deploying', icon: 'sync', tone: 'neutral' },
+  unknown: { label: 'Unknown', icon: 'question', tone: 'neutral' },
+  none: { label: 'Not deployed', icon: 'dash', tone: 'neutral' },
 };
-const conflict: StatusInfo = {
-  label: 'Route conflict',
-  icon: 'warning',
-  tone: 'warning',
+
+export const comparisons: Readonly<Record<ComparisonKey, StatusInfo>> = {
+  matches: { label: 'Matches', icon: 'check', tone: 'neutral' },
+  differs: { label: 'Differs', icon: 'diff-modified', tone: 'warning' },
+  unknown: { label: 'Not compared', icon: 'question', tone: 'neutral' },
 };
-const failed: StatusInfo = { label: 'Failed', icon: 'error', tone: 'error' };
-const deploying: StatusInfo = {
-  label: 'Deploying',
-  icon: 'sync',
-  tone: 'neutral',
-};
-const unchecked: StatusInfo = {
-  label: 'Status not checked',
-  icon: 'clock',
-  tone: 'neutral',
-};
-const matches: StatusInfo = {
-  label: 'Matches the local bundle',
-  icon: 'check',
-  tone: 'neutral',
-};
-const differs: StatusInfo = {
-  label: 'Differs from the local bundle',
-  icon: 'diff-modified',
-  tone: 'warning',
-};
-const incomparable: StatusInfo = {
-  label: 'Comparison with the local bundle failed',
-  icon: 'question',
-  tone: 'neutral',
-};
+
+/** What Apigee's route conflicts mean; its own messages follow. */
+const conflictHint =
+  'Base path conflict: another environment in the same environment group serves this base path too, so Apigee routes its requests to only one of them.';
 
 /** Returns whether a deployment failed or has a route conflict. */
 export function isProblem(cell: Cell): boolean {
   return cell.state === 'ERROR' || Boolean(cell.routeConflicts?.length);
 }
 
-/** Returns the status of a deployment; without a state it may still load. */
-function deploymentStatus(cell: Cell, loading: boolean): StatusInfo {
-  if (cell.state === 'ERROR') return failed;
-  if (cell.routeConflicts?.length) return conflict;
-  if (cell.state === 'READY') return ready;
-  if (cell.state === 'PROGRESSING') return deploying;
-  return loading
-    ? { label: 'Checking status', icon: 'clock', tone: 'neutral' }
-    : unchecked;
+/** Returns how a deployment is doing; without a cell, it is not deployed. */
+function statusOf(cell: Cell | undefined): StatusKey {
+  if (!cell) return 'none';
+  if (cell.state === 'ERROR') return 'failed';
+  if (cell.routeConflicts?.length) return 'warnings';
+  if (cell.state === 'READY') return 'ready';
+  if (cell.state === 'PROGRESSING') return 'deploying';
+  return 'unknown';
 }
 
-/** Returns how a deployment compares with the local bundle of its name. */
-function localStatus(cell: Cell, loading: boolean): StatusInfo {
-  if (cell.drift) return differs;
-  if (cell.drift === false) return matches;
-  return loading
-    ? {
-        label: 'Comparing with the local bundle',
-        icon: 'clock',
-        tone: 'neutral',
-      }
-    : incomparable;
+/** Returns how a deployment compares with its local bundle, if it has one. */
+function comparisonOf(
+  row: Row,
+  cell: Cell | undefined,
+): ComparisonKey | undefined {
+  if (!cell || !row.local) return undefined;
+  if (cell.drift === undefined) return 'unknown';
+  return cell.drift ? 'differs' : 'matches';
 }
 
 /** Renders a status icon, colored by tone. */
@@ -121,6 +109,11 @@ export function statusIcon(status: Pick<StatusInfo, 'icon' | 'tone'>) {
     name=${status.icon}
     class="tone-${status.tone}"
   ></vscode-icon>`;
+}
+
+/** Renders a state as its icon; the tooltip of its cell names it. */
+function stateIcon(status: StatusInfo, tooltip: string) {
+  return html`${statusIcon(status)}<span class="sr-only">${tooltip}</span>`;
 }
 
 /** Returns the Apigee console page of a proxy or shared flow. */
@@ -141,16 +134,16 @@ export function deployments(
 ) {
   const { environment } = view;
   const query = view.filter.trim().toLowerCase();
-  const rows = snapshot.rows.filter(row => {
+  const shown = snapshot.rows.filter(row => {
     const cell = row.cells[environment];
-    // A failed comparison is a difference that is not known yet
-    const unknown = row.local && cell?.drift === undefined && !snapshot.loading;
     return (
       row.name.toLowerCase().includes(query) &&
-      (!view.onlyProblems ||
-        Boolean(cell && (isProblem(cell) || cell.drift || unknown)))
+      (!view.status || statusOf(cell) === view.status) &&
+      (!view.comparison || comparisonOf(row, cell) === view.comparison)
     );
   });
+  const count = (rows: Row[]) =>
+    rows.filter(row => row.kind === view.kind).length;
   return html`
     <div class="page">
       <div class="toolbar">
@@ -165,39 +158,117 @@ export function deployments(
         >
           <vscode-icon slot="content-before" name="filter"></vscode-icon>
         </vscode-textfield>
-        <label class="checkbox">
-          <input
-            type="checkbox"
-            .checked=${view.onlyProblems}
-            @change=${(event: Event) =>
-              actions.setView({
-                onlyProblems: (event.target as HTMLInputElement).checked,
-              })}
-          />
-          Only problems and differences
-        </label>
+        ${filterSelect(
+          'status-filter',
+          'Status',
+          view.status,
+          statuses,
+          status => actions.setView({ status }),
+        )}
+        ${filterSelect(
+          'comparison-filter',
+          'Local Bundle',
+          view.comparison,
+          comparisons,
+          comparison => actions.setView({ comparison }),
+        )}
         <span class="count" aria-live="polite" aria-atomic="true">
-          ${rows.length} of ${snapshot.rows.length} shown
+          ${count(shown)} of ${count(snapshot.rows)} shown
         </span>
       </div>
       <section class="card">
         ${
           environment
-            ? table(snapshot, rows, environment, actions)
+            ? kindTabs(snapshot, shown, view, actions)
             : html`<p class="muted">
                 This organization has no environments yet.
               </p>`
         }
       </section>
-      ${problemList(snapshot.rows, environment)}
     </div>
   `;
 }
 
-/** The deployments of one environment, grouped into proxies and shared flows. */
+/** A select that filters by one column; its first option shows all rows. */
+function filterSelect<Key extends string>(
+  id: string,
+  label: string,
+  selected: Key | '',
+  options: Readonly<Record<Key, StatusInfo>>,
+  select: (key: Key | '') => void,
+) {
+  return html`
+    <div class="field">
+      <vscode-label for=${id}>
+        <span class="field-label">${label}</span>
+      </vscode-label>
+      <vscode-single-select
+        id=${id}
+        @change=${(event: Event) =>
+          select((event.target as VscodeSingleSelect).value as Key | '')}
+      >
+        <vscode-option value="" ?selected=${!selected}>All</vscode-option>
+        ${(Object.keys(options) as Key[]).map(
+          key => html`
+            <vscode-option value=${key} ?selected=${key === selected}
+              >${options[key].label}</vscode-option
+            >
+          `,
+        )}
+      </vscode-single-select>
+    </div>
+  `;
+}
+
+/**
+ * The proxies and the shared flows in a tab each, counted after filtering;
+ * the problems below a table follow its filters.
+ */
+function kindTabs(
+  snapshot: Loaded,
+  shown: Row[],
+  view: DeploymentView,
+  actions: Actions,
+) {
+  const selected = Math.max(
+    0,
+    tabs.findIndex(([kind]) => kind === view.kind),
+  );
+  return html`
+    <vscode-tabs
+      selected-index=${selected}
+      @vsc-tabs-select=${(event: CustomEvent<{ selectedIndex: number }>) =>
+        actions.setView({ kind: tabs[event.detail.selectedIndex][0] })}
+    >
+      ${tabs.map(
+        ([kind, label]) => html`
+          <vscode-tab-header slot="header">
+            <span class="tab-label">${label}</span>
+            <vscode-badge variant="counter" slot="content-after"
+              >${shown.filter(row => row.kind === kind).length}</vscode-badge
+            >
+          </vscode-tab-header>
+        `,
+      )}
+      ${tabs.map(([kind, label]) => {
+        const rows = shown.filter(row => row.kind === kind);
+        return html`
+          <vscode-tab-panel>
+            ${table(snapshot, rows, kind, label, view.environment, actions)}
+            ${problemList(rows, view.environment)}
+          </vscode-tab-panel>
+        `;
+      })}
+    </vscode-tabs>
+  `;
+}
+
+/** The deployments of one kind in the chosen environment. */
 function table(
   snapshot: Loaded,
   rows: Row[],
+  kind: Kind,
+  label: string,
   environment: string,
   actions: Actions,
 ) {
@@ -205,59 +276,40 @@ function table(
     <div class="table-scroll">
       <table class="deployments">
         <caption class="sr-only">
-          Deployments in ${environment}
+          ${label} in ${environment}
         </caption>
         <thead>
           <tr>
             <th scope="col">Name</th>
             <th scope="col" class="icon-cell">Status</th>
             <th scope="col" class="revision">Revision</th>
-            <th scope="col" class="icon-cell">Local bundle</th>
-            <th scope="col"><span class="sr-only">Actions</span></th>
+            <th scope="col" class="icon-cell">Local Bundle</th>
+            <th scope="col" class="actions">
+              <span class="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
-        ${groups.map(([kind, label]) => {
-          const members = rows.filter(row => row.kind === kind);
-          if (!members.length) return nothing;
-          return html`
-            <tbody>
-              <tr class="group">
-                <th scope="colgroup" colspan="5">${label}</th>
-              </tr>
-              ${members.map(row =>
-                deploymentRow(snapshot, row, environment, actions),
-              )}
-            </tbody>
-          `;
-        })}
-        ${
-          rows.length
-            ? nothing
-            : html`
-                <tbody>
+        <tbody>
+          ${
+            rows.length
+              ? rows.map(row =>
+                  deploymentRow(snapshot, row, environment, actions),
+                )
+              : html`
                   <tr>
                     <td class="empty" colspan="5">
                       ${
-                        snapshot.rows.length
-                          ? 'No proxies or shared flows match the filter.'
-                          : 'This organization has no API proxies or shared flows yet.'
+                        snapshot.rows.some(row => row.kind === kind)
+                          ? 'None match the filters.'
+                          : 'None in this organization yet.'
                       }
                     </td>
                   </tr>
-                </tbody>
-              `
-        }
+                `
+          }
+        </tbody>
       </table>
     </div>
-    <ul class="legend" aria-label="Legend">
-      ${[ready, conflict, failed, deploying, unchecked].map(
-        status => html`<li>${statusIcon(status)}${status.label}</li>`,
-      )}
-      <li><span aria-hidden="true">—</span>Not deployed</li>
-      ${[matches, differs, incomparable].map(
-        status => html`<li>${statusIcon(status)}${status.label}</li>`,
-      )}
-    </ul>
   `;
 }
 
@@ -269,9 +321,22 @@ function deploymentRow(
   actions: Actions,
 ) {
   const cell = row.cells[environment];
-  const status = cell && deploymentStatus(cell, snapshot.loading);
-  const local = cell && row.local && localStatus(cell, snapshot.loading);
-  const tooltip = cell && [status!.label, ...details(cell)].join('\n');
+  const statusKey = statusOf(cell);
+  const comparisonKey = comparisonOf(row, cell);
+  // Unknown states may still be loading
+  const loading = (key?: string) => key === 'unknown' && snapshot.loading;
+  const status = loading(statusKey)
+    ? { label: 'Checking…', icon: 'clock', tone: 'neutral' as const }
+    : statuses[statusKey];
+  const comparison = loading(comparisonKey)
+    ? { label: 'Comparing…', icon: 'clock', tone: 'neutral' as const }
+    : comparisonKey && comparisons[comparisonKey];
+  const conflicts = cell?.routeConflicts ?? [];
+  const tooltip = [
+    status.label,
+    ...(cell?.errors ?? []),
+    ...(conflicts.length ? [conflictHint, ...conflicts] : []),
+  ].join('\n');
   return html`
     <tr>
       <th scope="row">
@@ -283,23 +348,10 @@ function deploymentRow(
           ></a
         >
       </th>
-      <td class="icon-cell" title=${tooltip || 'Not deployed'}>
-        ${
-          status
-            ? html`${statusIcon(status)}<span class="sr-only">${tooltip}</span>`
-            : html`<span class="muted" aria-hidden="true">—</span
-                ><span class="sr-only">Not deployed</span>`
-        }
-      </td>
+      <td class="icon-cell" title=${tooltip}>${stateIcon(status, tooltip)}</td>
       <td class="revision">${cell ? cell.revision : nothing}</td>
-      <td class="icon-cell" title=${local ? local.label : nothing}>
-        ${
-          local
-            ? html`${statusIcon(local)}<span class="sr-only"
-                  >${local.label}</span
-                >`
-            : nothing
-        }
+      <td class="icon-cell" title=${comparison ? comparison.label : nothing}>
+        ${comparison ? stateIcon(comparison, comparison.label) : nothing}
       </td>
       <td class="actions">
         ${
@@ -325,7 +377,7 @@ function deploymentRow(
   `;
 }
 
-/** Failed deployments and route conflicts with their full messages. */
+/** The failed deployments and route conflicts shown, with their messages. */
 function problemList(rows: Row[], environment: string) {
   const problems = rows.flatMap(row => {
     const cell = row.cells[environment];
@@ -333,11 +385,11 @@ function problemList(rows: Row[], environment: string) {
   });
   if (!problems.length) return nothing;
   return html`
-    <section class="card">
-      <div class="card-head"><h2>Problems</h2></div>
+    <section class="problem-section">
+      <h3>Problems</h3>
       <ul class="problems">
         ${problems.map(({ row, cell }) => {
-          const status = deploymentStatus(cell, false);
+          const status = statuses[statusOf(cell)];
           return html`
             <li>
               ${statusIcon(status)}

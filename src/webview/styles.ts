@@ -159,7 +159,7 @@ export const styles = css`
     }
 
     /* Labels above the selects keep both in one row at narrow widths */
-    .field {
+    .topbar .field {
       flex-direction: column;
       align-items: flex-start;
       gap: 0;
@@ -194,6 +194,10 @@ export const styles = css`
   /* Tabs */
   vscode-tabs {
     padding: 0 20px;
+  }
+
+  .card vscode-tabs {
+    padding: 0;
   }
 
   /* A 2px active indicator; the header's own underline is only 1px */
@@ -453,23 +457,7 @@ export const styles = css`
     white-space: normal;
   }
 
-  /* Deployments: proxies and shared flows under group rows, icons centered */
-  .deployments tr.group th {
-    padding-top: 14px;
-    color: var(--at-text-muted);
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .deployments tbody:first-of-type tr.group th {
-    padding-top: 6px;
-  }
-
-  .deployments tr.group:hover {
-    background: none;
-  }
-
-  /* Narrow columns at the right; the name takes the remaining width */
+  /* Deployments: narrow columns at the right; the name takes the rest */
   .deployments .icon-cell,
   .deployments .revision {
     width: 1%;
@@ -515,22 +503,12 @@ export const styles = css`
     outline-offset: -1px;
   }
 
-  .legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 16px;
-    margin: 8px 0 0;
-    padding: 8px 0 0;
+  .problem-section {
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 12px;
     border-top: 1px solid var(--at-border);
-    color: var(--at-text-muted);
-    font-size: 12px;
-    list-style: none;
-  }
-
-  .legend li {
-    display: flex;
-    align-items: center;
-    gap: 6px;
   }
 
   .problems {
@@ -562,28 +540,14 @@ export const styles = css`
     gap: 8px 20px;
   }
 
-  .checkbox {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-  }
-
-  .checkbox input {
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    accent-color: var(--vscode-focusBorder);
-  }
-
-  .checkbox input:focus-visible {
-    outline: 1px solid var(--vscode-focusBorder);
-    outline-offset: 2px;
-  }
-
   .toolbar vscode-textfield {
     width: 280px;
     max-width: 100%;
+  }
+
+  /* Wide enough for the longest options, "Not deployed" and "Not compared" */
+  .toolbar vscode-single-select {
+    width: 140px;
   }
 
   .count {

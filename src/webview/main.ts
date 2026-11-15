@@ -2,7 +2,6 @@
 // reports the user's actions back; it never calls an API itself.
 import '@vscode-elements/elements/dist/vscode-badge/index.js';
 import '@vscode-elements/elements/dist/vscode-button/index.js';
-import '@vscode-elements/elements/dist/vscode-checkbox/index.js';
 import '@vscode-elements/elements/dist/vscode-icon/index.js';
 import '@vscode-elements/elements/dist/vscode-label/index.js';
 import '@vscode-elements/elements/dist/vscode-option/index.js';
@@ -49,7 +48,10 @@ const reducedMotion = () =>
   matchMedia('(prefers-reduced-motion: reduce)').matches ||
   document.body.classList.contains('vscode-reduce-motion');
 
-/** vscode-tabs selects only on Enter; Space selects the focused tab too, instead of scrolling. */
+/**
+ * vscode-tabs selects only on Enter; Space selects the focused tab too, instead
+ * of scrolling. On the outer tabs, it also serves the tabs nested in a panel.
+ */
 const selectWithSpace = (event: KeyboardEvent) => {
   const header = event.target as HTMLElement;
   if (event.key !== ' ' || header.localName !== 'vscode-tab-header') return;
@@ -88,8 +90,10 @@ class ApigeeDashboard extends LitElement {
     this.view = {
       tab: 0,
       environment: '',
+      kind: 'apis',
       filter: '',
-      onlyProblems: false,
+      status: '',
+      comparison: '',
       ...vscode.getState(),
     };
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {

@@ -3,6 +3,7 @@
 import { html, nothing } from 'lit';
 import type { LocalBundle, Overview, Row } from '../protocol';
 import {
+  comparisons,
   isProblem,
   kindLabels,
   statusIcon,
@@ -96,16 +97,16 @@ export function workspace(
                         ${
                           shared(bundle)
                             ? html`<span class="finding"
-                                >${statusIcon({ icon: 'info', tone: 'neutral' })}
-                                Name used by several bundles, not compared</span
+                                >${statusIcon(comparisons.unknown)} Name used by
+                                several bundles, not compared</span
                               >`
                             : nothing
                         }
                         ${
                           drifted.length
                             ? html`<span class="finding"
-                                >${statusIcon({ icon: 'warning', tone: 'warning' })}
-                                Differs from ${drifted.join(', ')}</span
+                                >${statusIcon(comparisons.differs)} Differs from
+                                ${drifted.join(', ')}</span
                               >`
                             : nothing
                         }
@@ -205,7 +206,7 @@ function findings(bundle: LocalBundle) {
       bundle.errors
         ? html`<span class="finding"
             >${statusIcon({ icon: 'error', tone: 'error' })}
-            ${count(bundle.errors, 'error')}</span
+            ${count(bundle.errors, 'Error')}</span
           >`
         : nothing
     }
@@ -213,7 +214,7 @@ function findings(bundle: LocalBundle) {
       bundle.warnings
         ? html`<span class="finding"
             >${statusIcon({ icon: 'warning', tone: 'warning' })}
-            ${count(bundle.warnings, 'warning')}</span
+            ${count(bundle.warnings, 'Warning')}</span
           >`
         : nothing
     }

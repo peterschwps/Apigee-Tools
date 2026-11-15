@@ -380,7 +380,7 @@ export function registerDashboard(
       const ambiguous = rows.filter(row => localBundles(row).length > 1);
       if (ambiguous.length) {
         notes.push(
-          `Several bundles in the workspace are named ${ambiguous.map(row => row.name).join(', ')}, so they are not compared. Exclude the extra copies with apigeeTools.exclude.`,
+          `Several bundles in the workspace are named ${ambiguous.map(row => `"${row.name}"`).join(', ')}, so they are not compared. Exclude the extra copies with apigeeTools.exclude.`,
         );
       }
       snapshot = {
@@ -576,7 +576,7 @@ export function registerDashboard(
     );
     if (failed.length) {
       notes.push(
-        `Differences from the local bundle could not be checked for ${failed.join(', ')}: ${messageOf(firstFailure)}`,
+        `Differences from the local bundle could not be checked for ${failed.map(name => `"${name}"`).join(', ')}: ${messageOf(firstFailure)}`,
       );
     }
   }
