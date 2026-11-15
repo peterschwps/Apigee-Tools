@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+    <PreFlow name="PreFlow">
+        <Request>
+            <Step>
+                <Name>OA-VerifyAccessToken</Name>
+            </Step>
+            <Step>
+                <Name>FC-QuotaPerApp</Name>
+            </Step>
+        </Request>
+        <Response/>
+    </PreFlow>
+    <Flows>
+        <Flow name="createOrder">
+            <Request>
+                <Step>
+                    <Name>KVM-GetMaxItems</Name>
+                </Step>
+                <Step>
+                    <Name>JS-ValidateOrder</Name>
+                </Step>
+                <Step>
+                    <Name>RF-InvalidOrder</Name>
+                    <Condition>order.valid = "false"</Condition>
+                </Step>
+            </Request>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/orders") and (request.verb = "POST")</Condition>
+        </Flow>
+        <Flow name="getOrder">
+            <Request>
+                <Step>
+                    <Name>EV-OrderId</Name>
+                </Step>
+            </Request>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/orders/*") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="cancelOrder">
+            <Request>
+                <Step>
+                    <Name>EV-OrderId</Name>
+                </Step>
+            </Request>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/orders/*") and (request.verb = "DELETE")</Condition>
+        </Flow>
+    </Flows>
+    <PostFlow name="PostFlow">
+        <Request/>
+        <Response/>
+    </PostFlow>
+    <HTTPProxyConnection>
+        <BasePath>/orders/v1</BasePath>
+    </HTTPProxyConnection>
+    <RouteRule name="default">
+        <TargetEndpoint>default</TargetEndpoint>
+    </RouteRule>
+</ProxyEndpoint>

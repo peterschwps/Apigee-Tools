@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<APIProxy revision="1" name="catalog-v2">
+    <DisplayName>Catalog v2</DisplayName>
+    <Description>Product catalog of the sample shop with paging and request validation.</Description>
+</APIProxy>

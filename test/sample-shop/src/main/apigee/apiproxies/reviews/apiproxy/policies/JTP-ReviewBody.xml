@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<JSONThreatProtection continueOnError="false" enabled="true" name="JTP-ReviewBody">
+    <DisplayName>JTP-ReviewBody</DisplayName>
+    <ArrayElementCount>10</ArrayElementCount>
+    <ContainerDepth>4</ContainerDepth>
+    <ObjectEntryCount>10</ObjectEntryCount>
+    <ObjectEntryNameLength>30</ObjectEntryNameLength>
+    <Source>request</Source>
+    <StringValueLength>2000</StringValueLength>
+</JSONThreatProtection>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage continueOnError="false" enabled="true" name="AM-PartnerHeaders">
+    <DisplayName>AM-PartnerHeaders</DisplayName>
+    <Set>
+        <Headers>
+            <Header name="x-shop-channel">partner</Header>
+            <Header name="x-partner-app">{developer.app.name}</Header>
+        </Headers>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" transport="http" type="request"/>
+</AssignMessage>

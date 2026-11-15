@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- apigee-tools disable=AX113 -->
+<ExtractVariables async="false" continueOnError="false" enabled="true" name="GetSessionId">
+    <DisplayName>GetSessionId</DisplayName>
+    <Source>request</Source>
+    <VariablePrefix>legacy</VariablePrefix>
+    <XMLPayload stopPayloadProcessing="false">
+        <Variable name="sessionId" type="string">
+            <XPath>/*/*[local-name() = 'Header']/*[local-name() = 'Session']/*[local-name() = 'Id']</XPath>
+        </Variable>
+    </XMLPayload>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</ExtractVariables>

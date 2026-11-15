@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+    <Description>Carrier rates from the cache or the carrier, shipments from the shipping service.</Description>
+    <PreFlow name="PreFlow">
+        <Request>
+            <Step>
+                <Name>SA-ShippingTraffic</Name>
+            </Step>
+        </Request>
+        <Response/>
+    </PreFlow>
+    <Flows>
+        <Flow name="getRates">
+            <Description>Carrier rates for a parcel, cached for ten minutes.</Description>
+            <Request>
+                <Step>
+                    <Name>KVM-CheckoutFlag</Name>
+                </Step>
+                <Step>
+                    <Name>RC-ShippingRates</Name>
+                </Step>
+                <Step>
+                    <Name>SA-CarrierRates</Name>
+                </Step>
+                <Step>
+                    <Name>SC-CarrierRates</Name>
+                </Step>
+            </Request>
+            <Response>
+                <Step>
+                    <Name>AM-RatesResponse</Name>
+                    <Condition>(responsecache.RC-ShippingRates.cachehit = false)</Condition>
+                </Step>
+                <Step>
+                    <Name>RC-ShippingRates</Name>
+                </Step>
+            </Response>
+            <Condition>(proxy.pathsuffix MatchesPath "/rates") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="createShipment">
+            <Request/>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/shipments") and (request.verb = "POST")</Condition>
+        </Flow>
+        <Flow name="trackShipment">
+            <Request/>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/shipments/*/tracking") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="unknownResource">
+            <Request>
+                <Step>
+                    <Name>RF-UnknownResource</Name>
+                </Step>
+            </Request>
+            <Response/>
+        </Flow>
+    </Flows>
+    <PostFlow name="PostFlow">
+        <Request/>
+        <Response/>
+    </PostFlow>
+    <HTTPProxyConnection>
+        <BasePath>/shipping</BasePath>
+    </HTTPProxyConnection>
+    <RouteRule name="ratesFromCarrier">
+        <Condition>(proxy.pathsuffix MatchesPath "/rates")</Condition>
+    </RouteRule>
+    <RouteRule name="default">
+        <TargetEndpoint>default</TargetEndpoint>
+    </RouteRule>
+</ProxyEndpoint>

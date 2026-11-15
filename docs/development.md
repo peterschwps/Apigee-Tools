@@ -57,7 +57,11 @@ uv tool run --with "mkdocs-material>=9,<10" "mkdocs>=1.6,<2" build --strict
 npx tsx scripts/test-org.ts provision PROJECT_ID
 npx tsx scripts/test-org.ts populate PROJECT_ID
 npx tsx scripts/test-org.ts status PROJECT_ID
+npx tsx scripts/test-org.ts conflict PROJECT_ID on
+npx tsx scripts/test-org.ts conflict PROJECT_ID off
 npx tsx scripts/test-org.ts delete PROJECT_ID --yes
 ```
 
-Provisioning takes up to 40 minutes. `populate` adds an environment `test` in a group `test-group`, deploys the fixture proxy `hello` unchanged to `eval` and with one changed policy to `test`, and deploys the shared flow `traffic-shared` to `eval`. In the Extension Development Host, open the dashboard on this repository: `hello` matches the local bundle in `eval` and differs from it in `test`.
+Provisioning takes up to 40 minutes. `populate` adds an environment `test` in a group `test-group` and deploys the sample shop from `test/sample-shop`: the environment configuration, the proxies and shared flows that its Cloud Code files list, older revisions of a few bundles, and API products, developers and apps. A second run changes nothing; configuration that already exists in the organization is kept, so delete it there to apply an edited file. `status` lists every deployment with its state, errors and route conflicts. `conflict on` also attaches `test` to `eval-group`, so every base path deployed in both environments conflicts; turn it off before the next `populate`.
+
+Start **Run Apigee Tools (sample shop)** to open the shop in the Extension Development Host. The linter shows its deliberate findings there, and the dashboard shows the organization; `test/sample-shop/README.md` lists what each bundle should show. No request ever reaches the proxies, since that would need billable networking, so debug sessions and analytics stay empty.

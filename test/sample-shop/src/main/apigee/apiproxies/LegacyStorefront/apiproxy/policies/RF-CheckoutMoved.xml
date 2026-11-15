@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<RaiseFault async="false" continueOnError="false" enabled="true" name="RF-CheckoutMoved">
+    <DisplayName>RF-CheckoutMoved</DisplayName>
+    <FaultResponse>
+        <Set>
+            <Payload contentType="text/xml">
+                <Error>
+                    <Code>CheckoutMoved</Code>
+                    <Message>The legacy checkout is switched off. Use the orders API instead.</Message>
+                </Error>
+            </Payload>
+            <StatusCode>410</StatusCode>
+            <ReasonPhrase>Gone</ReasonPhrase>
+        </Set>
+    </FaultResponse>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</RaiseFault>

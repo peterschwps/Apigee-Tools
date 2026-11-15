@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AccessControl continueOnError="false" enabled="true" name="AC-InternalNetworks">
+    <DisplayName>AC-InternalNetworks</DisplayName>
+    <IPRules noRuleMatchAction="DENY">
+        <MatchRule action="ALLOW">
+            <SourceAddress mask="8">10.0.0.0</SourceAddress>
+            <SourceAddress mask="16">192.168.0.0</SourceAddress>
+        </MatchRule>
+    </IPRules>
+</AccessControl>

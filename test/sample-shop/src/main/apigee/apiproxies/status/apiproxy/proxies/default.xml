@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+    <Description>Mock endpoint for uptime checks; it never calls a target.</Description>
+    <PreFlow name="PreFlow">
+        <Request/>
+        <Response/>
+    </PreFlow>
+    <Flows>
+        <Flow name="getHealth">
+            <Request/>
+            <Response>
+                <Step>
+                    <Name>AM-HealthResponse</Name>
+                </Step>
+            </Response>
+            <Condition>(proxy.pathsuffix MatchesPath "/health") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="unknownResource">
+            <Description>Answers every other path or verb with 404.</Description>
+            <Request>
+                <Step>
+                    <Name>RF-UnknownResource</Name>
+                </Step>
+            </Request>
+            <Response/>
+        </Flow>
+    </Flows>
+    <PostFlow name="PostFlow">
+        <Request/>
+        <Response/>
+    </PostFlow>
+    <HTTPProxyConnection>
+        <BasePath>/status</BasePath>
+    </HTTPProxyConnection>
+    <RouteRule name="noTarget"/>
+</ProxyEndpoint>

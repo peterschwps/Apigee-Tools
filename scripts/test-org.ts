@@ -1,9 +1,11 @@
 // Creates a free Apigee X evaluation organization to try the dashboard
-// against, fills it with the test fixtures, and deletes it again:
+// against, deploys the sample shop from test/sample-shop into it, and deletes
+// it again:
 //
 //   npx tsx scripts/test-org.ts provision PROJECT_ID [REGION]
 //   npx tsx scripts/test-org.ts populate PROJECT_ID
 //   npx tsx scripts/test-org.ts status PROJECT_ID
+//   npx tsx scripts/test-org.ts conflict PROJECT_ID on|off
 //   npx tsx scripts/test-org.ts delete PROJECT_ID --yes
 //
 // An evaluation organization costs nothing and Google deletes it after 60
@@ -11,6 +13,7 @@
 // billable network resources are set up. The project needs a billing account,
 // and gcloud must be signed in with an account that may provision Apigee.
 import { spawnSync } from 'node:child_process';
+import { readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { crc32 } from 'node:zlib';
@@ -22,8 +25,18 @@ import {
   tokenSource,
   type TokenSource,
 } from '../src/gcloud';
+import { apigeeClient } from '../src/apigee';
+import { readXml } from '../src/bundle';
 import type { Kind } from '../src/protocol';
-import { readBundle, type BundleFiles } from '../src/revision';
+import {
+  bundleDirectory,
+  differs,
+  fingerprints,
+  readBundle,
+  unzip,
+  type BundleFiles,
+} from '../src/revision';
+import { parseXml } from '../src/xml';
 
 /** What the commands need from the outside, replaceable in tests. */
 export type Context = {
@@ -38,6 +51,19 @@ export type Context = {
 
 type Operation = { name: string; done?: boolean; error?: { message?: string } };
 
+/** The state, errors, and route conflicts of one deployment. */
+type Status = {
+  state?: string;
+  errors?: { message?: string }[];
+  routeConflicts?: {
+    environmentGroup?: string;
+    conflictingDeployment?: { apiProxy?: string; environment?: string };
+  }[];
+};
+
+/** A proxy or shared flow of the sample, named like the dashboard names it. */
+type SampleBundle = { kind: Kind; name: string; directory: string };
+
 /** Reports a failed Apigee API request with Google's message. */
 class ApiError extends Error {
   constructor(
@@ -49,27 +75,125 @@ class ApiError extends Error {
 }
 
 const api = 'https://apigee.googleapis.com/v1';
-const fixtures = path.resolve(__dirname, '..', 'test', 'fixtures');
+const sample = path.resolve(
+  __dirname,
+  '..',
+  'test',
+  'sample-shop',
+  'src',
+  'main',
+  'apigee',
+);
 const projectPattern = /^[a-z][-a-z0-9]{4,28}[a-z0-9]$/;
 const regionPattern = /^[a-z]+-[a-z]+\d+$/;
 
 // The evaluation organization brings environment eval and group eval-group;
 // the test adds a second environment in a group of its own
+const evalEnvironment = 'eval';
+const evalGroup = 'eval-group';
 const testEnvironment = 'test';
 const testGroup = 'test-group';
 const testHostname = 'test.apigee-tools.example';
 
+// What the Cloud Code files of the sample cannot express. Drafts stay local;
+// history holds older revisions as edits of the local files, oldest first, so
+// that revision 1 is the first entry; pins name the revisions an environment
+// runs instead of the newest one
+export const drafts = new Set(['reviews', 'audit-draft']);
+export const history: Record<string, ((files: BundleFiles) => void)[]> = {
+  'catalog-v2': ['2.0', '2.1', '2.2'].map(version => files => {
+    edit(
+      files,
+      'apiproxy/policies/AM-CatalogVersion.xml',
+      '>2.3<',
+      `>${version}<`,
+    );
+    edit(
+      files,
+      'apiproxy/resources/jsc/page-links.js',
+      'var pageSizeLimit = 100;',
+      'var pageSizeLimit = 50;',
+    );
+  }),
+  // Before the order validation, a header policy took its place
+  'orders-v1': [
+    files => {
+      edit(
+        files,
+        'apiproxy/proxies/default.xml',
+        '<Name>JS-ValidateOrder</Name>',
+        '<Name>AM-LegacyOrderHeader</Name>',
+      );
+      files.delete('apiproxy/policies/JS-ValidateOrder.xml');
+      files.set(
+        'apiproxy/policies/AM-LegacyOrderHeader.xml',
+        Buffer.from(legacyOrderHeader),
+      );
+    },
+  ],
+  'security-baseline': [
+    files =>
+      edit(
+        files,
+        'sharedflowbundle/policies/SA-PerApp.xml',
+        '<Rate>50ps</Rate>',
+        '<Rate>30ps</Rate>',
+      ),
+  ],
+};
+const legacyOrderHeader = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage continueOnError="false" enabled="true" name="AM-LegacyOrderHeader">
+    <DisplayName>AM-LegacyOrderHeader</DisplayName>
+    <Set>
+        <Headers>
+            <Header name="x-order-source">legacy-checkout</Header>
+        </Headers>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" transport="http" type="request"/>
+</AssignMessage>
+`;
+export const pins: Record<string, Record<string, number>> = {
+  test: { 'catalog-v2': 2, 'orders-v1': 1, 'security-baseline': 1 },
+};
+
+// The payments target server authenticates with keys that Apigee generates,
+// so no private key is part of the repository; one alias expires soon
+const keystore = {
+  environment: evalEnvironment,
+  name: 'payments-mtls',
+  reference: 'payments-keystore',
+  aliases: { 'payments-client': 365, 'payments-client-expiring': 14 },
+};
+const maps: Record<string, Record<string, Record<string, string>>> = {
+  eval: {
+    'shop-settings': {
+      'feature.new-checkout': 'true',
+      'orders.max-items': '50',
+    },
+  },
+  test: {
+    'shop-settings': {
+      'feature.new-checkout': 'false',
+      'orders.max-items': '20',
+    },
+  },
+};
+const revokedApp = 'mobile-app';
+
 const usage = `Usage: npx tsx scripts/test-org.ts <command> PROJECT_ID
 
   provision PROJECT_ID [REGION]  Create a free evaluation organization (default region europe-west3)
-  populate PROJECT_ID            Add a test environment and group, deploy the test fixtures
+  populate PROJECT_ID            Add a test environment and group, deploy the sample shop
   status PROJECT_ID              Show the organization, its groups, and deployments
+  conflict PROJECT_ID on|off     Attach test to eval-group as well, which causes route conflicts
   delete PROJECT_ID --yes        Delete the organization`;
 
 /** Returns the commands, bound to a context. */
 export function testOrg(context: Context) {
   const { log } = context;
   const encode = encodeURIComponent;
+  const client = apigeeClient(context.tokens, api);
 
   /**
    * Sends a request and returns the JSON body. A change that another running
@@ -205,33 +329,23 @@ export function testOrg(context: Context) {
     }
   }
 
-  /** Waits until a deployment is ready, and fails with its errors. */
-  async function deployed(
+  /** Waits until a deployment is ready or failed and returns its status. */
+  async function settled(
     project: string,
     environment: string,
     kind: Kind,
     name: string,
     revision: string,
-  ): Promise<void> {
+  ): Promise<Status> {
     for (let attempt = 0; attempt < 60; attempt++) {
-      const status = await request<{
-        state?: string;
-        errors?: { message?: string }[];
-      }>(
+      const status = await request<Status>(
         'GET',
         `/organizations/${encode(project)}/environments/${encode(environment)}/${kind}/${encode(name)}/revisions/${encode(revision)}/deployments`,
       );
-      if (status.state === 'READY') return;
-      if (status.state === 'ERROR') {
-        throw new Error(
-          `Deploying ${name} revision ${revision} to ${environment} failed: ${(status.errors ?? []).map(error => error.message).join('; ')}`,
-        );
-      }
+      if (status.state === 'READY' || status.state === 'ERROR') return status;
       await context.sleep(10_000);
     }
-    throw new Error(
-      `${name} revision ${revision} is not ready in ${environment} after ten minutes.`,
-    );
+    return { state: 'still not ready after ten minutes' };
   }
 
   /** Imports a bundle as a new revision and returns its number. */
@@ -265,6 +379,363 @@ export function testOrg(context: Context) {
       `/organizations/${encode(project)}/environments/${encode(environment)}/${kind}/${encode(name)}/revisions/${encode(revision)}/deployments?override=true`,
     );
     log(`Deploying ${name} revision ${revision} to ${environment}.`);
+  }
+
+  /** Creates an entity and returns false when it exists already. */
+  async function create(resource: string, body?: unknown): Promise<boolean> {
+    try {
+      await request('POST', resource, body);
+      return true;
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        (error.status === 409 || /already exists/i.test(error.message))
+      ) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /** Returns the attachment of an environment to a group, if there is one. */
+  async function attachment(
+    project: string,
+    group: string,
+    environment: string,
+  ): Promise<{ name: string } | undefined> {
+    const { environmentGroupAttachments = [] } = await request<{
+      environmentGroupAttachments?: { name: string; environment: string }[];
+    }>(
+      'GET',
+      `/organizations/${encode(project)}/envgroups/${encode(group)}/attachments`,
+    );
+    return environmentGroupAttachments.find(
+      item => item.environment === environment,
+    );
+  }
+
+  /** Attaches an environment to a group unless it is attached already. */
+  async function attach(
+    project: string,
+    group: string,
+    environment: string,
+  ): Promise<void> {
+    if (await attachment(project, group, environment)) return;
+    await finish(
+      await request<Operation>(
+        'POST',
+        `/organizations/${encode(project)}/envgroups/${encode(group)}/attachments`,
+        { environment },
+      ),
+      `Attaching ${environment} to ${group}`,
+    );
+  }
+
+  /** Returns the revisions of a proxy or shared flow; none if it is missing. */
+  async function revisions(
+    project: string,
+    kind: Kind,
+    name: string,
+  ): Promise<number[]> {
+    try {
+      const list = await request<string[]>(
+        'GET',
+        `/organizations/${encode(project)}/${kind}/${encode(name)}/revisions`,
+      );
+      return list.map(Number);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return [];
+      throw error;
+    }
+  }
+
+  /**
+   * Imports a sample bundle: first the history revisions that are missing,
+   * then the local files unless the newest revision equals them. Returns the
+   * newest revision.
+   */
+  async function sync(project: string, bundle: SampleBundle): Promise<string> {
+    const local = await readBundle(bundle.directory, bundle.kind);
+    const changes = history[bundle.name] ?? [];
+    let newest = Math.max(
+      0,
+      ...(await revisions(project, bundle.kind, bundle.name)),
+    );
+
+    // Only missing revisions are built, so that a later local edit of a line
+    // that the history changes does not stop populate
+    for (const change of changes.slice(newest)) {
+      const files = new Map(local);
+      change(files);
+      newest = Number(
+        await importBundle(project, bundle.kind, bundle.name, files),
+      );
+    }
+
+    // The comparison is the dashboard's, so the import shows as matching
+    if (newest > changes.length) {
+      const remote = unzip(
+        await client.bundle(project, bundle.kind, bundle.name, String(newest)),
+      );
+      if (!differs(fingerprints(remote), fingerprints(local))) {
+        return String(newest);
+      }
+    }
+    return importBundle(project, bundle.kind, bundle.name, local);
+  }
+
+  /**
+   * Creates what the deployments of an environment depend on: the keystore
+   * with its reference, target servers, resource files, and KVMs.
+   */
+  async function configure(project: string, environment: string) {
+    const base = `/organizations/${encode(project)}/environments/${encode(environment)}`;
+    const folder = path.join(sample, 'environments', environment);
+    if (keystore.environment === environment) {
+      await create(`${base}/keystores`, { name: keystore.name });
+      for (const [alias, days] of Object.entries(keystore.aliases)) {
+        await create(
+          `${base}/keystores/${encode(keystore.name)}/aliases?format=selfsignedcert&alias=${encode(alias)}`,
+          {
+            keySize: '2048',
+            sigAlg: 'SHA256withRSA',
+            subject: { commonName: `${alias}.shop.example` },
+            certValidityInDays: days,
+          },
+        );
+      }
+      await create(`${base}/references`, {
+        name: keystore.reference,
+        refers: keystore.name,
+        resourceType: 'KeyStore',
+      });
+    }
+
+    // Cloud Code calls two fields of a target server differently
+    const servers = await readJson<{ enabled?: boolean; tlsInfo?: unknown }[]>(
+      path.join(folder, 'targetservers.json'),
+    );
+    for (const { enabled, tlsInfo, ...server } of servers) {
+      await create(`${base}/targetservers`, {
+        ...server,
+        isEnabled: enabled,
+        sSLInfo: tlsInfo,
+      });
+    }
+
+    // Resource files lie in resourcefiles/TYPE/NAME
+    const resources = path.join(folder, 'resourcefiles');
+    for (const type of await visible(resources)) {
+      for (const name of await visible(path.join(resources, type))) {
+        const content = await readFile(path.join(resources, type, name));
+        const form = new FormData();
+        form.append('file', new Blob([new Uint8Array(content)]), name);
+        await create(
+          `${base}/resourcefiles?type=${encode(type)}&name=${encode(name)}`,
+          form,
+        );
+      }
+    }
+    for (const [map, entries] of Object.entries(maps[environment] ?? {})) {
+      await create(`${base}/keyvaluemaps`, { name: map, encrypted: true });
+      for (const [name, value] of Object.entries(entries)) {
+        await create(`${base}/keyvaluemaps/${encode(map)}/entries`, {
+          name,
+          value,
+        });
+      }
+    }
+  }
+
+  /**
+   * Deploys the sample bundles of a kind as each environment's
+   * deployments.json lists them and waits for them. Rejected and failed
+   * deployments are returned rather than thrown, since the sample has some.
+   */
+  async function deployAll(
+    project: string,
+    kind: Kind,
+    newest: ReadonlyMap<string, string>,
+  ): Promise<string[]> {
+    const { deployments = [] } = await request<{
+      deployments?: {
+        environment: string;
+        apiProxy: string;
+        revision: string;
+      }[];
+    }>(
+      'GET',
+      `/organizations/${encode(project)}/deployments?sharedFlows=${kind === 'sharedflows'}`,
+    );
+    const problems: string[] = [];
+    const started: [string, string, string][] = [];
+    for (const environment of [evalEnvironment, testEnvironment]) {
+      const listed = await readJson<{
+        proxies?: (string | { name: string })[];
+        sharedflows?: (string | { name: string })[];
+      }>(path.join(sample, 'environments', environment, 'deployments.json'));
+      const entries =
+        (kind === 'apis' ? listed.proxies : listed.sharedflows) ?? [];
+      for (const entry of entries) {
+        const name = typeof entry === 'string' ? entry : entry.name;
+        const revision =
+          pins[environment]?.[name]?.toString() ??
+          newest.get(`${kind}/${name}`);
+        if (!revision) {
+          throw new Error(
+            `${environment}/deployments.json lists ${name}, which the sample does not contain.`,
+          );
+        }
+        const running = deployments.some(
+          item =>
+            item.environment === environment &&
+            item.apiProxy === name &&
+            item.revision === revision,
+        );
+        if (running) continue;
+        try {
+          await deploy(project, environment, kind, name, revision);
+          started.push([environment, name, revision]);
+        } catch (error) {
+          problems.push(
+            `${name} revision ${revision} in ${environment} was rejected: ${(error as Error).message}`,
+          );
+        }
+      }
+    }
+    for (const [environment, name, revision] of started) {
+      const status = await settled(project, environment, kind, name, revision);
+      if (status.state !== 'READY') {
+        const errors = (status.errors ?? []).map(error => error.message);
+        problems.push(
+          `${name} revision ${revision} in ${environment} is ${status.state}${errors.length ? `: ${errors.join('; ')}` : ''}`,
+        );
+      }
+    }
+    return problems;
+  }
+
+  /** Attaches the shared flows that an environment's flowhooks.json names. */
+  async function hook(project: string, environment: string): Promise<void> {
+    const hooks = await readJson<Record<string, unknown>>(
+      path.join(sample, 'environments', environment, 'flowhooks.json'),
+    );
+    for (const [point, flowHook] of Object.entries(hooks)) {
+      await request(
+        'PUT',
+        `/organizations/${encode(project)}/environments/${encode(environment)}/flowhooks/${encode(point)}`,
+        flowHook,
+      );
+    }
+  }
+
+  /** Creates the API products, developers, and apps of the sample. */
+  async function consumers(project: string): Promise<void> {
+    const base = `/organizations/${encode(project)}`;
+    const folder = path.join(sample, 'tests', 'shop');
+    const products = await readJson<object[]>(
+      path.join(folder, 'products.json'),
+    );
+    for (const product of products) {
+      await create(`${base}/apiproducts`, product);
+    }
+    const developers = await readJson<object[]>(
+      path.join(folder, 'developers.json'),
+    );
+    for (const developer of developers) {
+      await create(`${base}/developers`, developer);
+    }
+    const apps = await readJson<{ name: string; developerEmail: string }[]>(
+      path.join(folder, 'developerapps.json'),
+    );
+    for (const { developerEmail, ...app } of apps) {
+      // Cloud Code writes unset fields as empty strings
+      const body = Object.fromEntries(
+        Object.entries(app).filter(([, value]) => value !== ''),
+      );
+      const developer = `${base}/developers/${encode(developerEmail)}/apps`;
+      await create(developer, body);
+
+      // Checked every run, in case an earlier one stopped before revoking
+      if (app.name === revokedApp) {
+        const { status } = await request<{ status?: string }>(
+          'GET',
+          `${developer}/${encode(app.name)}`,
+        );
+        if (status !== 'revoked') {
+          await request(
+            'POST',
+            `${developer}/${encode(app.name)}?action=revoke`,
+          );
+        }
+      }
+    }
+  }
+
+  /** Shows the organization, its groups, and each deployment's status. */
+  async function status(project: string): Promise<void> {
+    const organizationPath = `/organizations/${encode(project)}`;
+    const current = await organization(project);
+    if (!current) {
+      log(`Organization ${project} does not exist or is not ready yet.`);
+      return;
+    }
+    const expires = current.expiresAt
+      ? `, expires ${new Date(Number(current.expiresAt)).toISOString().slice(0, 10)}`
+      : '';
+    log(`Organization ${project}: ${current.state}${expires}`);
+    const { environmentGroups = [] } = await request<{
+      environmentGroups?: { name: string; hostnames?: string[] }[];
+    }>('GET', `${organizationPath}/envgroups`);
+    for (const group of environmentGroups) {
+      const { environmentGroupAttachments = [] } = await request<{
+        environmentGroupAttachments?: { environment: string }[];
+      }>(
+        'GET',
+        `${organizationPath}/envgroups/${encode(group.name)}/attachments`,
+      );
+      const environments = environmentGroupAttachments
+        .map(item => item.environment)
+        .join(', ');
+      log(
+        `Group ${group.name} (${environments || 'no environments'}): ${(group.hostnames ?? []).join(', ') || 'no hostnames'}`,
+      );
+    }
+    for (const kind of ['apis', 'sharedflows'] as const) {
+      const { deployments = [] } = await request<{
+        deployments?: {
+          environment: string;
+          apiProxy: string;
+          revision: string;
+        }[];
+      }>(
+        'GET',
+        `${organizationPath}/deployments?sharedFlows=${kind === 'sharedflows'}`,
+      );
+      deployments.sort(
+        (a, b) =>
+          a.apiProxy.localeCompare(b.apiProxy) ||
+          a.environment.localeCompare(b.environment),
+      );
+      for (const item of deployments) {
+        const details = await request<Status>(
+          'GET',
+          `${organizationPath}/environments/${encode(item.environment)}/${kind}/${encode(item.apiProxy)}/revisions/${encode(item.revision)}/deployments`,
+        ).catch((error: Error): Status => ({
+          state: `unknown (${error.message})`,
+        }));
+        const notes = [
+          ...(details.errors ?? []).map(error => error.message),
+          ...(details.routeConflicts ?? []).map(
+            conflict =>
+              `route conflict with ${conflict.conflictingDeployment?.apiProxy} in ${conflict.conflictingDeployment?.environment} (${conflict.environmentGroup})`,
+          ),
+        ];
+        log(
+          `${kind === 'apis' ? 'API proxy' : 'Shared flow'} ${item.apiProxy} revision ${item.revision} in ${item.environment}: ${details.state ?? 'unknown'}${notes.length ? ` - ${notes.join('; ')}` : ''}`,
+        );
+      }
+    }
   }
 
   return {
@@ -362,7 +833,7 @@ export function testOrg(context: Context) {
       );
     },
 
-    /** Adds the test environment and group and deploys the test fixtures. */
+    /** Adds the test environment and group and deploys the sample shop. */
     async populate(project: string): Promise<void> {
       await evaluationOrganization(project);
       const organizationPath = `/organizations/${encode(project)}`;
@@ -435,107 +906,76 @@ export function testOrg(context: Context) {
           `Creating environment group ${testGroup}`,
         );
       }
-      const { environmentGroupAttachments = [] } = await request<{
-        environmentGroupAttachments?: { environment: string }[];
-      }>('GET', `${organizationPath}/envgroups/${testGroup}/attachments`);
-      if (
-        !environmentGroupAttachments.some(
-          item => item.environment === testEnvironment,
-        )
-      ) {
-        await finish(
-          await request<Operation>(
-            'POST',
-            `${organizationPath}/envgroups/${testGroup}/attachments`,
-            { environment: testEnvironment },
-          ),
-          `Attaching ${testEnvironment} to ${testGroup}`,
+      await attach(project, testGroup, testEnvironment);
+      if (await attachment(project, evalGroup, testEnvironment)) {
+        throw new Error(
+          `Route conflicts are on; turn them off first: npx tsx scripts/test-org.ts conflict ${project} off`,
         );
       }
 
-      // The fixture as it is matches the workspace; a changed copy in the test
-      // environment must show up as "differs from local"
-      const proxy = await readBundle(
-        path.join(fixtures, 'bundle', 'apiproxy'),
-        'apis',
-      );
-      const changed = new Map(proxy);
-      const policy = 'apiproxy/policies/SA-Limit.xml';
-      changed.set(
-        policy,
-        Buffer.from(
-          proxy.get(policy)!.toString('utf8').replace('30ps', '40ps'),
-        ),
-      );
-      const sharedFlow = await readBundle(
-        path.join(fixtures, 'sharedflow', 'sharedflowbundle'),
-        'sharedflows',
-      );
-      const same = await importBundle(project, 'apis', 'hello', proxy);
-      const different = await importBundle(project, 'apis', 'hello', changed);
-      const flow = await importBundle(
-        project,
-        'sharedflows',
-        'traffic-shared',
-        sharedFlow,
-      );
-      const deployments: [string, Kind, string, string][] = [
-        ['eval', 'apis', 'hello', same],
-        [testEnvironment, 'apis', 'hello', different],
-        ['eval', 'sharedflows', 'traffic-shared', flow],
-      ];
-      for (const deployment of deployments)
-        await deploy(project, ...deployment);
-      for (const deployment of deployments) {
-        await deployed(project, ...deployment);
+      // Dependencies first, since a deployment that lacks one is rejected
+      for (const environment of [evalEnvironment, testEnvironment]) {
+        await configure(project, environment);
       }
-      log(
-        [
-          '',
-          'Done. Open this repository in the Extension Development Host (F5), run',
-          `"Apigee Tools: Open Dashboard", and choose organization ${project}. Expected:`,
-          `- hello: revision ${same} in eval matches the local bundle,`,
-          `  revision ${different} in ${testEnvironment} shows "≠ local";`,
-          `- traffic-shared: revision ${flow} in eval;`,
-          `- groups eval-group and ${testGroup} (${testHostname}).`,
-        ].join('\n'),
-      );
-    },
-
-    /** Shows the organization, its groups, and its deployments. */
-    async status(project: string): Promise<void> {
-      const organizationPath = `/organizations/${encode(project)}`;
-      const current = await organization(project);
-      if (!current) {
-        log(`Organization ${project} does not exist or is not ready yet.`);
-        return;
-      }
-      const expires = current.expiresAt
-        ? `, expires ${new Date(Number(current.expiresAt)).toISOString().slice(0, 10)}`
-        : '';
-      log(`Organization ${project}: ${current.state}${expires}`);
-      const { environmentGroups = [] } = await request<{
-        environmentGroups?: { name: string; hostnames?: string[] }[];
-      }>('GET', `${organizationPath}/envgroups`);
-      for (const group of environmentGroups) {
-        log(
-          `Group ${group.name}: ${(group.hostnames ?? []).join(', ') || 'no hostnames'}`,
+      const newest = new Map<string, string>();
+      for (const bundle of await sampleBundles()) {
+        if (drafts.has(bundle.name)) continue;
+        newest.set(
+          `${bundle.kind}/${bundle.name}`,
+          await sync(project, bundle),
         );
       }
-      for (const sharedFlows of [false, true]) {
-        const { deployments = [] } = await request<{
-          deployments?: {
-            environment: string;
-            apiProxy: string;
-            revision: string;
-          }[];
-        }>('GET', `${organizationPath}/deployments?sharedFlows=${sharedFlows}`);
-        for (const item of deployments) {
+
+      // Flow hooks need their shared flows deployed, proxies their callouts;
+      // problems collected so far are shown even when a later step fails
+      const problems: string[] = [];
+      try {
+        problems.push(...(await deployAll(project, 'sharedflows', newest)));
+        for (const environment of [evalEnvironment, testEnvironment]) {
+          await hook(project, environment);
+        }
+        problems.push(...(await deployAll(project, 'apis', newest)));
+        await consumers(project);
+        log('');
+        await status(project);
+      } finally {
+        if (problems.length) {
+          log('');
           log(
-            `${sharedFlows ? 'Shared flow' : 'API proxy'} ${item.apiProxy} revision ${item.revision} in ${item.environment}`,
+            'Not ready; test/sample-shop/README.md lists the intended failures:',
           );
+          for (const problem of problems) log(`- ${problem}`);
         }
       }
+    },
+
+    status,
+
+    /**
+     * Attaches the test environment to eval-group as well, or detaches it
+     * again. Every base path deployed in both environments then conflicts.
+     */
+    async conflict(project: string, setting: string): Promise<void> {
+      if (setting !== 'on' && setting !== 'off') {
+        throw new Error('Choose on or off: conflict PROJECT_ID on|off');
+      }
+      await evaluationOrganization(project);
+      if (setting === 'on') {
+        await attach(project, evalGroup, testEnvironment);
+        log('Route conflicts are on; status shows them.');
+        return;
+      }
+      const attached = await attachment(project, evalGroup, testEnvironment);
+      if (attached) {
+        await finish(
+          await request<Operation>(
+            'DELETE',
+            `/organizations/${encode(project)}/envgroups/${evalGroup}/attachments/${encode(attached.name)}`,
+          ),
+          `Detaching ${testEnvironment} from ${evalGroup}`,
+        );
+      }
+      log('Route conflicts are off.');
     },
 
     /**
@@ -558,6 +998,51 @@ export function testOrg(context: Context) {
       log('Deletion is still running; check it later with the status command.');
     },
   };
+}
+
+/** Lists the sample's bundles, named after their descriptors. */
+export async function sampleBundles(): Promise<SampleBundle[]> {
+  const bundles: SampleBundle[] = [];
+  for (const kind of ['sharedflows', 'apis'] as const) {
+    const parent = path.join(sample, kind === 'apis' ? 'apiproxies' : kind);
+    for (const folder of await visible(parent)) {
+      const directory = path.join(parent, folder, bundleDirectory(kind));
+      const descriptor = (await visible(directory)).find(file =>
+        file.endsWith('.xml'),
+      );
+      const name = descriptor
+        ? parseXml(
+            await readXml(path.join(directory, descriptor)),
+          ).root?.attributes.find(attribute => attribute.name === 'name')?.value
+        : undefined;
+      bundles.push({ kind, name: name || folder, directory });
+    }
+  }
+  return bundles;
+}
+
+/** Replaces text in a bundle file and fails when the text is missing. */
+export function edit(
+  files: BundleFiles,
+  file: string,
+  from: string,
+  to: string,
+): void {
+  const content = files.get(file)?.toString('utf8');
+  if (!content?.includes(from)) {
+    throw new Error(`${file} does not contain "${from}".`);
+  }
+  files.set(file, Buffer.from(content.replace(from, to)));
+}
+
+/** Lists a directory without hidden entries; none when it is missing. */
+async function visible(directory: string): Promise<string[]> {
+  const names = await readdir(directory).catch((): string[] => []);
+  return names.filter(name => !name.startsWith('.')).sort();
+}
+
+async function readJson<T>(file: string): Promise<T> {
+  return JSON.parse(await readFile(file, 'utf8')) as T;
 }
 
 /**
@@ -636,6 +1121,8 @@ async function main(): Promise<void> {
       return commands.populate(project);
     case 'status':
       return commands.status(project);
+    case 'conflict':
+      return commands.conflict(project, option ?? '');
     case 'delete':
       if (option !== '--yes') {
         console.error(

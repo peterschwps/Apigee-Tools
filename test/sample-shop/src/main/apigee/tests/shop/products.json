@@ -1,0 +1,26 @@
+[
+  {
+    "name": "catalog-free",
+    "displayName": "Catalog (free)",
+    "description": "Read access to the product catalog",
+    "approvalType": "auto",
+    "apiResources": ["/", "/**"],
+    "quota": "100",
+    "quotaInterval": "1",
+    "quotaTimeUnit": "minute",
+    "proxies": ["catalog-v1", "catalog-v2"],
+    "environments": ["eval", "test"]
+  },
+  {
+    "name": "partner-gold",
+    "displayName": "Partner (gold)",
+    "description": "Orders and catalog for partners, approved by hand",
+    "approvalType": "manual",
+    "apiResources": ["/**"],
+    "quota": "1000",
+    "quotaInterval": "1",
+    "quotaTimeUnit": "minute",
+    "proxies": ["partner-gateway", "orders-v1", "catalog-v2"],
+    "environments": ["eval", "test"]
+  }
+]

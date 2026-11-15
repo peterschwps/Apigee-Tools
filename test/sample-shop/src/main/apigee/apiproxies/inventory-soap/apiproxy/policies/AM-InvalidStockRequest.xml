@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<AssignMessage continueOnError="false" enabled="true" name="AM-InvalidStockRequest">
+    <DisplayName>AM-InvalidStockRequest</DisplayName>
+    <Set>
+        <Payload contentType="application/json">{"error": "invalid_request", "message": "Send a JSON object with Sku and an optional Warehouse."}</Payload>
+        <StatusCode>400</StatusCode>
+        <ReasonPhrase>Bad Request</ReasonPhrase>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" transport="http" type="response"/>
+</AssignMessage>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+    <PreFlow name="PreFlow">
+        <Request>
+            <Step>
+                <Name>OA-VerifyAccessToken</Name>
+            </Step>
+            <Step>
+                <Name>JTP-PaymentRequest</Name>
+                <Condition>request.verb = "POST"</Condition>
+            </Step>
+        </Request>
+        <Response/>
+    </PreFlow>
+    <Flows>
+        <Flow name="refundPayment">
+            <Request/>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/*/refunds") and (request.verb = "POST")</Condition>
+        </Flow>
+        <Flow name="getPayment">
+            <Request/>
+            <Response>
+                <Step>
+                    <Name>EV-PaymentFields</Name>
+                </Step>
+                <Step>
+                    <Name>AM-RemoveCardData</Name>
+                </Step>
+            </Response>
+            <Condition>(proxy.pathsuffix MatchesPath "/*") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="createPayment">
+            <Description>Any other POST creates a payment; refunds match first.</Description>
+            <Request/>
+            <Response>
+                <Step>
+                    <Name>EV-PaymentFields</Name>
+                </Step>
+                <Step>
+                    <Name>RF-PaymentDeclined</Name>
+                    <Condition>payment.status = "declined"</Condition>
+                </Step>
+                <Step>
+                    <Name>AM-RemoveCardData</Name>
+                </Step>
+            </Response>
+            <Condition>request.verb = "POST"</Condition>
+        </Flow>
+    </Flows>
+    <PostFlow name="PostFlow">
+        <Request/>
+        <Response/>
+    </PostFlow>
+    <HTTPProxyConnection>
+        <BasePath>/payments</BasePath>
+    </HTTPProxyConnection>
+    <RouteRule name="default">
+        <TargetEndpoint>default</TargetEndpoint>
+    </RouteRule>
+</ProxyEndpoint>

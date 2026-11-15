@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+    <PreFlow name="PreFlow">
+        <Request/>
+        <Response/>
+    </PreFlow>
+    <Flows>
+        <Flow name="listReviews">
+            <Request>
+                <Step>
+                    <Name>AM-ReviewDefault</Name>
+                </Step>
+            </Request>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/products/*") and (request.verb = "GET")</Condition>
+        </Flow>
+        <Flow name="submitReview">
+            <Request>
+                <Step>
+                    <Name>SA-ReviewSubmit</Name>
+                </Step>
+                <Step>
+                    <Name>JTP-ReviewBody</Name>
+                </Step>
+                <Step>
+                    <Name>EV-ReviewRating</Name>
+                </Step>
+                <Step>
+                    <Name>RF-InvalidRating</Name>
+                    <Condition>(review.rating = null) or (review.rating LesserThan 1) or (review.rating GreaterThan 5)</Condition>
+                </Step>
+                <Step>
+                    <!-- expect AX108: the moderation script is not written yet -->
+                    <Name>JS-MaskProfanity</Name>
+                </Step>
+            </Request>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/products/*") and (request.verb = "POST")</Condition>
+        </Flow>
+    </Flows>
+    <PostFlow name="PostFlow">
+        <Request/>
+        <Response/>
+    </PostFlow>
+    <HTTPProxyConnection>
+        <BasePath>/reviews</BasePath>
+    </HTTPProxyConnection>
+    <RouteRule name="default">
+        <TargetEndpoint>default</TargetEndpoint>
+    </RouteRule>
+</ProxyEndpoint>

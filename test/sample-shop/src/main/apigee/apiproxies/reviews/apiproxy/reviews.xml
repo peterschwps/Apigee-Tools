@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<APIProxy revision="1" name="reviews">
+    <DisplayName>Reviews</DisplayName>
+    <Description>Product reviews of the sample shop. Work in progress, not imported yet.</Description>
+</APIProxy>

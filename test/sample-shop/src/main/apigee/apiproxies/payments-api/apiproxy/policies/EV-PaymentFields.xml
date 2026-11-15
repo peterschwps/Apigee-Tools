@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ExtractVariables continueOnError="false" enabled="true" name="EV-PaymentFields">
+    <DisplayName>EV-PaymentFields</DisplayName>
+    <Source clearPayload="false">response</Source>
+    <JSONPayload>
+        <Variable name="id" type="string">
+            <JSONPath>$.paymentId</JSONPath>
+        </Variable>
+        <Variable name="status" type="string">
+            <JSONPath>$.status</JSONPath>
+        </Variable>
+        <Variable name="declineCode" type="string">
+            <JSONPath>$.declineCode</JSONPath>
+        </Variable>
+        <Variable name="cardBrand" type="string">
+            <JSONPath>$.card.brand</JSONPath>
+        </Variable>
+        <Variable name="cardLast4" type="string">
+            <JSONPath>$.card.last4</JSONPath>
+        </Variable>
+    </JSONPayload>
+    <VariablePrefix>payment</VariablePrefix>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</ExtractVariables>

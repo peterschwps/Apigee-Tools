@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+    <PreFlow name="PreFlow">
+        <Request>
+            <Step>
+                <Name>FC-Cors</Name>
+            </Step>
+            <Step>
+                <Name>FC-QuotaPerApp</Name>
+            </Step>
+            <Step>
+                <Name>AM-PartnerHeaders</Name>
+            </Step>
+        </Request>
+        <Response/>
+    </PreFlow>
+    <Flows/>
+    <PostFlow name="PostFlow">
+        <Request/>
+        <Response/>
+    </PostFlow>
+    <HTTPProxyConnection>
+        <BasePath>/partner</BasePath>
+    </HTTPProxyConnection>
+    <RouteRule name="orders">
+        <Condition>proxy.pathsuffix MatchesPath "/orders/**"</Condition>
+        <!-- expect AX111: targets/ has no orders endpoint, the route was never finished -->
+        <TargetEndpoint>orders</TargetEndpoint>
+    </RouteRule>
+    <RouteRule name="default">
+        <TargetEndpoint>default</TargetEndpoint>
+    </RouteRule>
+</ProxyEndpoint>

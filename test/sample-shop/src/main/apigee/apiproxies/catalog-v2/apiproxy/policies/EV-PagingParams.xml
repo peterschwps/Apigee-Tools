@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ExtractVariables continueOnError="false" enabled="true" name="EV-PagingParams">
+    <DisplayName>EV-PagingParams</DisplayName>
+    <Source>request</Source>
+    <VariablePrefix>paging</VariablePrefix>
+    <QueryParam name="page">
+        <Pattern>{page}</Pattern>
+    </QueryParam>
+    <QueryParam name="pageSize">
+        <Pattern>{pageSize}</Pattern>
+    </QueryParam>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</ExtractVariables>

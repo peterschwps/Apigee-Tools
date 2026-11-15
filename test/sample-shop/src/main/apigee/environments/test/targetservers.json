@@ -1,0 +1,42 @@
+[
+  {
+    "name": "catalog-backend",
+    "host": "catalog.staging.shop.example",
+    "port": 443,
+    "enabled": true,
+    "description": "Product catalog service",
+    "tlsInfo": { "enabled": true }
+  },
+  {
+    "name": "orders-backend",
+    "host": "orders.staging.shop.example",
+    "port": 443,
+    "enabled": true,
+    "description": "Order management service",
+    "tlsInfo": { "enabled": true }
+  },
+  {
+    "name": "carrier-api",
+    "host": "sandbox.carrier.shop.example",
+    "port": 443,
+    "enabled": true,
+    "description": "Parcel carrier sandbox",
+    "tlsInfo": { "enabled": true }
+  },
+  {
+    "name": "legacy-soap",
+    "host": "legacy.staging.shop.example",
+    "port": 443,
+    "enabled": true,
+    "description": "Legacy storefront backend",
+    "tlsInfo": { "enabled": true }
+  },
+  {
+    "name": "legacy-soap-standby",
+    "host": "legacy-standby.staging.shop.example",
+    "port": 443,
+    "enabled": false,
+    "description": "Standby for the legacy storefront, switched off",
+    "tlsInfo": { "enabled": true }
+  }
+]

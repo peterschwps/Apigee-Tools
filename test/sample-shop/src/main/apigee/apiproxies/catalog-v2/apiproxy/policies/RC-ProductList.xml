@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ResponseCache continueOnError="false" enabled="true" name="RC-ProductList">
+    <DisplayName>RC-ProductList</DisplayName>
+    <CacheKey>
+        <KeyFragment ref="request.uri"/>
+    </CacheKey>
+    <Scope>Exclusive</Scope>
+    <ExpirySettings>
+        <TimeoutInSeconds>300</TimeoutInSeconds>
+    </ExpirySettings>
+    <ExcludeErrorResponse>true</ExcludeErrorResponse>
+    <SkipCacheLookup>request.header.cache-control = "no-cache"</SkipCacheLookup>
+</ResponseCache>

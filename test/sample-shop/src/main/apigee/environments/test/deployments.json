@@ -1,0 +1,12 @@
+{
+  "proxies": [
+    "catalog-v1",
+    "catalog-v2",
+    "orders-v1",
+    "customers",
+    "shipping",
+    "status",
+    "LegacyStorefront"
+  ],
+  "sharedflows": ["security-baseline", "cors", "quota-per-app"]
+}

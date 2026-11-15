@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
@@ -69,6 +76,32 @@ test('cli exits 0 for clean fixture bundles', async () => {
   assert.equal(result.code, 0);
   assert.deepEqual(result.out, []);
   assert.match(result.err[0], /^1\d files checked: 0 errors, 0 warnings\.$/);
+});
+
+test('the sample shop reports exactly the findings its comments expect', async () => {
+  const shop = path.join(repositoryRoot, 'test', 'sample-shop');
+  const result = await capture([shop]);
+
+  // A comment such as <!-- expect AX106, AX110: reason --> expects the next line
+  const expected: string[] = [];
+  for (const file of await readdir(shop, { recursive: true })) {
+    if (!file.endsWith('.xml')) continue;
+    const lines = (await readFile(path.join(shop, file), 'utf8')).split('\n');
+    lines.forEach((line, index) => {
+      const ids = /<!-- expect ((?:AX\d{3}[ ,]*)+)/.exec(line)?.[1] ?? '';
+      for (const id of ids.match(/AX\d{3}/g) ?? []) {
+        expected.push(`${path.join(shop, file)}:${index + 2} ${id}`);
+      }
+    });
+  }
+  const reported = result.out.map(line => {
+    const [, file = '', row, id] =
+      /^(.+):(\d+):\d+: \w+ (AX\d{3}) /.exec(line) ?? [];
+    return `${path.resolve(file)}:${row} ${id}`;
+  });
+  assert.deepEqual(reported.sort(), expected.sort());
+  assert.equal(new Set(reported.map(item => item.split(' ').at(-1))).size, 15);
+  assert.equal(result.code, 1);
 });
 
 test('cli ignores a byte order mark, also in referenced policies', async () => {

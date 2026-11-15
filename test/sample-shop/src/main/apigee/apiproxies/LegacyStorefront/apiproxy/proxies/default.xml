@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+    <Description>One SOAP service per path, passed through to the legacy backend.</Description>
+    <PreFlow name="PreFlow">
+        <Request>
+            <Step>
+                <Name>SA-LegacyTraffic</Name>
+            </Step>
+            <Step>
+                <Name>GetSessionId</Name>
+                <Condition>(request.verb = "POST") and (request.header.Content-Type Matches "*xml*")</Condition>
+            </Step>
+        </Request>
+        <Response/>
+    </PreFlow>
+    <Flows>
+        <Flow name="wsdl">
+            <Description>WSDL of each service for client code generators.</Description>
+            <Request/>
+            <Response/>
+            <Condition>(request.verb = "GET") and (request.querystring = "wsdl")</Condition>
+        </Flow>
+        <Flow name="catalog">
+            <Request/>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/catalog") and (request.verb = "POST")</Condition>
+        </Flow>
+        <Flow name="basket">
+            <Request/>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/basket") and (request.verb = "POST")</Condition>
+        </Flow>
+        <Flow name="checkout">
+            <Description>Switched off once the new checkout in orders-v1 is live.</Description>
+            <Request>
+                <Step>
+                    <Name>KVM-GetCheckoutFlag</Name>
+                </Step>
+                <Step>
+                    <Name>RF-CheckoutMoved</Name>
+                    <Condition>legacy.newCheckout = "true"</Condition>
+                </Step>
+            </Request>
+            <Response/>
+            <Condition>(proxy.pathsuffix MatchesPath "/checkout") and (request.verb = "POST")</Condition>
+        </Flow>
+        <Flow name="unknownResource">
+            <Request>
+                <Step>
+                    <Name>RF-UnknownResource</Name>
+                </Step>
+            </Request>
+            <Response/>
+        </Flow>
+    </Flows>
+    <PostFlow name="PostFlow">
+        <Request/>
+        <Response/>
+    </PostFlow>
+    <HTTPProxyConnection>
+        <BasePath>/legacy</BasePath>
+    </HTTPProxyConnection>
+    <RouteRule name="default">
+        <TargetEndpoint>default</TargetEndpoint>
+    </RouteRule>
+</ProxyEndpoint>
