@@ -702,7 +702,7 @@ export function registerDashboard(
       ?.catch(() => undefined);
     return (
       files?.get(file.join('/'))?.toString('utf8') ??
-      'This revision is no longer in memory. Use "Compare with local" in the Apigee Tools dashboard again.'
+      'This revision is no longer in memory. Open the comparison again from the Apigee Tools dashboard.'
     );
   }
 

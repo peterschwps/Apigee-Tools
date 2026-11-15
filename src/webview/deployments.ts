@@ -1,6 +1,6 @@
 // The Deployments tab: the proxies and shared flows of one environment in a
-// tab each, with their status, revision, comparison with the local bundle,
-// and problems.
+// tab each, with their status, revision, comparison with the workspace, and
+// problems.
 import type { VscodeSingleSelect } from '@vscode-elements/elements/dist/vscode-single-select/index.js';
 import type { VscodeTextfield } from '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import { html, nothing } from 'lit';
@@ -40,10 +40,12 @@ export type Actions = {
 
 /**
  * How a state shows: an icon whose shape differs per state, never color
- * alone; the label is its tooltip, its accessible name, and its filter option.
+ * alone; the label is its filter option and, unless a tooltip says more, its
+ * tooltip and accessible name.
  */
 type StatusInfo = {
   label: string;
+  tooltip?: string;
   /** Codicon name without the `codicon-` prefix. */
   icon: string;
   tone: 'success' | 'warning' | 'error' | 'neutral';
@@ -69,8 +71,18 @@ const statuses: Readonly<Record<StatusKey, StatusInfo>> = {
 };
 
 export const comparisons: Readonly<Record<ComparisonKey, StatusInfo>> = {
-  matches: { label: 'Matches', icon: 'check', tone: 'neutral' },
-  differs: { label: 'Differs', icon: 'diff-modified', tone: 'warning' },
+  matches: {
+    label: 'Same',
+    tooltip: 'Same as in the workspace',
+    icon: 'check',
+    tone: 'neutral',
+  },
+  differs: {
+    label: 'Differs',
+    tooltip: 'Differs from the workspace',
+    icon: 'diff-modified',
+    tone: 'warning',
+  },
   unknown: { label: 'Not compared', icon: 'question', tone: 'neutral' },
 };
 
@@ -112,7 +124,10 @@ export function statusIcon(status: Pick<StatusInfo, 'icon' | 'tone'>) {
 }
 
 /** Renders a state as its icon; the tooltip of its cell names it. */
-function stateIcon(status: StatusInfo, tooltip: string) {
+function stateIcon(
+  status: StatusInfo,
+  tooltip = status.tooltip ?? status.label,
+) {
   return html`${statusIcon(status)}<span class="sr-only">${tooltip}</span>`;
 }
 
@@ -167,7 +182,7 @@ export function deployments(
         )}
         ${filterSelect(
           'comparison-filter',
-          'Local Bundle',
+          'Workspace',
           view.comparison,
           comparisons,
           comparison => actions.setView({ comparison }),
@@ -283,10 +298,7 @@ function table(
             <th scope="col">Name</th>
             <th scope="col" class="icon-cell">Status</th>
             <th scope="col" class="revision">Revision</th>
-            <th scope="col" class="icon-cell">Local Bundle</th>
-            <th scope="col" class="actions">
-              <span class="sr-only">Actions</span>
-            </th>
+            <th scope="col" class="icon-cell">Workspace</th>
           </tr>
         </thead>
         <tbody>
@@ -297,7 +309,7 @@ function table(
                 )
               : html`
                   <tr>
-                    <td class="empty" colspan="5">
+                    <td class="empty" colspan="4">
                       ${
                         snapshot.rows.some(row => row.kind === kind)
                           ? 'None match the filters.'
@@ -313,7 +325,10 @@ function table(
   `;
 }
 
-/** One row: name, status icon, revision, comparison icon, and Compare. */
+/**
+ * One row: name, status icon, revision, and comparison icon; the icon of a
+ * deployment that differs opens the comparison.
+ */
 function deploymentRow(
   snapshot: Loaded,
   row: Row,
@@ -328,9 +343,10 @@ function deploymentRow(
   const status = loading(statusKey)
     ? { label: 'Checking…', icon: 'clock', tone: 'neutral' as const }
     : statuses[statusKey];
-  const comparison = loading(comparisonKey)
-    ? { label: 'Comparing…', icon: 'clock', tone: 'neutral' as const }
+  const comparison: StatusInfo | undefined = loading(comparisonKey)
+    ? { label: 'Comparing…', icon: 'clock', tone: 'neutral' }
     : comparisonKey && comparisons[comparisonKey];
+  const comparisonTip = comparison?.tooltip ?? comparison?.label;
   const conflicts = cell?.routeConflicts ?? [];
   const tooltip = [
     status.label,
@@ -360,19 +376,13 @@ function deploymentRow(
                 >`
         }
       </td>
-      <td
-        class="icon-cell"
-        data-tooltip=${comparison ? comparison.label : nothing}
-      >
-        ${comparison ? stateIcon(comparison, comparison.label) : nothing}
-      </td>
-      <td class="actions">
-        ${
-          cell && row.local
-            ? html`<button
+      ${
+        cell && comparisonKey === 'differs'
+          ? html`<td class="icon-cell">
+              <button
                 class="icon-button"
-                data-tooltip="Compare with local"
-                aria-label=${`Compare revision ${cell.revision} in ${environment} with the local bundle`}
+                data-tooltip=${`${comparisonTip}\nClick to compare`}
+                aria-label=${`${comparisonTip}. Compare revision ${cell.revision}`}
                 @click=${() =>
                   actions.send({
                     type: 'compare',
@@ -381,11 +391,13 @@ function deploymentRow(
                     environment,
                   })}
               >
-                <vscode-icon name="git-compare"></vscode-icon>
-              </button>`
-            : nothing
-        }
-      </td>
+                ${statusIcon(comparisons.differs)}
+              </button>
+            </td>`
+          : html`<td class="icon-cell" data-tooltip=${comparisonTip ?? nothing}>
+              ${comparison ? stateIcon(comparison) : nothing}
+            </td>`
+      }
     </tr>
   `;
 }

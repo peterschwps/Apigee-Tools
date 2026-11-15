@@ -465,11 +465,9 @@ export const styles = css`
     text-align: center;
   }
 
-  /* As narrow as the Compare button, which keeps every row one height */
-  .deployments .actions {
-    width: 1%;
-    padding-block: 2px;
-    text-align: right;
+  /* A button takes no more height than an icon, so every row is one height */
+  .deployments .icon-button {
+    margin-block: -3px;
   }
 
   .icon-button {
