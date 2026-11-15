@@ -358,6 +358,11 @@ function enabledAddons(
     .sort();
 }
 
+/** Starts a message with a capital letter, which Apigee's often lack. */
+function sentence(message: string): string {
+  return message.charAt(0).toUpperCase() + message.slice(1);
+}
+
 /** Copies a deployment status into its cell, reduced to readable messages. */
 export function applyStatus(cell: Cell, status: DeploymentStatus): void {
   cell.state =
@@ -367,12 +372,13 @@ export function applyStatus(cell: Cell, status: DeploymentStatus): void {
       ? status.state
       : undefined;
   cell.errors = (status.errors ?? [])
-    .map(error => error.message ?? '')
+    .map(error => sentence(error.message ?? ''))
     .filter(Boolean);
-  cell.routeConflicts = (status.routeConflicts ?? []).map(
-    conflict =>
+  cell.routeConflicts = (status.routeConflicts ?? []).map(conflict =>
+    sentence(
       conflict.description ??
-      `Base path ${conflict.conflictingDeployment?.basepath ?? '?'} conflicts with ${conflict.conflictingDeployment?.apiProxy ?? 'another deployment'} in ${conflict.environmentGroup ?? 'an environment group'}.`,
+        `Base path ${conflict.conflictingDeployment?.basepath ?? '?'} conflicts with ${conflict.conflictingDeployment?.apiProxy ?? 'another deployment'} in ${conflict.environmentGroup ?? 'an environment group'}.`,
+    ),
   );
   // Every instance and environment group lists its routes
   const basePaths = (status.instances ?? []).flatMap(instance =>

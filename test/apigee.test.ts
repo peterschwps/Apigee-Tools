@@ -335,7 +335,7 @@ test('a status keeps the state, readable messages, and base paths', () => {
   const cell: Cell = { revision: '2' };
   applyStatus(cell, {
     state: 'ERROR',
-    errors: [{ message: 'Invalid policy XML' }],
+    errors: [{ message: 'instance "eval" reported error InvalidAllowedRate' }],
     instances: [
       { deployedRoutes: [{ basepath: '/orders' }, { basepath: '/v2/orders' }] },
       { deployedRoutes: [{ basepath: '/orders' }] },
@@ -350,7 +350,7 @@ test('a status keeps the state, readable messages, and base paths', () => {
   assert.deepEqual(cell, {
     revision: '2',
     state: 'ERROR',
-    errors: ['Invalid policy XML'],
+    errors: ['Instance "eval" reported error InvalidAllowedRate'],
     routeConflicts: ['Base path /orders conflicts with legacy in public.'],
     basePaths: ['/orders', '/v2/orders'],
   });
