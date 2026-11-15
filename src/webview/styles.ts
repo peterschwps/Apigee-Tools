@@ -170,7 +170,13 @@ export const styles = css`
     border-right: 0;
   }
 
-  .account vscode-icon {
+  /* Refresh in the account's gray; hover brings the full icon color */
+  .session .refresh {
+    color: var(--at-text-muted);
+  }
+
+  .account vscode-icon,
+  .refresh vscode-icon {
     color: inherit;
   }
 
