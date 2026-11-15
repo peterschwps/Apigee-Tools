@@ -323,7 +323,7 @@ function columnFilter<Key extends string>(
     : `Filter by ${column.toLowerCase()}`;
   return html`
     <button
-      class="icon-button"
+      class="icon-button ${selected ? 'active' : ''}"
       popovertarget=${id}
       aria-haspopup="menu"
       aria-label=${tooltip}

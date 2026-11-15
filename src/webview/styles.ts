@@ -559,11 +559,20 @@ export const styles = css`
     gap: 2px;
   }
 
-  /* Smaller than other icon buttons, so the column names come first */
+  /*
+   * Smaller and grey, so the column names come first; hover and an active
+   * filter bring the icon to the front
+   */
   .column-head .icon-button {
     width: 18px;
     height: 18px;
     margin-block: -1px;
+    color: var(--at-text-muted);
+  }
+
+  .column-head .icon-button:hover,
+  .column-head .icon-button.active {
+    color: var(--vscode-icon-foreground, inherit);
   }
 
   /* Menus of the column filters, in VS Code's menu colors */
