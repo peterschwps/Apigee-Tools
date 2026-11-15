@@ -377,7 +377,7 @@ function placeMenu(event: ToggleEvent) {
   ).getBoundingClientRect();
   menu.style.top = `${box.bottom + 2}px`;
   // Near the right edge, the menu ends at the button instead of starting there
-  const right = box.left + 220 > innerWidth;
+  const right = box.left + 200 > innerWidth;
   menu.style.left = right ? 'auto' : `${box.left}px`;
   menu.style.right = right ? `${innerWidth - box.right}px` : 'auto';
 }
@@ -474,6 +474,7 @@ function table(
   const { environment } = view;
   const order = view.sort === 'desc' ? -1 : 1;
   const sorted = [...rows].sort((a, b) => order * a.name.localeCompare(b.name));
+  const reverse = view.sort === 'desc' ? 'Sort ascending' : 'Sort descending';
   return html`
     <div class="table-scroll">
       <table class="deployments">
@@ -486,38 +487,47 @@ function table(
               scope="col"
               aria-sort=${view.sort === 'desc' ? 'descending' : 'ascending'}
             >
-              <button
-                class="icon-button labeled sort"
-                @click=${() =>
-                  actions.setView({
-                    sort: view.sort === 'desc' ? 'asc' : 'desc',
-                  })}
-              >
-                Name<vscode-icon
-                  name=${view.sort === 'desc' ? 'arrow-down' : 'arrow-up'}
-                ></vscode-icon>
-              </button>
+              <span class="column-head">
+                Name
+                <button
+                  class="icon-button"
+                  data-tooltip=${reverse}
+                  aria-label=${reverse}
+                  @click=${() =>
+                    actions.setView({
+                      sort: view.sort === 'desc' ? 'asc' : 'desc',
+                    })}
+                >
+                  <vscode-icon
+                    name=${view.sort === 'desc' ? 'arrow-down' : 'arrow-up'}
+                  ></vscode-icon>
+                </button>
+              </span>
             </th>
             <th scope="col" class="icon-cell">
-              Status
-              ${columnFilter(
-                `${kind}-status`,
-                'Status',
-                view.status,
-                statuses,
-                status => actions.setView({ status }),
-              )}
+              <span class="column-head">
+                Status
+                ${columnFilter(
+                  `${kind}-status`,
+                  'Status',
+                  view.status,
+                  statuses,
+                  status => actions.setView({ status }),
+                )}
+              </span>
             </th>
             <th scope="col" class="revision">Revision</th>
             <th scope="col" class="icon-cell">
-              Workspace
-              ${columnFilter(
-                `${kind}-comparison`,
-                'Workspace',
-                view.comparison,
-                comparisons,
-                comparison => actions.setView({ comparison }),
-              )}
+              <span class="column-head">
+                Workspace
+                ${columnFilter(
+                  `${kind}-comparison`,
+                  'Workspace',
+                  view.comparison,
+                  comparisons,
+                  comparison => actions.setView({ comparison }),
+                )}
+              </span>
             </th>
           </tr>
         </thead>

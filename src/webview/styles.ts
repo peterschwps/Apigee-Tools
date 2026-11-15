@@ -546,11 +546,11 @@ export const styles = css`
     margin: 0 0 8px -3px;
   }
 
-  /* The label lines up with the names below */
-  .sort {
-    margin-left: -7px;
-    padding: 0 2px 0 6px;
-    color: inherit;
+  /* A column name with its sort or filter button, centered on the text */
+  .column-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
   }
 
   /* Menus of the column filters, in VS Code's menu colors */
@@ -573,7 +573,6 @@ export const styles = css`
     align-items: center;
     gap: 6px;
     width: 100%;
-    min-width: 180px;
     padding: 3px 10px 3px 6px;
     border: 0;
     border-radius: 3px;
