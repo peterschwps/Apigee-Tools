@@ -476,7 +476,9 @@ export const styles = css`
     margin-block: -3px;
   }
 
+  /* Border-box also for links, which are content-box by default */
   .icon-button {
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -490,9 +492,12 @@ export const styles = css`
     cursor: pointer;
   }
 
+  /* Links that look like icon buttons keep their color and get no underline */
   .icon-button:hover {
     border-color: var(--vscode-toolbar-hoverOutline, transparent);
     background: var(--vscode-toolbar-hoverBackground);
+    color: var(--vscode-icon-foreground, inherit);
+    text-decoration: none;
   }
 
   .icon-button:active {
@@ -505,6 +510,7 @@ export const styles = css`
   .icon-button:focus-visible {
     outline: 1px solid var(--vscode-focusBorder);
     outline-offset: -1px;
+    border-radius: 5px;
   }
 
   .problems {
@@ -576,12 +582,14 @@ export const styles = css`
     gap: 4px;
   }
 
+  /* An icon button with a label; the icon lines up with the title */
   .back {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
     justify-self: start;
-    margin-bottom: 8px;
+    width: auto;
+    gap: 2px;
+    margin: 0 0 8px -3px;
+    padding: 0 6px 0 2px;
+    font: inherit;
   }
 
   .details-title {

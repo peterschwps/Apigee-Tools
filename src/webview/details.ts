@@ -52,7 +52,7 @@ export function details(snapshot: Loaded, row: Row, actions: Actions) {
     <div class="page">
       <header class="details-head">
         <button
-          class="link back"
+          class="icon-button back"
           @click=${() => actions.setView({ detail: '' })}
         >
           <vscode-icon name="chevron-left"></vscode-icon>Deployments
