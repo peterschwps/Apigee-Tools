@@ -1,6 +1,6 @@
 // The Deployments tab: the proxies and shared flows of one environment in a
-// tab each, with their status, revision, comparison with the workspace, and
-// problems.
+// tab each, with their status, revision, and comparison with the workspace; a
+// name opens its details.
 import type { VscodeSingleSelect } from '@vscode-elements/elements/dist/vscode-single-select/index.js';
 import type { VscodeTextfield } from '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import { html, nothing } from 'lit';
@@ -30,6 +30,8 @@ export type DeploymentView = {
   filter: string;
   status: StatusKey | '';
   comparison: ComparisonKey | '';
+  /** The proxy or shared flow of `kind` whose details show, if any. */
+  detail: string;
 };
 
 /** How the tabs report actions: messages to the extension and view changes. */
@@ -61,7 +63,7 @@ const tabs: [Kind, string][] = [
   ['sharedflows', 'Shared Flows'],
 ];
 
-const statuses: Readonly<Record<StatusKey, StatusInfo>> = {
+export const statuses: Readonly<Record<StatusKey, StatusInfo>> = {
   ready: { label: 'Ready', icon: 'pass-filled', tone: 'success' },
   warnings: { label: 'Warnings', icon: 'warning', tone: 'warning' },
   failed: { label: 'Failed', icon: 'error', tone: 'error' },
@@ -86,8 +88,16 @@ export const comparisons: Readonly<Record<ComparisonKey, StatusInfo>> = {
   unknown: { label: 'Not compared', icon: 'question', tone: 'neutral' },
 };
 
+// Unknown states while a load may still bring them
+const checking: StatusInfo = {
+  label: 'Checking…',
+  icon: 'clock',
+  tone: 'neutral',
+};
+const comparing: StatusInfo = { ...checking, label: 'Comparing…' };
+
 /** What Apigee's route conflicts mean; its own messages follow. */
-const conflictHint =
+export const conflictHint =
   'Base path conflict: another environment in the same environment group serves this base path too, so Apigee routes its requests to only one of them.';
 
 /** Returns whether a deployment failed or has a route conflict. */
@@ -96,7 +106,7 @@ export function isProblem(cell: Cell): boolean {
 }
 
 /** Returns how a deployment is doing; without a cell, it is not deployed. */
-function statusOf(cell: Cell | undefined): StatusKey {
+export function statusOf(cell: Cell | undefined): StatusKey {
   if (!cell) return 'none';
   if (cell.state === 'ERROR') return 'failed';
   if (cell.routeConflicts?.length) return 'warnings';
@@ -123,23 +133,75 @@ export function statusIcon(status: Pick<StatusInfo, 'icon' | 'tone'>) {
   ></vscode-icon>`;
 }
 
-/** Renders a state as its icon; the tooltip of its cell names it. */
-function stateIcon(
-  status: StatusInfo,
-  tooltip = status.tooltip ?? status.label,
+/** A cell with the icon of a state, which its tooltip names. */
+function stateCell(status: StatusInfo | undefined) {
+  const tooltip = status && (status.tooltip ?? status.label);
+  return html`<td class="icon-cell" data-tooltip=${tooltip ?? nothing}>
+    ${
+      status
+        ? html`${statusIcon(status)}<span class="sr-only">${tooltip}</span>`
+        : nothing
+    }
+  </td>`;
+}
+
+/** A dash for a missing value, which screen readers read as "None". */
+export function none() {
+  return html`${statusIcon(statuses.none)}<span class="sr-only">None</span>`;
+}
+
+/** The status of a deployment. */
+export function statusCell(snapshot: Loaded, cell: Cell | undefined) {
+  const key = statusOf(cell);
+  return stateCell(
+    key === 'unknown' && snapshot.loading ? checking : statuses[key],
+  );
+}
+
+export function revisionCell(cell: Cell | undefined) {
+  return html`<td class="revision">${cell ? cell.revision : none()}</td>`;
+}
+
+/**
+ * How a deployment compares with the workspace; the icon of one that differs
+ * opens the comparison.
+ */
+export function workspaceCell(
+  snapshot: Loaded,
+  row: Row,
+  environment: string,
+  actions: Actions,
 ) {
-  return html`${statusIcon(status)}<span class="sr-only">${tooltip}</span>`;
+  const cell = row.cells[environment];
+  const key = comparisonOf(row, cell);
+  if (cell && key === 'differs') {
+    const tooltip = comparisons.differs.tooltip;
+    return html`<td class="icon-cell">
+      <button
+        class="icon-button"
+        data-tooltip=${`${tooltip}\nClick to compare`}
+        aria-label=${`${tooltip}. Compare revision ${cell.revision}`}
+        @click=${() =>
+          actions.send({
+            type: 'compare',
+            kind: row.kind,
+            name: row.name,
+            environment,
+          })}
+      >
+        ${statusIcon(comparisons.differs)}
+      </button>
+    </td>`;
+  }
+  return stateCell(
+    key === 'unknown' && snapshot.loading ? comparing : key && comparisons[key],
+  );
 }
 
 /** Returns the Apigee console page of a proxy or shared flow. */
-function consoleUrl(projectId: string, row: Row): string {
+export function consoleUrl(projectId: string, row: Row): string {
   const collection = row.kind === 'apis' ? 'proxies' : 'sharedflows';
   return `https://console.cloud.google.com/apigee/${collection}/${encodeURIComponent(row.name)}/overview?project=${encodeURIComponent(projectId)}`;
-}
-
-/** Messages of a deployment: errors first, then route conflicts. */
-function details(cell: Cell): string[] {
-  return [...(cell.errors ?? []), ...(cell.routeConflicts ?? [])];
 }
 
 export function deployments(
@@ -235,10 +297,7 @@ function filterSelect<Key extends string>(
   `;
 }
 
-/**
- * The proxies and the shared flows in a tab each, counted after filtering;
- * the problems below a table follow its filters.
- */
+/** The proxies and the shared flows in a tab each, counted after filtering. */
 function kindTabs(
   snapshot: Loaded,
   shown: Row[],
@@ -270,7 +329,6 @@ function kindTabs(
         return html`
           <vscode-tab-panel>
             ${table(snapshot, rows, kind, label, view.environment, actions)}
-            ${problemList(rows, view.environment)}
           </vscode-tab-panel>
         `;
       })}
@@ -325,10 +383,7 @@ function table(
   `;
 }
 
-/**
- * One row: name, status icon, revision, and comparison icon; the icon of a
- * deployment that differs opens the comparison.
- */
+/** One row; its name opens the details. */
 function deploymentRow(
   snapshot: Loaded,
   row: Row,
@@ -336,99 +391,22 @@ function deploymentRow(
   actions: Actions,
 ) {
   const cell = row.cells[environment];
-  const statusKey = statusOf(cell);
-  const comparisonKey = comparisonOf(row, cell);
-  // Unknown states may still be loading
-  const loading = (key?: string) => key === 'unknown' && snapshot.loading;
-  const status = loading(statusKey)
-    ? { label: 'Checking…', icon: 'clock', tone: 'neutral' as const }
-    : statuses[statusKey];
-  const comparison: StatusInfo | undefined = loading(comparisonKey)
-    ? { label: 'Comparing…', icon: 'clock', tone: 'neutral' }
-    : comparisonKey && comparisons[comparisonKey];
-  const comparisonTip = comparison?.tooltip ?? comparison?.label;
-  const conflicts = cell?.routeConflicts ?? [];
-  const tooltip = [
-    status.label,
-    ...(cell?.errors ?? []),
-    ...(conflicts.length ? [conflictHint, ...conflicts] : []),
-  ].join('\n');
   return html`
     <tr>
       <th scope="row">
-        <a
-          href=${consoleUrl(snapshot.overview.projectId, row)}
-          data-tooltip="Open in the Apigee console"
-          >${row.name}<span class="sr-only">
-            (opens the Apigee console)</span
-          ></a
+        <button
+          class="link"
+          data-name=${`${row.kind}/${row.name}`}
+          @click=${() => {
+            actions.setView({ detail: row.name });
+            actions.send({ type: 'details', kind: row.kind, name: row.name });
+          }}
         >
+          ${row.name}
+        </button>
       </th>
-      <td class="icon-cell" data-tooltip=${tooltip}>
-        ${stateIcon(status, tooltip)}
-      </td>
-      <td class="revision">
-        ${
-          cell
-            ? cell.revision
-            : html`${statusIcon(statuses.none)}<span class="sr-only"
-                  >None</span
-                >`
-        }
-      </td>
-      ${
-        cell && comparisonKey === 'differs'
-          ? html`<td class="icon-cell">
-              <button
-                class="icon-button"
-                data-tooltip=${`${comparisonTip}\nClick to compare`}
-                aria-label=${`${comparisonTip}. Compare revision ${cell.revision}`}
-                @click=${() =>
-                  actions.send({
-                    type: 'compare',
-                    kind: row.kind,
-                    name: row.name,
-                    environment,
-                  })}
-              >
-                ${statusIcon(comparisons.differs)}
-              </button>
-            </td>`
-          : html`<td class="icon-cell" data-tooltip=${comparisonTip ?? nothing}>
-              ${comparison ? stateIcon(comparison) : nothing}
-            </td>`
-      }
+      ${statusCell(snapshot, cell)} ${revisionCell(cell)}
+      ${workspaceCell(snapshot, row, environment, actions)}
     </tr>
-  `;
-}
-
-/** The failed deployments and route conflicts shown, with their messages. */
-function problemList(rows: Row[], environment: string) {
-  const problems = rows.flatMap(row => {
-    const cell = row.cells[environment];
-    return cell && isProblem(cell) ? [{ row, cell }] : [];
-  });
-  if (!problems.length) return nothing;
-  return html`
-    <section class="problem-section">
-      <h3>Problems</h3>
-      <ul class="problems">
-        ${problems.map(({ row, cell }) => {
-          const status = statuses[statusOf(cell)];
-          return html`
-            <li>
-              ${statusIcon(status)}
-              <span>
-                <strong>${row.name}</strong>, revision ${cell.revision}:
-                ${status.label}
-              </span>
-              ${details(cell).map(
-                message => html`<span class="detail">${message}</span>`,
-              )}
-            </li>
-          `;
-        })}
-      </ul>
-    </section>
   `;
 }

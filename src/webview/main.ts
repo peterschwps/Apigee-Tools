@@ -25,6 +25,7 @@ import {
   type DeploymentView,
   type Loaded,
 } from './deployments';
+import { details } from './details';
 import { overview, workspace } from './overview';
 import { styles } from './styles';
 import { tooltips } from './tooltip';
@@ -80,9 +81,18 @@ class ApigeeDashboard extends LitElement {
   /** Hides the tooltip once a render removed its element. */
   private syncTooltip = () => {};
 
+  /** The element to focus after the next render, as a selector. */
+  private focusNext?: string;
+
   private readonly actions: Actions = {
     send,
     setView: patch => {
+      // Keyboard focus moves into the details, and back to the row they show
+      if (patch.detail !== undefined && patch.detail !== this.view.detail) {
+        this.focusNext = patch.detail
+          ? '.back'
+          : `[data-name="${CSS.escape(`${this.view.kind}/${this.view.detail}`)}"]`;
+      }
       this.view = { ...this.view, ...patch };
       vscode.setState(this.view);
     },
@@ -98,6 +108,7 @@ class ApigeeDashboard extends LitElement {
       filter: '',
       status: '',
       comparison: '',
+      detail: '',
       ...vscode.getState(),
     };
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
@@ -125,9 +136,19 @@ class ApigeeDashboard extends LitElement {
     );
   }
 
-  /** Moves focus to Refresh once a notice with the focused button is gone. */
+  /**
+   * Moves the focus into or out of the details, and to Refresh once a notice
+   * with the focused button is gone.
+   */
   protected override async updated(): Promise<void> {
     this.syncTooltip();
+    if (this.focusNext) {
+      const selector = this.focusNext;
+      this.focusNext = undefined;
+      // Nested tabs show their panels only after updates of their own
+      await new Promise(requestAnimationFrame);
+      this.renderRoot.querySelector<HTMLElement>(selector)?.focus();
+    }
     if (!refocus) return;
     const refresh = this.renderRoot.querySelector<LitElement>(
       '.session vscode-button',
@@ -173,11 +194,15 @@ class ApigeeDashboard extends LitElement {
                     </vscode-label>
                     <vscode-single-select
                       id="organization"
-                      @change=${(event: Event) =>
+                      @change=${(event: Event) => {
+                        // Details belong to the organization they came from
+                        this.view = { ...this.view, detail: '' };
+                        vscode.setState(this.view);
                         send({
                           type: 'organization',
                           name: (event.target as VscodeSingleSelect).value,
-                        })}
+                        });
+                      }}
                     >
                       ${snapshot.organizations.map(
                         name => html`
@@ -311,11 +336,20 @@ class ApigeeDashboard extends LitElement {
           <span class="tab-label">Deployments</span>
         </vscode-tab-header>
         <vscode-tab-panel>${overview(snapshot, this.actions)}</vscode-tab-panel>
-        <vscode-tab-panel>
-          ${deployments(snapshot, this.effectiveView(snapshot), this.actions)}
-        </vscode-tab-panel>
+        <vscode-tab-panel>${this.deploymentsTab(snapshot)}</vscode-tab-panel>
       </vscode-tabs>
     `;
+  }
+
+  /** The table of the Deployments tab, or the details of one of its rows. */
+  private deploymentsTab(snapshot: Loaded) {
+    const view = this.effectiveView(snapshot);
+    const row = snapshot.rows.find(
+      item => item.kind === view.kind && item.name === view.detail,
+    );
+    return row
+      ? details(snapshot, row, this.actions)
+      : deployments(snapshot, view, this.actions);
   }
 }
 

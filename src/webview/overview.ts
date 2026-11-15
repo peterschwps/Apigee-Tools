@@ -190,7 +190,7 @@ function environmentsCard(organization: Overview) {
 }
 
 /** The lint findings of a bundle, or a note that there are none. */
-function findings(bundle: LocalBundle) {
+export function findings(bundle: LocalBundle) {
   if (!bundle.linted) {
     return html`<span class="finding muted"
       >Not linted: turned off by apigeeTools.enabled</span

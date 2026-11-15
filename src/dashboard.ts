@@ -234,6 +234,9 @@ export function registerDashboard(
       case 'compare':
         await compare(message.kind, message.name, message.environment);
         break;
+      case 'details':
+        await checkDetails(message.kind, message.name);
+        break;
       case 'openBundle': {
         const bundle = bundles.find(item => relative(item) === message.path);
         try {
@@ -520,6 +523,63 @@ export function registerDashboard(
       notes.push(
         `Status was checked for ${checked} of ${total} deployments, local bundles and recent deployments first, to spare the API quota.`,
       );
+    }
+  }
+
+  /**
+   * Loads the status that the details of a proxy or shared flow still miss,
+   * such as those beyond the limit of status checks per load.
+   */
+  async function checkDetails(kind: Kind, name: string): Promise<void> {
+    const row = snapshot.rows?.find(
+      item => item.kind === kind && item.name === name,
+    );
+    const organization = snapshot.organization;
+    const missing = Object.entries(row?.cells ?? {}).filter(
+      ([, cell]) => !cell.state,
+    );
+    if (!organization || !missing.length) return;
+    // A running load reports its own end
+    const alone = !loading;
+    if (alone) {
+      snapshot = { ...snapshot, loading: true };
+      post();
+    }
+    try {
+      const current = (session ??= await startSession());
+      const client = apigeeClient(current.tokens, current.base);
+      await Promise.all(
+        missing.map(async ([environment, cell]) => {
+          try {
+            applyStatus(
+              cell,
+              await client.deploymentStatus(
+                organization,
+                environment,
+                kind,
+                name,
+                cell.revision,
+              ),
+            );
+          } catch (error) {
+            host.log.warn(
+              `Status of ${name} in ${environment}:`,
+              messageOf(error),
+            );
+            snapshot.notes?.push(
+              `Status of "${name}" in ${environment} could not be checked: ${messageOf(error)}`,
+            );
+          }
+        }),
+      );
+    } catch (error) {
+      host.log.warn('Checking the details failed:', messageOf(error));
+      snapshot.notes?.push(
+        `Status of "${name}" could not be checked: ${messageOf(error)}`,
+      );
+    } finally {
+      if (alone && !loading) snapshot = { ...snapshot, loading: false };
+      post();
     }
   }
 

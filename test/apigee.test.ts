@@ -204,12 +204,14 @@ test('rows combine all bundles with their newest deployments', async t => {
               apiProxy: 'orders',
               revision: '4',
               deployStartTime: '200',
+              proxyDeploymentType: 'PROXY_DEPLOYMENT_TYPE_UNSPECIFIED',
             },
             {
               environment: 'dev',
               apiProxy: 'orders',
               revision: '5',
               deployStartTime: '300',
+              proxyDeploymentType: 'EXTENSIBLE',
             },
           ],
         });
@@ -231,7 +233,7 @@ test('rows combine all bundles with their newest deployments', async t => {
       local: false,
       cells: {
         prod: { revision: '4', deployedAt: 200 },
-        dev: { revision: '5', deployedAt: 300 },
+        dev: { revision: '5', deployedAt: 300, proxyType: 'EXTENSIBLE' },
       },
     },
     {
@@ -329,11 +331,15 @@ test('status checks start with local bundles, then the newest deployments', () =
   );
 });
 
-test('a status keeps the state and readable messages', () => {
+test('a status keeps the state, readable messages, and base paths', () => {
   const cell: Cell = { revision: '2' };
   applyStatus(cell, {
     state: 'ERROR',
     errors: [{ message: 'Invalid policy XML' }],
+    instances: [
+      { deployedRoutes: [{ basepath: '/orders' }, { basepath: '/v2/orders' }] },
+      { deployedRoutes: [{ basepath: '/orders' }] },
+    ],
     routeConflicts: [
       {
         environmentGroup: 'public',
@@ -346,6 +352,7 @@ test('a status keeps the state and readable messages', () => {
     state: 'ERROR',
     errors: ['Invalid policy XML'],
     routeConflicts: ['Base path /orders conflicts with legacy in public.'],
+    basePaths: ['/orders', '/v2/orders'],
   });
 });
 

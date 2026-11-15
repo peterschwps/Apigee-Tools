@@ -30,12 +30,14 @@ type Deployment = {
   apiProxy: string;
   revision: string;
   deployStartTime?: string;
+  proxyDeploymentType?: string;
 };
 
 /** The status of one deployment, which list requests leave out. */
 export type DeploymentStatus = {
   state?: DeploymentState | 'RUNTIME_STATE_UNSPECIFIED';
   errors?: { message?: string }[];
+  instances?: { deployedRoutes?: { basepath?: string }[] }[];
   routeConflicts?: {
     description?: string;
     environmentGroup?: string;
@@ -332,9 +334,13 @@ export async function loadRows(
       const deployedAt = Number(deployment.deployStartTime) || undefined;
       const current = row.cells[deployment.environment];
       if (current && (current.deployedAt ?? 0) > (deployedAt ?? 0)) continue;
+      const proxyType = deployment.proxyDeploymentType;
       row.cells[deployment.environment] = {
         revision: deployment.revision,
         deployedAt,
+        ...((proxyType === 'STANDARD' || proxyType === 'EXTENSIBLE') && {
+          proxyType,
+        }),
       };
     }
     rows.push(...[...rowsByName.values()].sort(byName));
@@ -368,6 +374,11 @@ export function applyStatus(cell: Cell, status: DeploymentStatus): void {
       conflict.description ??
       `Base path ${conflict.conflictingDeployment?.basepath ?? '?'} conflicts with ${conflict.conflictingDeployment?.apiProxy ?? 'another deployment'} in ${conflict.environmentGroup ?? 'an environment group'}.`,
   );
+  // Every instance and environment group lists its routes
+  const basePaths = (status.instances ?? []).flatMap(instance =>
+    (instance.deployedRoutes ?? []).map(route => route.basepath ?? ''),
+  );
+  cell.basePaths = [...new Set(basePaths.filter(Boolean))];
 }
 
 /**

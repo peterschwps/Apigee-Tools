@@ -465,6 +465,12 @@ export const styles = css`
     text-align: center;
   }
 
+  /* Columns of the details that are as narrow as their content */
+  .deployments .fit {
+    width: 1%;
+    padding-inline: 16px;
+  }
+
   /* A button takes no more height than an icon, so every row is one height */
   .deployments .icon-button {
     margin-block: -3px;
@@ -501,14 +507,6 @@ export const styles = css`
     outline-offset: -1px;
   }
 
-  .problem-section {
-    display: grid;
-    gap: 8px;
-    margin-top: 8px;
-    padding-top: 12px;
-    border-top: 1px solid var(--at-border);
-  }
-
   .problems {
     display: grid;
     gap: 6px;
@@ -525,7 +523,6 @@ export const styles = css`
 
   .problems .detail {
     grid-column: 2;
-    color: var(--at-text-muted);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -571,5 +568,36 @@ export const styles = css`
   .count {
     margin-left: auto;
     color: var(--at-text-muted);
+  }
+
+  /* Details of a proxy or shared flow */
+  .details-head {
+    display: grid;
+    gap: 4px;
+  }
+
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    justify-self: start;
+    margin-bottom: 8px;
+  }
+
+  .details-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .details-title h2 {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+
+  .details-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
   }
 `;

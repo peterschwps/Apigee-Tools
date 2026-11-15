@@ -16,6 +16,10 @@ export type Cell = {
   state?: DeploymentState;
   errors?: string[];
   routeConflicts?: string[];
+  /** Base paths that environment groups route to the deployment. */
+  basePaths?: string[];
+  /** The proxy type, which sets the price of a call under pay-as-you-go. */
+  proxyType?: 'STANDARD' | 'EXTENSIBLE';
   /** Whether the revision differs from the local bundle; absent if unknown. */
   drift?: boolean;
 };
@@ -90,6 +94,7 @@ export type WebviewMessage =
   | { type: 'refresh' }
   | { type: 'organization'; name: string }
   | { type: 'compare'; kind: Kind; name: string; environment: string }
+  | { type: 'details'; kind: Kind; name: string }
   | { type: 'openBundle'; path: string }
   | { type: 'signIn' }
   | { type: 'settings' }
