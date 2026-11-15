@@ -140,7 +140,11 @@ class ApigeeDashboard extends LitElement {
       'keydown',
       event => {
         const target = event.composedPath()[0] as Element;
-        if (event.repeat && target.localName === 'vscode-button') {
+        if (
+          event.repeat &&
+          (target.localName === 'vscode-button' ||
+            target.classList.contains('refresh'))
+        ) {
           event.stopPropagation();
           event.preventDefault();
         }
@@ -171,11 +175,9 @@ class ApigeeDashboard extends LitElement {
       this.renderRoot.querySelector<HTMLElement>(selector)?.focus();
     }
     if (!refocus) return;
-    const refresh = this.renderRoot.querySelector<LitElement>('.refresh');
+    const refresh = this.renderRoot.querySelector<HTMLElement>('.refresh');
     if (!refresh) return;
     refocus = false;
-    // A new button renders its inner element first, then takes the focus
-    await refresh.updateComplete;
     refresh.focus();
   }
 
@@ -277,16 +279,17 @@ class ApigeeDashboard extends LitElement {
           ${
             snapshot?.trusted && snapshot.requested
               ? html`
-                  <vscode-button
-                    class="refresh"
-                    secondary
-                    icon="refresh"
-                    ?icon-spin=${snapshot.loading && !reducedMotion()}
+                  <button
+                    class="icon-button labeled refresh"
                     aria-busy=${snapshot.loading ? 'true' : 'false'}
                     @click=${() => send({ type: 'refresh' })}
-                    @keydown=${keepScroll}
-                    >Refresh</vscode-button
                   >
+                    <vscode-icon
+                      name="refresh"
+                      ?spin=${snapshot.loading && !reducedMotion()}
+                    ></vscode-icon
+                    >Refresh
+                  </button>
                 `
               : nothing
           }

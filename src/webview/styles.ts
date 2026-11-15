@@ -133,7 +133,7 @@ export const styles = css`
     grid-area: session;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     min-width: 0;
   }
 
@@ -156,9 +156,11 @@ export const styles = css`
     max-width: 100%;
   }
 
-  /* Only the icon; the tooltip names the account */
+  /* Only the icon, which the tooltip names; a line sets it apart from Refresh */
   .account {
     display: flex;
+    padding-right: 16px;
+    border-right: 1px solid var(--at-border);
     color: var(--at-text-muted);
   }
 
