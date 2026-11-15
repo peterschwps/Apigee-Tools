@@ -41,7 +41,7 @@ import {
   type BundleFiles,
 } from './revision';
 
-/** A bundle in the workspace, with the findings of the linter. */
+/** A bundle in the workspace. */
 export type WorkspaceBundle = Omit<LocalBundle, 'path'> & {
   /** Absolute path of the `apiproxy` or `sharedflowbundle` directory. */
   directory: string;
@@ -52,7 +52,7 @@ export type WorkspaceBundle = Omit<LocalBundle, 'path'> & {
 /** What the dashboard needs from the rest of the extension. */
 export type DashboardHost = {
   log: vscode.LogOutputChannel;
-  /** Finds the bundles in the workspace and lints them. */
+  /** Finds the bundles in the workspace. */
   scanWorkspace(): Promise<WorkspaceBundle[]>;
 };
 
@@ -200,8 +200,8 @@ export function registerDashboard(
       case 'ready':
         ready = true;
         post();
-        if (!snapshot.trusted) await scan();
-        else if (
+        if (
+          snapshot.trusted &&
           snapshot.requested &&
           !snapshot.loading &&
           !snapshot.overview &&
@@ -270,13 +270,6 @@ export function registerDashboard(
         await vscode.commands.executeCommand('workbench.trust.manage');
         break;
     }
-  }
-
-  /** Lints the workspace bundles for the restricted view. */
-  async function scan(): Promise<void> {
-    bundles = await host.scanWorkspace();
-    snapshot = { ...snapshot, bundles: bundles.map(toLocalBundle) };
-    post();
   }
 
   /**
@@ -873,8 +866,7 @@ function relative(bundle: WorkspaceBundle): string {
 }
 
 function toLocalBundle(bundle: WorkspaceBundle): LocalBundle {
-  const { kind, name, linted, errors, warnings } = bundle;
-  return { kind, name, path: relative(bundle), linted, errors, warnings };
+  return { kind: bundle.kind, name: bundle.name, path: relative(bundle) };
 }
 
 /** Explains an error in terms of what the user can do about it. */

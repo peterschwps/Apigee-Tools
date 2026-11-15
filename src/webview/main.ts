@@ -26,7 +26,7 @@ import {
   type Loaded,
 } from './deployments';
 import { details } from './details';
-import { overview, workspace } from './overview';
+import { overview } from './overview';
 import { styles } from './styles';
 import { tooltips } from './tooltip';
 
@@ -86,17 +86,24 @@ class ApigeeDashboard extends LitElement {
 
   private readonly actions: Actions = {
     send,
-    setView: patch => {
-      // Keyboard focus moves into the details, and back to the row they show
-      if (patch.detail !== undefined && patch.detail !== this.view.detail) {
-        this.focusNext = patch.detail
-          ? '.back'
-          : `[data-name="${CSS.escape(`${this.view.kind}/${this.view.detail}`)}"]`;
-      }
-      this.view = { ...this.view, ...patch };
-      vscode.setState(this.view);
+    setView: patch => this.setView(patch),
+    openDetails: row => {
+      this.setView({ tab: 1, kind: row.kind, detail: row.name });
+      send({ type: 'details', kind: row.kind, name: row.name });
     },
   };
+
+  /** Changes the view and keeps it for a reload of the webview. */
+  private setView(patch: Partial<ViewState>): void {
+    // Keyboard focus moves into the details, and back to the row they show
+    if (patch.detail !== undefined && patch.detail !== this.view.detail) {
+      this.focusNext = patch.detail
+        ? '.back'
+        : `[data-name="${CSS.escape(`${this.view.kind}/${this.view.detail}`)}"]`;
+    }
+    this.view = { ...this.view, ...patch };
+    vscode.setState(this.view);
+  }
 
   constructor() {
     super();
@@ -283,9 +290,6 @@ class ApigeeDashboard extends LitElement {
             'The dashboard runs gcloud and reads from the Apigee API, which needs a trusted workspace. Linting keeps working in Restricted Mode.',
             button('Manage Workspace Trust', { type: 'trust' }),
           )}
-        </div>
-        <div class="content">
-          ${workspace(snapshot.bundles, undefined, this.actions)}
         </div>
       `;
     }

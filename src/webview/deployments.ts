@@ -38,6 +38,8 @@ export type DeploymentView = {
 export type Actions = {
   send(message: WebviewMessage): void;
   setView(patch: Partial<DeploymentView>): void;
+  /** Shows the details of a row and loads what they still miss. */
+  openDetails(row: Row): void;
 };
 
 /**
@@ -105,6 +107,15 @@ const comparing: StatusInfo = { ...checking, label: 'Comparing…' };
 /** What Apigee's route conflicts mean; its own messages follow. */
 export const conflictHint =
   'Base path conflict: another environment in the same environment group serves this base path too, so Apigee routes its requests to only one of them.';
+
+/** The messages of a deployment: errors, then explained route conflicts. */
+export function messagesOf(cell: Cell): string[] {
+  const conflicts = cell.routeConflicts ?? [];
+  return [
+    ...(cell.errors ?? []),
+    ...(conflicts.length ? [conflictHint, ...conflicts] : []),
+  ];
+}
 
 /** Returns whether a deployment failed or has a route conflict. */
 export function isProblem(cell: Cell): boolean {
@@ -418,10 +429,7 @@ function deploymentRow(
         <button
           class="link"
           data-name=${`${row.kind}/${row.name}`}
-          @click=${() => {
-            actions.setView({ detail: row.name });
-            actions.send({ type: 'details', kind: row.kind, name: row.name });
-          }}
+          @click=${() => actions.openDetails(row)}
         >
           ${row.name}
         </button>

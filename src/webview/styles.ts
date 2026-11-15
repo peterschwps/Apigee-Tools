@@ -234,10 +234,6 @@ export const styles = css`
     display: none;
   }
 
-  .content {
-    padding: 16px 20px 20px;
-  }
-
   .loading {
     display: flex;
     align-items: center;
@@ -339,24 +335,8 @@ export const styles = css`
     gap: 16px;
   }
 
-  .facts {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 6px 16px;
-    margin: 0;
-  }
-
-  .facts dt {
-    color: var(--at-text-muted);
-  }
-
-  .facts dd {
-    margin: 0;
-  }
-
   .list,
-  .chips,
-  .hosts {
+  .chips {
     margin: 0;
     padding: 0;
     list-style: none;
@@ -385,25 +365,16 @@ export const styles = css`
     gap: 4px;
   }
 
-  .hosts li,
   .path,
   .item-name {
     overflow-wrap: anywhere;
   }
 
-  .hosts,
   .path {
     margin-top: 2px;
     color: var(--at-text-muted);
     font-family: var(--vscode-editor-font-family);
     font-size: 12px;
-  }
-
-  .findings {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    margin-top: 2px;
   }
 
   .finding {

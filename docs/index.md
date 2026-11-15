@@ -187,9 +187,9 @@ The dashboard selects the organization you chose last in this workspace, otherwi
 
 ### Overview and deployments
 
-- **Overview** counts environments, API proxies, shared flows, deployments, and problems. It lists the environments with their type, environment groups and, under pay-as-you-go, their add-ons, and the bundles in the workspace with their lint findings.
+- **Overview** counts environments, API proxies, shared flows, deployments, and problems. It lists the environments with their type, environment groups and, under pay-as-you-go, their add-ons, and the failed deployments and warnings with their messages; a name opens the details.
 - **Deployments** lists the API proxies and the shared flows of the environment chosen at the top, each in a tab that counts the rows shown. Icons show the status of each deployment (Ready, Warnings, Failed, Deploying, Unknown, or Not deployed) and how it compares with the workspace (Same, Differs, Not compared, or Not in workspace). Hovering over an icon names it. Filter by name, status, or workspace. A name opens the details of the proxy or shared flow.
-- **Details** show the deployments of a proxy or shared flow in every environment with status, revision, deployment time, base paths, and the comparison with the workspace, followed by their errors and warnings in full. The header names the proxy type, Standard or Extensible, which sets the price of a call under pay-as-you-go, and the bundle in the workspace with its lint findings; its buttons open the Apigee console and the local bundle.
+- **Details** show the deployments of a proxy or shared flow in every environment with status, revision, deployment time, base paths, and the comparison with the workspace, followed by their errors and warnings in full. The header names the proxy type, Standard or Extensible, which sets the price of a call under pay-as-you-go, and the path of its bundle in the workspace; its buttons open the Apigee console and the local bundle.
 - **Warnings:** the deployment is ready, but Apigee reports a base path conflict: another environment in the same environment group serves the same base path, and Apigee routes the requests for it to only one environment. Give the proxies different base paths, or attach the environments to different groups.
 - **Unknown:** the status was not checked; a notice above the tabs says why. Opening the details checks it.
 
@@ -214,7 +214,7 @@ The dashboard runs `gcloud config list` and `gcloud auth print-access-token`, wi
 
 Data loads when you open the dashboard, refresh it, or switch the organization; a dashboard restored after restarting VS Code waits until you load it. To spare the API quota, the status is checked for at most 200 deployments per load, local bundles and recent deployments first. A network failure or an exhausted quota stops the remaining checks, and a notice says so.
 
-In Restricted Mode, linting keeps working. The dashboard then lists only the workspace bundles and needs a trusted workspace for everything else.
+In Restricted Mode, linting keeps working, and the dashboard asks for a trusted workspace.
 
 ## Scope and limitations
 

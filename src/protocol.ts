@@ -51,16 +51,12 @@ export type Overview = {
   groups: { name: string; hostnames: string[]; environments: string[] }[];
 };
 
-/** A bundle in the workspace with the findings of the linter. */
+/** A bundle in the workspace. */
 export type LocalBundle = {
   kind: Kind;
   name: string;
   /** Workspace-relative path of the bundle directory. */
   path: string;
-  /** Whether the linter checked it; the settings can turn linting off. */
-  linted: boolean;
-  errors: number;
-  warnings: number;
 };
 
 /** Why the dashboard cannot show data, and what may help. */

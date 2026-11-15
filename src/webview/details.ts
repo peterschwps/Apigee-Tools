@@ -5,10 +5,10 @@ import { html, nothing } from 'lit';
 import type { Cell, LocalBundle, Row } from '../protocol';
 import {
   comparisons,
-  conflictHint,
   consoleUrl,
   isProblem,
   kindLabels,
+  messagesOf,
   none,
   revisionCell,
   statusCell,
@@ -19,7 +19,6 @@ import {
   type Actions,
   type Loaded,
 } from './deployments';
-import { findings } from './overview';
 
 const proxyTypes = { STANDARD: 'Standard', EXTENSIBLE: 'Extensible' };
 
@@ -143,18 +142,12 @@ export function details(snapshot: Loaded, row: Row, actions: Actions) {
   `;
 }
 
-/** The bundles of this name in the workspace, with their lint findings. */
+/** The paths of the bundles of this name in the workspace. */
 function local(bundles: LocalBundle[] | undefined) {
   if (!bundles) return html`<p class="muted">Scanning the workspace…</p>`;
   if (!bundles.length) return html`<p class="muted">Not in this workspace</p>`;
   return html`
-    ${bundles.map(
-      bundle => html`
-        <div class="findings">
-          <span class="path">${bundle.path}</span>${findings(bundle)}
-        </div>
-      `,
-    )}
+    ${bundles.map(bundle => html`<p class="path">${bundle.path}</p>`)}
     ${
       bundles.length > 1
         ? html`<div class="finding">
@@ -205,7 +198,6 @@ function messages(problems: (readonly [string, Cell])[]) {
       <ul class="problems">
         ${problems.map(([environment, cell]) => {
           const status = statuses[statusOf(cell)];
-          const conflicts = cell.routeConflicts ?? [];
           return html`
             <li>
               ${statusIcon(status)}
@@ -215,10 +207,9 @@ function messages(problems: (readonly [string, Cell])[]) {
                   >: ${status.label}</span
                 >
               </span>
-              ${[
-                ...(cell.errors ?? []),
-                ...(conflicts.length ? [conflictHint, ...conflicts] : []),
-              ].map(message => html`<span class="detail">${message}</span>`)}
+              ${messagesOf(cell).map(
+                message => html`<span class="detail">${message}</span>`,
+              )}
             </li>
           `;
         })}
