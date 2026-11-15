@@ -351,7 +351,15 @@ function deploymentRow(
       <td class="icon-cell" data-tooltip=${tooltip}>
         ${stateIcon(status, tooltip)}
       </td>
-      <td class="revision">${cell ? cell.revision : nothing}</td>
+      <td class="revision">
+        ${
+          cell
+            ? cell.revision
+            : html`${statusIcon(statuses.none)}<span class="sr-only"
+                  >None</span
+                >`
+        }
+      </td>
       <td
         class="icon-cell"
         data-tooltip=${comparison ? comparison.label : nothing}
