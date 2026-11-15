@@ -1,7 +1,6 @@
 // The Deployments tab: the proxies and shared flows of one environment in a
 // tab each, with their status, revision, and comparison with the workspace; a
 // name opens its details.
-import type { VscodeSingleSelect } from '@vscode-elements/elements/dist/vscode-single-select/index.js';
 import type { VscodeTextfield } from '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import { html, nothing } from 'lit';
 import type {
@@ -30,6 +29,8 @@ export type DeploymentView = {
   filter: string;
   status: StatusKey | '';
   comparison: ComparisonKey | '';
+  /** The order of the names. */
+  sort: 'asc' | 'desc';
   /** The proxy or shared flow of `kind` whose details show, if any. */
   detail: string;
 };
@@ -282,20 +283,6 @@ export function deployments(
         >
           <vscode-icon slot="content-before" name="filter"></vscode-icon>
         </vscode-textfield>
-        ${filterSelect(
-          'status-filter',
-          'Status',
-          view.status,
-          statuses,
-          status => actions.setView({ status }),
-        )}
-        ${filterSelect(
-          'comparison-filter',
-          'Workspace',
-          view.comparison,
-          comparisons,
-          comparison => actions.setView({ comparison }),
-        )}
         <span class="count" aria-live="polite" aria-atomic="true">
           ${count(shown)} of ${count(snapshot.rows)} shown
         </span>
@@ -313,35 +300,127 @@ export function deployments(
   `;
 }
 
-/** A select that filters by one column; its first option shows all rows. */
-function filterSelect<Key extends string>(
+/**
+ * A filter in a column header: an icon button that opens a menu of the
+ * column's states, with "All" first; an active filter fills the icon.
+ */
+function columnFilter<Key extends string>(
   id: string,
-  label: string,
+  column: string,
   selected: Key | '',
   options: Readonly<Record<Key, StatusInfo>>,
   select: (key: Key | '') => void,
 ) {
+  const items: [Key | '', string, StatusInfo | undefined][] = [
+    ['', 'All', undefined],
+    ...(Object.keys(options) as Key[]).map(
+      key =>
+        [key, options[key].label, options[key]] as [Key, string, StatusInfo],
+    ),
+  ];
+  const tooltip = selected
+    ? `${column}: ${options[selected].label}`
+    : `Filter by ${column.toLowerCase()}`;
   return html`
-    <div class="field">
-      <vscode-label for=${id}>
-        <span class="field-label">${label}</span>
-      </vscode-label>
-      <vscode-single-select
-        id=${id}
-        @change=${(event: Event) =>
-          select((event.target as VscodeSingleSelect).value as Key | '')}
-      >
-        <vscode-option value="" ?selected=${!selected}>All</vscode-option>
-        ${(Object.keys(options) as Key[]).map(
-          key => html`
-            <vscode-option value=${key} ?selected=${key === selected}
-              >${options[key].label}</vscode-option
-            >
-          `,
-        )}
-      </vscode-single-select>
+    <button
+      class="icon-button"
+      popovertarget=${id}
+      aria-haspopup="menu"
+      aria-label=${tooltip}
+      data-tooltip=${tooltip}
+    >
+      <vscode-icon name=${selected ? 'filter-filled' : 'filter'}></vscode-icon>
+    </button>
+    <div
+      id=${id}
+      class="menu"
+      popover
+      role="menu"
+      aria-label=${`Filter by ${column.toLowerCase()}`}
+      @beforetoggle=${placeMenu}
+      @toggle=${focusOnToggle}
+      @keydown=${moveInMenu}
+      @focusout=${closeOnLeave}
+    >
+      ${items.map(
+        ([key, label, sign]) => html`
+          <button
+            class="menu-item"
+            role="menuitemradio"
+            aria-checked=${key === selected ? 'true' : 'false'}
+            @click=${(event: Event) => {
+              (event.currentTarget as HTMLElement)
+                .closest<HTMLElement>('[popover]')
+                ?.hidePopover();
+              select(key);
+            }}
+          >
+            <vscode-icon
+              name="check"
+              class=${key === selected ? '' : 'unchecked'}
+            ></vscode-icon>
+            ${sign ? statusIcon(sign) : html`<span class="no-icon"></span>`}
+            ${label}
+          </button>
+        `,
+      )}
     </div>
   `;
+}
+
+/** Places a menu below the button that opens it, inside the window. */
+function placeMenu(event: ToggleEvent) {
+  if (event.newState !== 'open') return;
+  const menu = event.target as HTMLElement;
+  const box = (
+    menu.previousElementSibling as HTMLElement
+  ).getBoundingClientRect();
+  menu.style.top = `${box.bottom + 2}px`;
+  // Near the right edge, the menu ends at the button instead of starting there
+  const right = box.left + 220 > innerWidth;
+  menu.style.left = right ? 'auto' : `${box.left}px`;
+  menu.style.right = right ? `${innerWidth - box.right}px` : 'auto';
+}
+
+/**
+ * Focuses the checked item of a menu that opened, and the button again when a
+ * menu closes with the focus inside, such as after a choice or Escape.
+ */
+function focusOnToggle(event: ToggleEvent) {
+  const menu = event.target as HTMLElement;
+  if (event.newState === 'open') {
+    menu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+    return;
+  }
+  const focused = (menu.getRootNode() as ShadowRoot).activeElement;
+  if (!focused || menu.contains(focused)) {
+    (menu.previousElementSibling as HTMLElement).focus();
+  }
+}
+
+/** Moves the focus through a menu with the arrow keys, Home, and End. */
+function moveInMenu(event: KeyboardEvent) {
+  const items = [
+    ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+      '[role^="menuitem"]',
+    ),
+  ];
+  const index = items.indexOf(event.target as HTMLElement);
+  const next = {
+    ArrowDown: (index + 1) % items.length,
+    ArrowUp: (index - 1 + items.length) % items.length,
+    Home: 0,
+    End: items.length - 1,
+  }[event.key];
+  if (next === undefined) return;
+  event.preventDefault();
+  items[next].focus();
+}
+
+/** Closes a menu once the focus leaves it, such as with Tab. */
+function closeOnLeave(event: FocusEvent) {
+  const menu = event.currentTarget as HTMLElement;
+  if (!menu.contains(event.relatedTarget as Node | null)) menu.hidePopover();
 }
 
 /** The proxies and the shared flows in a tab each, counted after filtering. */
@@ -375,7 +454,7 @@ function kindTabs(
         const rows = shown.filter(row => row.kind === kind);
         return html`
           <vscode-tab-panel>
-            ${table(snapshot, rows, kind, label, view.environment, actions)}
+            ${table(snapshot, rows, kind, label, view, actions)}
           </vscode-tab-panel>
         `;
       })}
@@ -383,15 +462,18 @@ function kindTabs(
   `;
 }
 
-/** The deployments of one kind in the chosen environment. */
+/** The deployments of one kind in the chosen environment, sorted by name. */
 function table(
   snapshot: Loaded,
   rows: Row[],
   kind: Kind,
   label: string,
-  environment: string,
+  view: DeploymentView,
   actions: Actions,
 ) {
+  const { environment } = view;
+  const order = view.sort === 'desc' ? -1 : 1;
+  const sorted = [...rows].sort((a, b) => order * a.name.localeCompare(b.name));
   return html`
     <div class="table-scroll">
       <table class="deployments">
@@ -400,16 +482,49 @@ function table(
         </caption>
         <thead>
           <tr>
-            <th scope="col">Name</th>
-            <th scope="col" class="icon-cell">Status</th>
+            <th
+              scope="col"
+              aria-sort=${view.sort === 'desc' ? 'descending' : 'ascending'}
+            >
+              <button
+                class="icon-button labeled sort"
+                @click=${() =>
+                  actions.setView({
+                    sort: view.sort === 'desc' ? 'asc' : 'desc',
+                  })}
+              >
+                Name<vscode-icon
+                  name=${view.sort === 'desc' ? 'arrow-down' : 'arrow-up'}
+                ></vscode-icon>
+              </button>
+            </th>
+            <th scope="col" class="icon-cell">
+              Status
+              ${columnFilter(
+                `${kind}-status`,
+                'Status',
+                view.status,
+                statuses,
+                status => actions.setView({ status }),
+              )}
+            </th>
             <th scope="col" class="revision">Revision</th>
-            <th scope="col" class="icon-cell">Workspace</th>
+            <th scope="col" class="icon-cell">
+              Workspace
+              ${columnFilter(
+                `${kind}-comparison`,
+                'Workspace',
+                view.comparison,
+                comparisons,
+                comparison => actions.setView({ comparison }),
+              )}
+            </th>
           </tr>
         </thead>
         <tbody>
           ${
-            rows.length
-              ? rows.map(row =>
+            sorted.length
+              ? sorted.map(row =>
                   deploymentRow(snapshot, row, environment, actions),
                 )
               : html`

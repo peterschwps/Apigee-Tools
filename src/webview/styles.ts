@@ -27,7 +27,7 @@ export const styles = css`
   }
 
   h1 {
-    font-size: 15px;
+    font-size: 20px;
     white-space: nowrap;
   }
 
@@ -102,15 +102,15 @@ export const styles = css`
     color: var(--at-info);
   }
 
-  /* Header: brand, context selects, and session; the selects get a row of their own when narrow */
+  /* Header: the title and the session, with the context selects in a row below */
   .topbar {
     display: grid;
-    grid-template-columns: auto 1fr auto;
-    grid-template-areas: 'brand context session';
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'brand session' 'context context';
     align-items: center;
-    gap: 8px 24px;
-    padding: 12px 20px 10px;
-    /* Keyboard focus follows the rows, also when the selects move below Refresh */
+    gap: 10px 24px;
+    padding: 14px 20px 10px;
+    /* Keyboard focus follows the rows: the selects come after Refresh */
     reading-flow: grid-rows;
   }
 
@@ -155,21 +155,6 @@ export const styles = css`
     max-width: 100%;
   }
 
-  @media (max-width: 1099px) {
-    .topbar {
-      grid-template-columns: 1fr auto;
-      grid-template-areas: 'brand session' 'context context';
-      row-gap: 2px;
-    }
-
-    /* Labels above the selects keep both in one row at narrow widths */
-    .topbar .field {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0;
-    }
-  }
-
   /* A long account name shortens, so Refresh always stays in view */
   .account {
     display: flex;
@@ -188,11 +173,6 @@ export const styles = css`
 
   .account vscode-icon {
     color: inherit;
-  }
-
-  /* Wide enough for "Refreshing…", so the header does not shift while loading */
-  .session vscode-button {
-    min-width: 124px;
   }
 
   /* Tabs */
@@ -403,10 +383,10 @@ export const styles = css`
     white-space: nowrap;
   }
 
+  /* As VS Code's own tables: the size of the cells, in bold */
   thead th {
-    color: var(--at-text-muted);
-    font-size: 12px;
-    font-weight: 600;
+    color: var(--at-text);
+    font-weight: bold;
   }
 
   tbody th {
@@ -521,11 +501,6 @@ export const styles = css`
     max-width: 100%;
   }
 
-  /* Wide enough for the longest option, "Not in workspace" */
-  .toolbar vscode-single-select {
-    width: 140px;
-  }
-
   /* Tooltips in VS Code's hover colors, above everything else */
   .tooltip {
     position: fixed;
@@ -557,14 +532,75 @@ export const styles = css`
     gap: 4px;
   }
 
-  /* An icon button with a label; the icon lines up with the title */
-  .back {
-    justify-self: start;
+  /* An icon button with a label */
+  .labeled {
     width: auto;
     gap: 2px;
-    margin: 0 0 8px -3px;
     padding: 0 6px 0 2px;
     font: inherit;
+  }
+
+  /* The icon lines up with the title */
+  .back {
+    justify-self: start;
+    margin: 0 0 8px -3px;
+  }
+
+  /* The label lines up with the names below */
+  .sort {
+    margin-left: -7px;
+    padding: 0 2px 0 6px;
+    color: inherit;
+  }
+
+  /* Menus of the column filters, in VS Code's menu colors */
+  .menu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 4px;
+    border: 1px solid var(--vscode-menu-border, var(--at-border));
+    border-radius: 5px;
+    background: var(--vscode-menu-background, var(--at-surface-raised));
+    box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+    color: var(--vscode-menu-foreground, var(--at-text));
+    /* Not bold like the header that holds it */
+    font-weight: normal;
+  }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 180px;
+    padding: 3px 10px 3px 6px;
+    border: 0;
+    border-radius: 3px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .menu-item:hover,
+  .menu-item:focus-visible {
+    outline: none;
+    background: var(
+      --vscode-menu-selectionBackground,
+      var(--vscode-list-hoverBackground)
+    );
+    color: var(--vscode-menu-selectionForeground, inherit);
+  }
+
+  .menu-item .unchecked {
+    visibility: hidden;
+  }
+
+  /* Takes the place of a state icon in "All" */
+  .no-icon {
+    width: 16px;
   }
 
   .details-title {
