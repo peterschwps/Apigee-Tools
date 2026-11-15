@@ -133,7 +133,7 @@ export const styles = css`
     grid-area: session;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 8px;
     min-width: 0;
   }
 
