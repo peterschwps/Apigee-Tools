@@ -326,40 +326,8 @@ export const styles = css`
     margin-bottom: 8px;
   }
 
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 16px;
-  }
-
-  .list,
-  .chips {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .list > li + li {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--at-border);
-  }
-
-  .item-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
   .item-name {
     font-weight: 600;
-  }
-
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
   }
 
   .path,

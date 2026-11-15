@@ -1,7 +1,6 @@
-// The Overview tab: key figures, the environments, and the failed
-// deployments and warnings.
+// The Overview tab: key figures and the failed deployments and warnings.
 import { html, nothing } from 'lit';
-import type { Cell, Overview, Row } from '../protocol';
+import type { Cell, Row } from '../protocol';
 import {
   isProblem,
   messagesOf,
@@ -41,10 +40,7 @@ export function overview(snapshot: Loaded, actions: Actions) {
           </dd>
         </div>
       </dl>
-      <div class="cards">
-        ${environmentsCard(organization)}
-        ${problemsCard(problems, snapshot.loading, actions)}
-      </div>
+      ${problemsCard(problems, snapshot.loading, actions)}
     </div>
   `;
 }
@@ -106,66 +102,4 @@ function kpi(label: string, value: number) {
       <dd>${value}</dd>
     </div>
   `;
-}
-
-function environmentsCard(organization: Overview) {
-  const groupsOf = (environment: string) =>
-    organization.groups
-      .filter(group => group.environments.includes(environment))
-      .map(group => group.name);
-  return html`
-    <section class="card">
-      <div class="card-head"><h2>Environments</h2></div>
-      ${
-        organization.environments.length
-          ? html`
-              <ul class="list">
-                ${organization.environments.map(environment => {
-                  const groups = groupsOf(environment.name);
-                  return html`
-                    <li>
-                      <div class="item-head">
-                        <span class="item-name">${environment.name}</span>
-                        ${
-                          environment.type
-                            ? html`<vscode-badge
-                                >${valueLabel(environment.type)}</vscode-badge
-                              >`
-                            : nothing
-                        }
-                      </div>
-                      ${
-                        environment.addons?.length
-                          ? html`<ul class="chips" aria-label="Add-ons">
-                              ${environment.addons.map(
-                                addon =>
-                                  html`<li>
-                                    <vscode-badge>${addon}</vscode-badge>
-                                  </li>`,
-                              )}
-                            </ul>`
-                          : nothing
-                      }
-                      <div class="muted">
-                        ${
-                          groups.length
-                            ? `Groups: ${groups.join(', ')}`
-                            : 'Not attached to a group'
-                        }
-                      </div>
-                    </li>
-                  `;
-                })}
-              </ul>
-            `
-          : html`<p class="muted">No environments yet.</p>`
-      }
-    </section>
-  `;
-}
-
-/** Returns a readable label for an enum value such as `INTERMEDIATE`. */
-function valueLabel(value?: string): string {
-  if (!value) return '—';
-  return value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
 }
