@@ -205,8 +205,10 @@ XML files of the bundle structure count as different only when their elements, a
 
 | Setting | Use |
 | --- | --- |
-| `apigeeTools.gcloudPath` | Path to `gcloud` when it is not on the `PATH`, such as `~/google-cloud-sdk/bin/gcloud`. It applies only from user or remote settings, never from a workspace. |
+| `apigeeTools.gcloudPath` | Optional path to the CLI executable: `gcloud.cmd` on Windows, `gcloud` on macOS/Linux. Leave empty to detect it on the extension host's `PATH`.  |
 | `apigeeTools.gcloudConfiguration` | A named gcloud configuration, such as one per customer, instead of the active one. |
+
+The dashboard and sign-in action resolve the CLI from `PATH` unless an explicit path is set. Restart VS Code after changing `PATH`. In WSL, SSH, or Dev Containers, the CLI must be available where the extension runs.
 
 Organizations with data residency work when gcloud uses their regional endpoint through `gcloud config set api_endpoint_overrides/apigee`; the dashboard uses the same endpoint.
 

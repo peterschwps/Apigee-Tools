@@ -78,7 +78,7 @@
           "type": "string",
           "default": "",
           "scope": "machine",
-          "markdownDescription": "Path to the `gcloud` executable for the dashboard. Leave empty to use `gcloud` from the `PATH`."
+          "markdownDescription": "Path to the Google Cloud CLI executable for the dashboard (`gcloud.cmd` on Windows, `gcloud` on macOS/Linux). Leave empty to detect it on the extension host's `PATH`. Set this in User or Remote Settings."
         },
         "apigeeTools.gcloudConfiguration": {
           "type": "string",
