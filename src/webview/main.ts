@@ -430,14 +430,17 @@ function notice(
 /** A problem with the actions that help with its reason. */
 function problemNotice(problem: Problem) {
   const retry = button('Try again', { type: 'refresh' }, true);
+  const pathSetting = html`
+    <button class="link" @click=${() => send({ type: 'settings' })}>
+      Set the gcloud path
+    </button>
+  `;
   const actions = {
     gcloudMissing: html`
       <a href=${installUrl}>Install the Google Cloud CLI</a>
-      <button class="link" @click=${() => send({ type: 'settings' })}>
-        Set the gcloud path
-      </button>
-      ${retry}
+      ${pathSetting} ${retry}
     `,
+    gcloudFailed: html`${pathSetting} ${retry}`,
     signedOut: html`${button('Sign in with gcloud', { type: 'signIn' })}${retry}`,
     noOrganization: retry,
     api: retry,

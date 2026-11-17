@@ -1,7 +1,7 @@
 import { execFile, type ExecFileException } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { accessSync, constants, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { delimiter, isAbsolute, join, resolve } from 'node:path';
 
 /** Runs gcloud with the given arguments and resolves to its standard output. */
 export type Gcloud = (args: readonly string[]) => Promise<string>;
@@ -45,9 +45,6 @@ const tokenPattern = /^[\w.-]+$/;
 const signedOutPattern =
   /gcloud auth login|active account|credentialed accounts|reauthenticat/i;
 
-// cmd.exe's wording when a command does not exist
-const notFoundOnWindows = /is not recognized as an internal or external/i;
-
 /** Returns whether a name is a valid gcloud configuration name. */
 export function isConfigurationName(name: string): boolean {
   return configurationPattern.test(name);
@@ -86,16 +83,12 @@ export function gcloudRunner(setting: string, configuration = ''): Gcloud {
       `"${configuration}" is not a valid gcloud configuration name.`,
     );
   }
-  const path = gcloudCommand(setting);
   const extra = configuration ? [`--configuration=${configuration}`] : [];
   return args =>
     new Promise((resolveOutput, reject) => {
+      const path = gcloudCommand(setting);
       // The invocation rejects paths that cmd.exe cannot take
       const invocation = gcloudInvocation(path, [...args, ...extra]);
-      if (!installed(path)) {
-        reject(new GcloudError('missing', `gcloud was not found ("${path}").`));
-        return;
-      }
       const child = execFile(
         invocation.file,
         invocation.args,
@@ -165,35 +158,51 @@ export async function gcloudConfig(gcloud: Gcloud): Promise<GcloudConfig> {
 }
 
 /**
- * Returns the command for a gcloudPath setting: a leading `~` means the home
- * directory, which no shell expands here, and a relative path is relative to
- * the home directory, where gcloud runs.
+ * Resolves the configured command, or gcloud on PATH, to an executable file.
+ * Explicit paths are relative to the home directory and may start with ~.
+ * Only absolute PATH entries are searched, never the current directory.
+ * Windows launchers need their full path so they find their SDK resources.
  */
 export function gcloudCommand(setting: string): string {
-  const path =
-    setting === '~' || /^~[\\/]/.test(setting)
-      ? join(homedir(), setting.slice(2))
-      : setting;
-  return /[\\/]/.test(path) ? resolve(homedir(), path) : path;
-}
-
-/**
- * Returns whether gcloud exists, checked directly rather than through the
- * shell's language-dependent message: a path as it is, and on Windows a bare
- * command in the home directory and on the PATH, with each PATHEXT ending,
- * as cmd.exe looks it up. Elsewhere a missing command fails with ENOENT.
- */
-function installed(command: string): boolean {
+  const command = setting || 'gcloud';
+  const expanded =
+    command === '~' || /^~[\\/]/.test(command)
+      ? join(homedir(), command.slice(2))
+      : command;
+  const explicitPath = /[\\/]/.test(expanded)
+    ? resolve(homedir(), expanded)
+    : undefined;
+  const candidates = explicitPath
+    ? [explicitPath]
+    : (process.env.PATH ?? '')
+        .split(delimiter)
+        .map(directory => directory.replace(/^"(.*)"$/, '$1'))
+        .filter(directory => isAbsolute(directory))
+        .map(directory => join(directory, expanded));
   const windows = process.platform === 'win32';
+  // Do not select the extensionless Unix script shipped beside gcloud.cmd.
   const endings = windows
-    ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';')]
+    ? /\.(?:com|exe|bat|cmd)$/i.test(expanded)
+      ? ['']
+      : (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+          .split(';')
+          .filter(ending => /^\.(?:com|exe|bat|cmd)$/i.test(ending))
     : [''];
-  const exists = (file: string) =>
-    endings.some(ending => existsSync(file + ending));
-  if (/[\\/]/.test(command)) return exists(command);
-  if (!windows) return true;
-  return [homedir(), ...(process.env.PATH ?? '').split(delimiter)].some(
-    directory => directory && exists(join(directory, command)),
+  for (const candidate of candidates) {
+    for (const ending of endings) {
+      const file = candidate + ending;
+      try {
+        if (!statSync(file).isFile()) continue;
+        accessSync(file, windows ? constants.F_OK : constants.X_OK);
+        return file;
+      } catch {
+        // Try the next executable in PATH order.
+      }
+    }
+  }
+  throw new GcloudError(
+    'missing',
+    `gcloud was not found ("${explicitPath ?? command}").`,
   );
 }
 
@@ -203,7 +212,7 @@ function gcloudError(
   stderr: string,
   path: string,
 ): GcloudError {
-  if (error.code === 'ENOENT' || notFoundOnWindows.test(stderr)) {
+  if (error.code === 'ENOENT') {
     return new GcloudError('missing', `gcloud was not found ("${path}").`);
   }
   if (signedOutPattern.test(stderr)) {

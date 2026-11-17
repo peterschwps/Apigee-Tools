@@ -64,7 +64,8 @@ export type Note = { tone: 'warning' | 'info'; text: string };
 
 /** Why the dashboard cannot show data, and what may help. */
 export type Problem = {
-  reason: 'gcloudMissing' | 'signedOut' | 'noOrganization' | 'api';
+  reason:
+    'gcloudMissing' | 'gcloudFailed' | 'signedOut' | 'noOrganization' | 'api';
   message: string;
   hint?: string;
 };

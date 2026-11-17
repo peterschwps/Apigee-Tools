@@ -917,14 +917,17 @@ function toLocalBundle(bundle: WorkspaceBundle): LocalBundle {
 
 /** Explains an error in terms of what the user can do about it. */
 function problemOf(error: unknown): Problem {
-  if (error instanceof GcloudError && error.reason === 'missing') {
+  if (error instanceof GcloudError && error.reason !== 'signedOut') {
+    const missing = error.reason === 'missing';
     const remote = vscode.env.remoteName
       ? ` It has to run where the extension runs (${vscode.env.remoteName}).`
       : '';
     return {
-      reason: 'gcloudMissing',
-      message: 'The Google Cloud CLI (gcloud) was not found.',
-      hint: `Install it, or set apigeeTools.gcloudPath to its location.${remote}`,
+      reason: missing ? 'gcloudMissing' : 'gcloudFailed',
+      message: missing
+        ? 'The Google Cloud CLI (gcloud) was not found.'
+        : `The Google Cloud CLI (gcloud) could not be run. ${messageOf(error)}`,
+      hint: `${missing ? 'Install the CLI and add it to PATH' : 'Check that the CLI works in a terminal'}, or set apigeeTools.gcloudPath to its executable in User or Remote Settings. Restart VS Code after changing PATH.${remote}`,
     };
   }
   if (
