@@ -20,7 +20,8 @@
   },
   "categories": [
     "Linters",
-    "Programming Languages"
+    "Programming Languages",
+    "Visualization"
   ],
   "keywords": [
     "apigee",
@@ -30,7 +31,13 @@
     "google cloud",
     "api management",
     "xml",
-    "linter"
+    "linter",
+    "dashboard",
+    "deployments",
+    "api gateway",
+    "policies",
+    "gcp",
+    "intellisense"
   ],
   "main": "./dist/extension.js",
   "bin": {
