@@ -44,7 +44,7 @@ jobs:
       - name: Package the extension and the CLI
         run: |
           mkdir -p release
-          npx vsce package --no-dependencies --pre-release --out "release/apigee-tools-${{ steps.version.outputs.version }}.vsix"
+          npx vsce package --no-dependencies --out "release/apigee-tools-${{ steps.version.outputs.version }}.vsix"
           npm run package:npm
           npm pack ./.cache/npm-package --pack-destination release
       # Validate the exact publish command before approval; npm reads paths without ./ as GitHub repositories.
@@ -75,7 +75,7 @@ jobs:
         with:
           node-version: 24
       - name: Publish with trusted publishing
-        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --pre-release --skip-duplicate --packagePath "release/apigee-tools-${{ needs.build.outputs.version }}.vsix"
+        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --skip-duplicate --packagePath "release/apigee-tools-${{ needs.build.outputs.version }}.vsix"
 
   publish-openvsx:
     name: Publish to Open VSX
@@ -96,7 +96,7 @@ jobs:
         with:
           node-version: 24
       - name: Publish with trusted publishing
-        run: npx --yes ovsx@1.2.0 publish --trusted-publishing --pre-release --skip-duplicate --packagePath "release/apigee-tools-${{ needs.build.outputs.version }}.vsix"
+        run: npx --yes ovsx@1.2.0 publish --trusted-publishing --skip-duplicate --packagePath "release/apigee-tools-${{ needs.build.outputs.version }}.vsix"
 
   publish-npm:
     name: Publish to npm
