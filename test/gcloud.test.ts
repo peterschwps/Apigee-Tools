@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import {
+  gcloudCommand,
   gcloudConfig,
   GcloudError,
   gcloudInvocation,
@@ -121,6 +122,26 @@ test('a command that is not on the PATH is reported as missing', async () => {
   // Elsewhere than on Windows, running it fails with ENOENT
   const gcloud = gcloudRunner('apigee-tools-no-such-command');
   await assert.rejects(gcloud(['version']), { reason: 'missing' });
+});
+
+test('gcloud on the PATH is the first executable file, by its full path', async t => {
+  if (process.platform === 'win32') return t.skip('uses Unix permissions');
+  const notExecutable = path.join(scripts, 'path-a');
+  const executable = path.join(scripts, 'path-b');
+  await mkdir(notExecutable);
+  await mkdir(executable);
+  await writeFile(path.join(notExecutable, 'gcloud'), 'not a program\n');
+  const file = path.join(executable, 'gcloud');
+  await writeFile(file, '#!/bin/sh\n');
+  await chmod(file, 0o755);
+  const saved = process.env.PATH;
+  t.after(() => {
+    process.env.PATH = saved;
+  });
+  process.env.PATH = [notExecutable, executable].join(path.delimiter);
+  assert.equal(gcloudCommand(''), file);
+  process.env.PATH = notExecutable;
+  assert.throws(() => gcloudCommand(''), { reason: 'missing' });
 });
 
 test('gcloud runs in the home directory without prompts', async t => {
