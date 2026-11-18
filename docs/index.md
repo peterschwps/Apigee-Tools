@@ -185,7 +185,7 @@ The dashboard shows what is deployed in an Apigee X organization next to the bun
 - A sign-in with `gcloud auth login`. Without one, the dashboard offers a button that runs the command in a terminal.
 - A role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`).
 
-The dashboard selects the organization you chose last in this workspace, otherwise the project of your gcloud configuration, otherwise the first organization the account can access. If the account may not list organizations, the gcloud project comes first. The header switches between organizations and filters the environments.
+The dashboard selects the organization you chose last in this workspace, otherwise the project of your GCloud configuration, otherwise the first organization the account can access. If the account may not list organizations, the GCloud project comes first. The header switches between organizations and filters the environments.
 
 ### Overview and deployments
 
@@ -206,11 +206,11 @@ XML files of the bundle structure count as different only when their elements, a
 | Setting | Use |
 | --- | --- |
 | `apigeeTools.gcloudPath` | Optional path to the CLI executable: `gcloud.cmd` on Windows, `gcloud` on macOS/Linux. Leave empty to detect it on the extension host's `PATH`.  |
-| `apigeeTools.gcloudConfiguration` | A named gcloud configuration, such as one per customer, instead of the active one. |
+| `apigeeTools.gcloudConfiguration` | A named GCloud configuration, such as one per customer, instead of the active one. |
 
 The dashboard and sign-in action resolve the CLI from `PATH` unless an explicit path is set. Restart VS Code after changing `PATH`. In WSL, SSH, or Dev Containers, the CLI must be available where the extension runs.
 
-Organizations with data residency work when gcloud uses their regional endpoint through `gcloud config set api_endpoint_overrides/apigee`; the dashboard uses the same endpoint.
+Organizations with data residency work when GCloud uses their regional endpoint through `gcloud config set api_endpoint_overrides/apigee`; the dashboard uses the same endpoint.
 
 ### Data and access
 

@@ -59,7 +59,7 @@ export type DashboardHost = {
   scanWorkspace(): Promise<WorkspaceBundle[]>;
 };
 
-/** gcloud access, set up again on refresh and when settings change. */
+/** GCloud access, set up again on refresh and when settings change. */
 type Session = {
   account?: string;
   project?: string;
@@ -360,7 +360,7 @@ export function registerDashboard(
         return;
       }
 
-      // An organization guessed from the gcloud project may not exist, and
+      // An organization guessed from the GCloud project may not exist, and
       // Apigee answers 403 for missing organizations too
       if (!organizations.includes(organization)) {
         const missing = await client.organization(organization).then(
@@ -467,7 +467,7 @@ export function registerDashboard(
 
   /**
    * Picks the organization chosen in the selector, then the last chosen one
-   * that loaded, the gcloud project, or the first listed. Without a list,
+   * that loaded, the GCloud project, or the first listed. Without a list,
    * which the account may not be allowed to read, the project comes first.
    */
   function chooseOrganization(
@@ -807,9 +807,9 @@ export function registerDashboard(
 
   /**
    * Starts `gcloud auth login` in a terminal, where it can open a browser.
-   * gcloud runs directly, so no shell interprets the configured path; on
-   * Windows, cmd.exe runs gcloud.cmd. The home directory keeps cmd.exe from
-   * running a gcloud.cmd of the workspace.
+   * GCloud runs directly, so no shell interprets the configured path; on
+   * Windows, cmd.exe runs `gcloud.cmd`. The home directory keeps cmd.exe from
+   * running a `gcloud.cmd` of the workspace.
    */
   function signIn(): void {
     const settings = vscode.workspace.getConfiguration('apigeeTools');
@@ -827,7 +827,7 @@ export function registerDashboard(
         args,
       );
       const terminal = vscode.window.createTerminal({
-        name: 'gcloud auth login',
+        name: 'GCloud sign-in',
         cwd: homedir(),
         shellPath: invocation.shell
           ? (process.env.ComSpec ?? 'cmd.exe')
@@ -839,7 +839,7 @@ export function registerDashboard(
       terminal.show();
     } catch (error) {
       void vscode.window.showErrorMessage(
-        `Signing in with gcloud failed: ${messageOf(error)}`,
+        `Signing in with GCloud failed: ${messageOf(error)}`,
       );
     }
   }
@@ -925,8 +925,8 @@ function problemOf(error: unknown): Problem {
     return {
       reason: missing ? 'gcloudMissing' : 'gcloudFailed',
       message: missing
-        ? 'The Google Cloud CLI (gcloud) was not found.'
-        : `The Google Cloud CLI (gcloud) could not be run. ${messageOf(error)}`,
+        ? 'The Google Cloud CLI (GCloud) was not found.'
+        : `The Google Cloud CLI (GCloud) could not be run. ${messageOf(error)}`,
       hint: `${missing ? 'Install the CLI and add it to PATH' : 'Check that the CLI works in a terminal'}, or set apigeeTools.gcloudPath to its executable in User or Remote Settings. Restart VS Code after changing PATH.${remote}`,
     };
   }
@@ -936,7 +936,7 @@ function problemOf(error: unknown): Problem {
   ) {
     return {
       reason: 'signedOut',
-      message: 'gcloud is not signed in.',
+      message: 'GCloud is not signed in.',
       hint: 'Sign in with gcloud auth login, then try again.',
     };
   }

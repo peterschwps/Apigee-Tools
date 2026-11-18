@@ -278,10 +278,10 @@ class ApigeeDashboard extends LitElement {
             snapshot?.account
               ? html`<span
                   class="account"
-                  data-tooltip=${`Signed in with gcloud as ${snapshot.account}`}
+                  data-tooltip=${`Signed in with GCloud as ${snapshot.account}`}
                   ><vscode-icon name="account"></vscode-icon
                   ><span class="sr-only"
-                    >Signed in with gcloud as ${snapshot.account}</span
+                    >Signed in with GCloud as ${snapshot.account}</span
                   ></span
                 >`
               : nothing
@@ -316,7 +316,7 @@ class ApigeeDashboard extends LitElement {
             'warning',
             'workspace-untrusted',
             'Restricted Mode',
-            'The dashboard runs gcloud and reads from the Apigee API, which needs a trusted workspace. Linting keeps working in Restricted Mode.',
+            'The dashboard runs GCloud and reads from the Apigee API, which needs a trusted workspace. Linting keeps working in Restricted Mode.',
             button('Manage Workspace Trust', { type: 'trust' }),
           )}
         </div>
@@ -432,7 +432,7 @@ function problemNotice(problem: Problem) {
   const retry = button('Try again', { type: 'refresh' }, true);
   const pathSetting = html`
     <button class="link" @click=${() => send({ type: 'settings' })}>
-      Set the gcloud path
+      Set the GCloud path
     </button>
   `;
   const actions = {
@@ -441,7 +441,7 @@ function problemNotice(problem: Problem) {
       ${pathSetting} ${retry}
     `,
     gcloudFailed: html`${pathSetting} ${retry}`,
-    signedOut: html`${button('Sign in with gcloud', { type: 'signIn' })}${retry}`,
+    signedOut: html`${button('Sign in with GCloud', { type: 'signIn' })}${retry}`,
     noOrganization: retry,
     api: retry,
   }[problem.reason];

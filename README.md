@@ -27,7 +27,7 @@ The dashboard needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/ins
 - `apigeeTools.exclude`: ignore matching file paths, also as bundles in the dashboard.
 - `apigeeTools.ignore`: suppress selected diagnostic IDs, such as `AX110`.
 - `apigeeTools.gcloudPath`: path to `gcloud` for the dashboard, if it is not on the `PATH`.
-- `apigeeTools.gcloudConfiguration`: a named gcloud configuration for the dashboard instead of the active one.
+- `apigeeTools.gcloudConfiguration`: a named GCloud configuration for the dashboard instead of the active one.
 
 To suppress a diagnostic at one location, add `<!-- apigee-tools disable=AX101 -->` on the line before it, or use the quick fix. AX105 typos also offer a fix to the closest documented value.
 

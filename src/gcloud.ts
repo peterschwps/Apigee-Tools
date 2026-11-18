@@ -3,7 +3,7 @@ import { accessSync, constants, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join, resolve } from 'node:path';
 
-/** Runs gcloud with the given arguments and resolves to its standard output. */
+/** Runs GCloud with the given arguments and resolves to its standard output. */
 export type Gcloud = (args: readonly string[]) => Promise<string>;
 
 /** Hands out the access token and renews it once for concurrent rejections. */
@@ -12,7 +12,7 @@ export type TokenSource = {
   renew(stale: Promise<string>): Promise<string>;
 };
 
-/** What the dashboard reads from the gcloud configuration. */
+/** What the dashboard reads from the GCloud configuration. */
 export type GcloudConfig = {
   account?: string;
   project?: string;
@@ -20,7 +20,7 @@ export type GcloudConfig = {
   endpoint?: string;
 };
 
-/** Reports why gcloud could not run or could not provide credentials. */
+/** Reports why GCloud could not run or could not provide credentials. */
 export class GcloudError extends Error {
   constructor(
     readonly reason: 'missing' | 'signedOut' | 'failed',
@@ -32,7 +32,7 @@ export class GcloudError extends Error {
 
 const timeoutMs = 30_000;
 
-// Names of gcloud configurations: lower-case letters, digits, and hyphens
+// Names of GCloud configurations: lower-case letters, digits, and hyphens
 const configurationPattern = /^[a-z][-a-z0-9]*$/;
 
 // Characters that cmd.exe interprets even inside double quotes
@@ -41,17 +41,17 @@ const unsafeForCmd = /["%!\r\n]/;
 // Access tokens are URL-safe; other output is not a token
 const tokenPattern = /^[\w.-]+$/;
 
-// gcloud's wording when the account has to sign in (again)
+// GCloud's wording when the account has to sign in (again)
 const signedOutPattern =
   /gcloud auth login|active account|credentialed accounts|reauthenticat/i;
 
-/** Returns whether a name is a valid gcloud configuration name. */
+/** Returns whether a name is a valid GCloud configuration name. */
 export function isConfigurationName(name: string): boolean {
   return configurationPattern.test(name);
 }
 
 /**
- * Returns how to start gcloud: directly on macOS and Linux, and on Windows as
+ * Returns how to start GCloud: directly on macOS and Linux, and on Windows as
  * one quoted command line for cmd.exe, which Node needs to run `gcloud.cmd`.
  */
 export function gcloudInvocation(
@@ -65,14 +65,14 @@ export function gcloudInvocation(
   if ([path, ...args].some(part => unsafeForCmd.test(part))) {
     throw new GcloudError(
       'failed',
-      `The gcloud path "${path}" contains characters that cmd.exe cannot take.`,
+      `The GCloud path "${path}" contains characters that cmd.exe cannot take.`,
     );
   }
   return { file: [`"${path}"`, ...args].join(' '), args: [], shell: true };
 }
 
 /**
- * Creates a runner for gcloud. It starts in the home directory, so that cmd.exe
+ * Creates a runner for GCloud. It starts in the home directory, so that cmd.exe
  * never picks up a `gcloud` file from a workspace, and it never waits for a
  * prompt.
  */
@@ -80,7 +80,7 @@ export function gcloudRunner(setting: string, configuration = ''): Gcloud {
   if (configuration && !isConfigurationName(configuration)) {
     throw new GcloudError(
       'failed',
-      `"${configuration}" is not a valid gcloud configuration name.`,
+      `"${configuration}" is not a valid GCloud configuration name.`,
     );
   }
   const extra = configuration ? [`--configuration=${configuration}`] : [];
@@ -117,7 +117,7 @@ export function tokenSource(gcloud: Gcloud): TokenSource {
       if (!tokenPattern.test(token)) {
         throw new GcloudError(
           'failed',
-          'gcloud did not print an access token.',
+          'GCloud did not print an access token.',
         );
       }
       return token;
@@ -147,7 +147,7 @@ export async function gcloudConfig(gcloud: Gcloud): Promise<GcloudConfig> {
   } catch {
     throw new GcloudError(
       'failed',
-      'gcloud printed an unreadable configuration.',
+      'GCloud printed an unreadable configuration.',
     );
   }
   return {
@@ -158,7 +158,7 @@ export async function gcloudConfig(gcloud: Gcloud): Promise<GcloudConfig> {
 }
 
 /**
- * Resolves the configured command, or gcloud on PATH, to an executable file.
+ * Resolves the configured command, or GCloud on PATH, to an executable file.
  * Explicit paths are relative to the home directory and may start with ~.
  * Only absolute PATH entries are searched, never the current directory.
  * Windows launchers need their full path so they find their SDK resources.
@@ -180,7 +180,7 @@ export function gcloudCommand(setting: string): string {
         .filter(directory => isAbsolute(directory))
         .map(directory => join(directory, expanded));
   const windows = process.platform === 'win32';
-  // Do not select the extensionless Unix script shipped beside gcloud.cmd.
+  // Do not select the extensionless Unix script shipped beside `gcloud.cmd`.
   const endings = windows
     ? /\.(?:com|exe|bat|cmd)$/i.test(expanded)
       ? ['']
@@ -202,26 +202,26 @@ export function gcloudCommand(setting: string): string {
   }
   throw new GcloudError(
     'missing',
-    `gcloud was not found ("${explicitPath ?? command}").`,
+    `GCloud was not found ("${explicitPath ?? command}").`,
   );
 }
 
-/** Translates a failed gcloud run into a reason the dashboard can act on. */
+/** Translates a failed GCloud run into a reason the dashboard can act on. */
 function gcloudError(
   error: ExecFileException,
   stderr: string,
   path: string,
 ): GcloudError {
   if (error.code === 'ENOENT') {
-    return new GcloudError('missing', `gcloud was not found ("${path}").`);
+    return new GcloudError('missing', `GCloud was not found ("${path}").`);
   }
   if (signedOutPattern.test(stderr)) {
-    return new GcloudError('signedOut', 'gcloud has no valid sign-in.');
+    return new GcloudError('signedOut', 'GCloud has no valid sign-in.');
   }
   if (error.killed) {
     return new GcloudError(
       'failed',
-      `gcloud did not finish within ${timeoutMs / 1000} seconds.`,
+      `GCloud did not finish within ${timeoutMs / 1000} seconds.`,
     );
   }
   const lines = stderr.trim().split(/\r?\n/);

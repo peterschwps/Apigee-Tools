@@ -11,7 +11,7 @@
 // An evaluation organization costs nothing and Google deletes it after 60
 // days. It is created without VPC peering and without internet access, so no
 // billable network resources are set up. The project needs a billing account,
-// and gcloud must be signed in with an account that may provision Apigee.
+// and GCloud must be signed in with an account that may provision Apigee.
 import { spawnSync } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -41,9 +41,9 @@ import { parseXml } from '../src/xml';
 /** What the commands need from the outside, replaceable in tests. */
 export type Context = {
   tokens: TokenSource;
-  /** Runs gcloud with visible output and fails when gcloud fails. */
+  /** Runs GCloud with visible output and fails when GCloud fails. */
   gcloud(args: string[]): void;
-  /** Runs gcloud and returns its output. */
+  /** Runs GCloud and returns its output. */
   read(args: string[]): Promise<string>;
   sleep(ms: number): Promise<void>;
   log(line: string): void;

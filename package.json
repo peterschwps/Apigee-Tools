@@ -46,7 +46,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Linting works in Restricted Mode. The dashboard runs gcloud and reads from the Apigee API, so it needs a trusted workspace."
+      "description": "Linting works in Restricted Mode. The dashboard runs GCloud and reads from the Apigee API, so it needs a trusted workspace."
     }
   },
   "contributes": {
@@ -84,8 +84,8 @@
           "type": "string",
           "default": "",
           "pattern": "^([a-z][-a-z0-9]*)?$",
-          "patternErrorMessage": "Use the name of a gcloud configuration: lower-case letters, digits, and hyphens.",
-          "markdownDescription": "Named gcloud configuration for the dashboard, as listed by `gcloud config configurations list`. Leave empty to use the active configuration."
+          "patternErrorMessage": "Use the name of a GCloud configuration: lower-case letters, digits, and hyphens.",
+          "markdownDescription": "Named GCloud configuration for the dashboard, as listed by `gcloud config configurations list`. Leave empty to use the active configuration."
         }
       }
     },

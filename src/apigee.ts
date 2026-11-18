@@ -74,7 +74,7 @@ export function apiBase(endpoint?: string): string {
   if (!endpoint) return `${globalEndpoint}/v1`;
   if (!endpointPattern.test(endpoint)) {
     throw new ApigeeError(
-      `gcloud overrides the Apigee endpoint with ${endpoint}, which is not an Apigee API endpoint.`,
+      `GCloud overrides the Apigee endpoint with ${endpoint}, which is not an Apigee API endpoint.`,
     );
   }
   return `${endpoint.replace(/\/$/, '')}/v1`;
@@ -105,7 +105,7 @@ export function apigeeClient(
     limit(async (): Promise<Buffer> => {
       const url = `${base}${path}`;
 
-      // Each attempt gets its own timeout, which waiting for gcloud does not use
+      // Each attempt gets its own timeout, which waiting for GCloud does not use
       let timeout: AbortSignal | undefined;
       const send = (token: string) => {
         timeout = AbortSignal.timeout(timeoutMs);
