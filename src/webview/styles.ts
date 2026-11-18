@@ -271,7 +271,7 @@ export const styles = css`
   }
 
   .notice.info {
-    --notice-color: var(--at-neutral);
+    --notice-color: var(--at-info);
   }
 
   /* Only beside the first line: empty rows would add their gaps below the text */
