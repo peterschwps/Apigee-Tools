@@ -118,6 +118,13 @@ class ApigeeDashboard extends LitElement {
     }
     this.view = { ...this.view, ...patch };
     vscode.setState(this.view);
+    if (patch.environment && this.snapshot?.organization) {
+      send({
+        type: 'environment',
+        organization: this.snapshot.organization,
+        name: patch.environment,
+      });
+    }
   }
 
   constructor() {
@@ -161,7 +168,7 @@ class ApigeeDashboard extends LitElement {
       },
       true,
     );
-    send({ type: 'ready' });
+    send({ type: 'ready', environment: this.view.environment });
   }
 
   /** Sets up the tooltips once the shadow root exists. */

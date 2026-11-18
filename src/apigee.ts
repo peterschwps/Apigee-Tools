@@ -389,24 +389,22 @@ export function applyStatus(cell: Cell, status: DeploymentStatus): void {
 
 /**
  * Picks the deployments whose status to load: those of local bundles first,
- * then the most recently deployed, at most `limit`.
+ * then the most recently deployed, for the selected environment.
  */
 export function statusTargets(
   rows: readonly Row[],
-  limit: number,
+  environment: string,
 ): { row: Row; environment: string }[] {
   const deployedAt = (target: { row: Row; environment: string }) =>
     target.row.cells[target.environment].deployedAt ?? 0;
   return rows
-    .flatMap(row =>
-      Object.keys(row.cells).map(environment => ({ row, environment })),
-    )
+    .filter(row => row.cells[environment])
+    .map(row => ({ row, environment }))
     .sort(
       (a, b) =>
         Number(b.row.local) - Number(a.row.local) ||
         deployedAt(b) - deployedAt(a),
-    )
-    .slice(0, limit);
+    );
 }
 
 /** Runs at most `size` tasks at a time; a finished task hands over its slot. */

@@ -19,7 +19,7 @@ Run **Apigee Tools: Open Dashboard** from the Command Palette, or click **Apigee
 - **Overview:** key figures and the failed deployments and warnings with their messages.
 - **Deployments:** the API proxies and the shared flows of the environment chosen at the top, each in a tab, with status, revision, and whether each deployment is the same as in your workspace. Filter by name, status, or workspace; where a deployment differs, its icon opens the differing files side by side. A name opens its details: the deployments in every environment with their base paths, and their errors and warnings in full.
 
-The dashboard needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), signed in with `gcloud auth login`, and a role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`). The access token stays in memory and is sent only to the Apigee API. Data loads when you open or refresh the dashboard, never in the background, and nothing is deployed or changed. See the [dashboard section](docs/index.md#dashboard) for details.
+The dashboard needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), signed in with `gcloud auth login`, and a role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`). The access token stays in memory and is sent only to the Apigee API. The full deployment list loads when you open or refresh the dashboard. Detailed status and local comparisons load for the selected environment, with missing data fetched when you switch environments or open resource details. Loaded environment results are reused until Refresh; nothing is deployed or changed. See the [dashboard section](docs/index.md#dashboard) for details.
 
 ## Settings
 

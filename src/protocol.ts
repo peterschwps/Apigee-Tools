@@ -90,9 +90,10 @@ export type Snapshot = {
 export type HostMessage = { type: 'snapshot'; snapshot: Snapshot };
 
 export type WebviewMessage =
-  | { type: 'ready' }
+  | { type: 'ready'; environment?: string }
   | { type: 'refresh' }
   | { type: 'organization'; name: string }
+  | { type: 'environment'; organization: string; name: string }
   | { type: 'compare'; kind: Kind; name: string; environment: string }
   | { type: 'details'; kind: Kind; name: string }
   | { type: 'openBundle'; path: string }

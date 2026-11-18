@@ -302,7 +302,7 @@ test('the overview lists environments, groups, and enabled add-ons', async t => 
   });
 });
 
-test('status checks start with local bundles, then the newest deployments', () => {
+test('status checks cover the selected environment, local and recent first', () => {
   const row = (
     name: string,
     local: boolean,
@@ -324,10 +324,10 @@ test('status checks start with local bundles, then the newest deployments', () =
     row('mine', true, { dev: 2, prod: 3 }),
   ];
   assert.deepEqual(
-    statusTargets(rows, 3).map(
+    statusTargets(rows, 'prod').map(
       ({ row, environment }) => `${row.name}/${environment}`,
     ),
-    ['mine/prod', 'mine/dev', 'new/prod'],
+    ['mine/prod', 'new/prod', 'old/prod'],
   );
 });
 

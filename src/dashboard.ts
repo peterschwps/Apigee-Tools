@@ -25,6 +25,7 @@ import {
   type TokenSource,
 } from './gcloud';
 import type {
+  Cell,
   HostMessage,
   Kind,
   LocalBundle,
@@ -71,10 +72,6 @@ const viewType = 'apigeeTools.dashboard';
 const revisionScheme = 'apigee-revision';
 const organizationKey = 'apigeeTools.organization';
 
-// Status requests per load, a small share of the 6,000 management API calls
-// per minute that an organization's users and pipelines share
-const statusLimit = 200;
-
 // Revisions whose files stay in memory for the comparison editors
 const keptRevisions = 10;
 
@@ -102,6 +99,13 @@ export function registerDashboard(
   let bundles: WorkspaceBundle[] = [];
   let session: Session | undefined;
   let loading: AbortController | undefined;
+  let dataController: AbortController | undefined;
+  let dataClient: ApigeeClient | undefined;
+  let selectedEnvironment = '';
+  let environmentLoads = new Map<string, Promise<void>>();
+  let pendingChecks = 0;
+  // A resolved request also remembers an explicitly unknown runtime state.
+  const statusRequests = new WeakMap<Cell, Promise<void>>();
   // The organization chosen in the selector; only such a choice is remembered
   let picked: string | undefined;
   let postTimer: ReturnType<typeof setTimeout> | undefined;
@@ -146,7 +150,7 @@ export function registerDashboard(
     vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration('apigeeTools')) session = undefined;
     }),
-    { dispose: () => loading?.abort() },
+    { dispose: () => dataController?.abort() },
   );
 
   // While developing, esbuild rebuilds the webview on every change, and the
@@ -219,7 +223,12 @@ export function registerDashboard(
     const listener = panel.webview.onDidReceiveMessage(handle);
     panel.onDidDispose(() => {
       listener.dispose();
-      loading?.abort();
+      dataController?.abort();
+      dataController = undefined;
+      dataClient = undefined;
+      loading = undefined;
+      environmentLoads = new Map();
+      pendingChecks = 0;
       panel = undefined;
       ready = false;
       picked = undefined;
@@ -238,6 +247,7 @@ export function registerDashboard(
     switch (message.type) {
       case 'ready':
         ready = true;
+        selectedEnvironment = message.environment ?? selectedEnvironment;
         post();
         if (
           snapshot.trusted &&
@@ -247,6 +257,8 @@ export function registerDashboard(
           !snapshot.problem
         ) {
           await load();
+        } else if (snapshot.requested) {
+          await checkEnvironment(selectedEnvironment);
         }
         break;
       case 'refresh':
@@ -268,6 +280,17 @@ export function registerDashboard(
             rows: undefined,
           };
           await load();
+        }
+        break;
+      case 'environment':
+        if (
+          message.organization === snapshot.organization &&
+          snapshot.overview?.environments.some(
+            item => item.name === message.name,
+          )
+        ) {
+          selectedEnvironment = message.name;
+          await checkEnvironment(message.name);
         }
         break;
       case 'compare':
@@ -317,9 +340,13 @@ export function registerDashboard(
    */
   async function load(): Promise<void> {
     if (!vscode.workspace.isTrusted) return;
-    loading?.abort();
+    dataController?.abort();
     const controller = new AbortController();
     loading = controller;
+    dataController = controller;
+    dataClient = undefined;
+    environmentLoads = new Map();
+    pendingChecks = 0;
     // Each load has notes of its own, so an aborted load cannot add to them
     const notes: Note[] = [];
     snapshot = {
@@ -332,9 +359,11 @@ export function registerDashboard(
     try {
       // A settings change may reset the session while this load runs
       const current = (session ??= await startSession());
+      if (controller.signal.aborted) return;
       const client = apigeeClient(current.tokens, current.base, {
         signal: controller.signal,
       });
+      dataClient = client;
       const organizations: string[] = await client
         .organizations()
         .catch(error => {
@@ -431,10 +460,12 @@ export function registerDashboard(
       if (organization === picked) {
         await context.workspaceState.update(organizationKey, organization);
       }
-      await Promise.all([
-        checkStatus(client, organization, rows, controller, notes),
-        checkDrift(client, organization, rows, controller, notes),
-      ]);
+      if (
+        !overview.environments.some(item => item.name === selectedEnvironment)
+      ) {
+        selectedEnvironment = overview.environments[0]?.name ?? '';
+      }
+      await checkEnvironment(selectedEnvironment);
     } catch (error) {
       if (controller.signal.aborted) return;
       host.log.warn('Loading the dashboard failed:', messageOf(error));
@@ -442,7 +473,7 @@ export function registerDashboard(
     } finally {
       if (loading === controller) {
         loading = undefined;
-        snapshot = { ...snapshot, loading: false };
+        snapshot = { ...snapshot, loading: pendingChecks > 0 };
         post();
       }
     }
@@ -483,8 +514,101 @@ export function registerDashboard(
     );
   }
 
+  /** Loads each selected environment once until Refresh replaces its cells. */
+  function checkEnvironment(environment: string): Promise<void> {
+    const existing = environmentLoads.get(environment);
+    if (existing) return existing;
+    const { organization, rows, overview } = snapshot;
+    const controller = dataController;
+    const client = dataClient;
+    if (
+      !snapshot.trusted ||
+      !snapshot.requested ||
+      !organization ||
+      !rows ||
+      !controller ||
+      controller.signal.aborted ||
+      !client ||
+      !overview?.environments.some(item => item.name === environment)
+    ) {
+      return Promise.resolve();
+    }
+    const notes = snapshot.notes ?? [];
+    const task = (async () => {
+      pendingChecks++;
+      snapshot = { ...snapshot, loading: true };
+      post();
+      try {
+        await Promise.all([
+          checkStatus(
+            client,
+            organization,
+            rows,
+            environment,
+            controller,
+            notes,
+          ),
+          checkDrift(
+            client,
+            organization,
+            rows,
+            environment,
+            controller,
+            notes,
+          ),
+        ]);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          notes.push({
+            tone: 'warning',
+            text: `Loading environment "${environment}" failed: ${messageOf(error)}`,
+          });
+        }
+      } finally {
+        if (dataController === controller) {
+          pendingChecks--;
+          snapshot = {
+            ...snapshot,
+            loading: Boolean(loading || pendingChecks),
+          };
+          post();
+        }
+      }
+    })();
+    environmentLoads.set(environment, task);
+    return task;
+  }
+
+  /** Shares status requests between environment loads and resource details. */
+  function readStatus(
+    client: ApigeeClient,
+    organization: string,
+    row: Row,
+    environment: string,
+  ): Promise<void> {
+    const cell = row.cells[environment];
+    let request = statusRequests.get(cell);
+    if (!request) {
+      request = client
+        .deploymentStatus(
+          organization,
+          environment,
+          row.kind,
+          row.name,
+          cell.revision,
+        )
+        .then(status => {
+          applyStatus(cell, status);
+          schedulePost();
+        });
+      statusRequests.set(cell, request);
+      request.catch(() => statusRequests.delete(cell));
+    }
+    return request;
+  }
+
   /**
-   * Loads the status of the deployments, local bundles and recent ones first.
+   * Loads every deployment status in the selected environment.
    * A network failure or an exhausted quota stops the remaining requests, so
    * the dashboard neither waits for timeouts nor uses up the quota of others.
    */
@@ -492,34 +616,18 @@ export function registerDashboard(
     client: ApigeeClient,
     organization: string,
     rows: Row[],
+    environment: string,
     controller: AbortController,
     notes: Note[],
   ): Promise<void> {
-    const total = rows.reduce(
-      (sum, row) => sum + Object.keys(row.cells).length,
-      0,
-    );
-    const targets = statusTargets(rows, statusLimit);
-    let checked = 0;
+    const targets = statusTargets(rows, environment);
     let failed = 0;
     let firstFailure: unknown;
     let stopped: ApigeeError | undefined;
     await Promise.all(
       targets.map(async ({ row, environment }) => {
-        const cell = row.cells[environment];
         try {
-          applyStatus(
-            cell,
-            await client.deploymentStatus(
-              organization,
-              environment,
-              row.kind,
-              row.name,
-              cell.revision,
-            ),
-          );
-          checked++;
-          schedulePost();
+          await readStatus(client, organization, row, environment);
         } catch (error) {
           if (controller.signal.aborted) return;
           if (
@@ -554,70 +662,56 @@ export function registerDashboard(
         text: `Status could not be checked for ${failed} deployments: ${messageOf(firstFailure)}${hint}`.trim(),
       });
     }
-    if (!stopped && targets.length < total) {
-      notes.push({
-        tone: 'info',
-        text: `Status was checked for ${checked} of ${total} deployments, local bundles and recent deployments first, to spare the API quota.`,
-      });
-    }
   }
 
-  /**
-   * Loads the status that the details of a proxy or shared flow still miss,
-   * such as those beyond the limit of status checks per load.
-   */
+  /** Loads missing status values across environments when details are opened. */
   async function checkDetails(kind: Kind, name: string): Promise<void> {
     const row = snapshot.rows?.find(
       item => item.kind === kind && item.name === name,
     );
     const organization = snapshot.organization;
-    const missing = Object.entries(row?.cells ?? {}).filter(
-      ([, cell]) => !cell.state,
+    const controller = dataController;
+    const client = dataClient;
+    if (
+      !row ||
+      !organization ||
+      !controller ||
+      controller.signal.aborted ||
+      !client
+    )
+      return;
+    const missing = Object.keys(row.cells).filter(
+      environment => !row.cells[environment].state,
     );
-    if (!organization || !missing.length) return;
-    // A running load reports its own end
-    const alone = !loading;
-    if (alone) {
-      snapshot = { ...snapshot, loading: true };
-      post();
-    }
+    if (!missing.length) return;
+    const notes = snapshot.notes ?? [];
+    pendingChecks++;
+    snapshot = { ...snapshot, loading: true };
+    post();
     try {
-      const current = (session ??= await startSession());
-      const client = apigeeClient(current.tokens, current.base);
       await Promise.all(
-        missing.map(async ([environment, cell]) => {
+        missing.map(async environment => {
           try {
-            applyStatus(
-              cell,
-              await client.deploymentStatus(
-                organization,
-                environment,
-                kind,
-                name,
-                cell.revision,
-              ),
-            );
+            await readStatus(client, organization, row, environment);
           } catch (error) {
+            if (controller.signal.aborted) return;
             host.log.warn(
               `Status of ${name} in ${environment}:`,
               messageOf(error),
             );
-            snapshot.notes?.push({
+            notes.push({
               tone: 'warning',
               text: `Status of "${name}" in ${environment} could not be checked: ${messageOf(error)}`,
             });
           }
         }),
       );
-    } catch (error) {
-      host.log.warn('Checking the details failed:', messageOf(error));
-      snapshot.notes?.push({
-        tone: 'warning',
-        text: `Status of "${name}" could not be checked: ${messageOf(error)}`,
-      });
     } finally {
-      if (alone && !loading) snapshot = { ...snapshot, loading: false };
-      post();
+      if (dataController === controller) {
+        pendingChecks--;
+        snapshot = { ...snapshot, loading: Boolean(loading || pendingChecks) };
+        post();
+      }
     }
   }
 
@@ -629,6 +723,7 @@ export function registerDashboard(
     client: ApigeeClient,
     organization: string,
     rows: Row[],
+    environment: string,
     controller: AbortController,
     notes: Note[],
   ): Promise<void> {
@@ -636,25 +731,22 @@ export function registerDashboard(
     let firstFailure: unknown;
     await Promise.all(
       rows
-        .filter(row => row.local)
+        .filter(row => row.local && row.cells[environment])
         .map(async row => {
           const bundle = localBundle(row)!;
           try {
             const local = fingerprints(
               await readBundle(bundle.directory, row.kind),
             );
-            await Promise.all(
-              Object.values(row.cells).map(async cell => {
-                const remote = await revisionPrints(
-                  client,
-                  organization,
-                  row,
-                  cell.revision,
-                );
-                cell.drift = differs(remote, local);
-                schedulePost();
-              }),
+            const cell = row.cells[environment];
+            const remote = await revisionPrints(
+              client,
+              organization,
+              row,
+              cell.revision,
             );
+            cell.drift = differs(remote, local);
+            schedulePost();
           } catch (error) {
             if (controller.signal.aborted) return;
             host.log.warn(
