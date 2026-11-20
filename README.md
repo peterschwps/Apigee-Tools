@@ -22,6 +22,10 @@ Run **Apigee Tools: Open Dashboard** from the Command Palette, or click **Apigee
 
 The dashboard needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), signed in with `gcloud auth login`, and a role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`). The access token stays in memory and is sent only to the Apigee API, and API keys show only their last four characters. Data loads when you open or refresh the dashboard, for Relationships once its tab is open, never in the background, and nothing is deployed or changed. See the [dashboard section](docs/index.md#dashboard) for details.
 
+## Flow
+
+**Show Flow** in the title bar of a bundle's XML file draws how Apigee runs its flows: the request and the response in run order, with conditional flows, route rules, and fault rules in the order Apigee checks them. **Source** switches to what an environment runs: the deployed revision with the shared flows of its flow hooks, marked where it differs from your workspace. See the [flow section](docs/index.md#flow).
+
 ## Settings
 
 - `apigeeTools.enabled`: enable or disable diagnostics and completion.

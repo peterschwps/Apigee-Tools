@@ -241,7 +241,47 @@ Data loads when you open the dashboard, refresh it, or switch the organization; 
 
 The Relationships tab loads its data the first time it opens, and with every load after that: API products, developers, app groups, apps with their API keys, flow hooks, and the deployed revisions, whose FlowCallout policies name the shared flows they call. It downloads at most 200 revisions per load, recent deployments first, and each revision once per session; a notice says when a refresh reads more. Consumer secrets are discarded on arrival. Full API keys stay in the memory of the extension: the tab receives only their last four characters, and copying a key or looking one up happens in the extension, without a request to the API. The search text is not saved.
 
-In Restricted Mode, linting keeps working, and the dashboard asks for a trusted workspace.
+In Restricted Mode, linting and the flow of local bundles keep working, and the dashboard asks for a trusted workspace.
+
+## Flow
+
+**Show Flow** draws how Apigee runs the flows of an API proxy or shared flow, in a panel beside the editor. Open it with the button in the title bar of an XML file of a bundle, with **Apigee Tools: Show Flow** from the Command Palette, or with **Show Flow** in the details of a proxy or shared flow in the dashboard. The panel shows the bundle of the file it was opened from, and draws it again when you save one of its files.
+
+### Reading the flow
+
+Each proxy endpoint gets a map of the stages in the order Apigee runs them:
+
+- **Request:** the client with the base path, the PreFlow, conditional Flows, and PostFlow of the proxy endpoint, the route rules, the flows of the target endpoint, and the backend.
+- **Response:** the flows of the target endpoint, then those of the proxy endpoint, back to the client.
+- **Per Event**, **On Error**, and **After the Response** show the EventFlow for server-sent events, the fault handling of each endpoint, and the PostClientFlow, when the bundle has them.
+
+Conditional flows, route rules, and fault rules are numbered in the order Apigee checks them, and the first match runs: fault rules from the bottom up in a proxy endpoint and from the top down in a target endpoint, followed by the DefaultFaultRule. A case without a condition matches everything, so the cases after it are marked as never running. Route rules are buttons: choose one to draw the target it leads to, or none for a null route. A step with a condition has a dashed border, and a disabled policy is muted. A step opens its policy, and the title of an endpoint opens its file; hovering over an item names its policy type, its condition, and what else matters.
+
+In narrow panels the stages run from top to bottom. From 1,000 pixels, the request runs from left to right with the response below it from right to left, as in the Apigee console. Keyboard focus moves into each band with Tab and follows the run order with the arrow keys.
+
+### Workspace and environments
+
+**Source** switches between the local copy, **Workspace**, and each environment where the proxy or shared flow is deployed, such as **eval · Revision 2**. The environments come from the organization of the dashboard; until it has loaded, **Load Environments** loads it. An environment shows the flow of its deployed revision with:
+
+- the shared flows of the environment's flow hooks, where they run, with their revisions;
+- the revision of each shared flow that a FlowCallout calls, or an error sign where it is not deployed, since the call then fails;
+- the status of the deployment and a mark on each policy, resource, or endpoint file that differs from the local copy. The button beside **Source** opens the differing files in VS Code's diff editor, or the sign says that they are the same.
+
+Steps that only the local copy has are not drawn in an environment; the mark on the endpoint and the diff show them.
+
+### What the flow view assumes
+
+Google's documentation leaves some behavior open, so the flow view assumes:
+
+- Pre-Target and Post-Target flow hooks run around the flows of the target endpoint. Where a route has no target endpoint, they get a question mark.
+- Flow hooks do not run in the error flow.
+- The EventFlow runs for each event; how it is ordered with the response flows is not shown.
+- The policies that a PostClientFlow allows are not checked.
+- Of several policies with one name, the one in the file named after it counts.
+
+### Data
+
+The flow of the local copy reads only files of the workspace: it needs no sign-in, works in Restricted Mode, and sends nothing over the network. An environment reads its deployed revision once per session, shared with the comparisons of the dashboard, and its four flow hooks once until you refresh.
 
 ## Scope and limitations
 

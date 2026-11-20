@@ -64,6 +64,18 @@ The Relationships tab should show:
 - `security-baseline` has the flow hook icon in both environments, `logging` only in eval.
 - `admin`, `cart`, `customers`, `inventory-soap`, `LegacyStorefront`, `payments`, `shipping`, and `status` are in no API product.
 
+The flow view should show:
+
+- `orders-v1`: in eval, revision 2 is the same as the workspace, between the Pre-Proxy flow hook `security-baseline` and the Post-Proxy flow hook `logging`. In test, revision 1 runs `AM-LegacyOrderHeader` instead of `JS-ValidateOrder`; the proxy endpoint, that step, and `security-baseline` at revision 1 are marked, and 3 files differ.
+- `catalog-v2` in test: revision 2 marks `AM-CatalogVersion`, and `JS-PageLinks` through `page-links.js`; 2 files differ.
+- `shipping`: the route rule `ratesFromCarrier` is a null route; following it ends the request at the route rules.
+- `LegacyStorefront`: the PreFlow of the target endpoint, its fault rule under On Error, and the load balancer with its fallback server.
+- `customers`: the fault rule `insufficientScope` under On Error.
+- `status`: from a file in `archive/`, the flow of that copy; from the dashboard, no local copy, since two bundles share the name.
+- `partner-gateway`: the route rule `orders` leads to a target endpoint that does not exist.
+- `reviews`: offline and signed out, the flow of the workspace with the missing policy `JS-MaskProfanity`.
+- `cart`: the two conditional flows named `addItem` as cases 2 and 3.
+
 `npx tsx scripts/test-org.ts conflict PROJECT_ID on` also attaches test to `eval-group`. Every proxy deployed in both environments then shows Warnings in test, because its base path conflicts with the deployment in eval. Turn it off with `conflict PROJECT_ID off` before the next `populate`.
 
 Nothing sends requests to the proxies. In an evaluation organization without VPC peering, that would need billable networking, so debug sessions and analytics stay empty.
