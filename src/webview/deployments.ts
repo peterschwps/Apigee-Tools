@@ -41,6 +41,8 @@ export type Actions = {
   setView(patch: Partial<DeploymentView>): void;
   /** Shows the details of a row and loads what they still miss. */
   openDetails(row: Row): void;
+  /** Shows the relationships of a node, such as `apis:orders-v1`. */
+  openRelationships(node: string): void;
 };
 
 /**

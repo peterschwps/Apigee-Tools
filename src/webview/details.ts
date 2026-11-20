@@ -59,6 +59,15 @@ export function details(snapshot: Loaded, row: Row, actions: Actions) {
         <div class="details-title">
           <h2>${row.name}</h2>
           <div class="details-actions">
+            <button
+              class="icon-button"
+              data-tooltip="Show in Relationships"
+              aria-label="Show in Relationships"
+              @click=${() =>
+                actions.openRelationships(`${row.kind}:${row.name}`)}
+            >
+              <vscode-icon name="type-hierarchy"></vscode-icon>
+            </button>
             <a
               class="icon-button"
               href=${consoleUrl(snapshot.overview.projectId, row)}

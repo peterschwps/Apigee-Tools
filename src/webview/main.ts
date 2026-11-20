@@ -119,6 +119,7 @@ class ApigeeDashboard extends LitElement {
       this.setView({ tab: 1, kind: row.kind, detail: row.name });
       send({ type: 'details', kind: row.kind, name: row.name });
     },
+    openRelationships: node => this.setView({ tab: relationshipsIndex, node }),
   };
 
   private readonly relationshipActions: RelationshipActions = {
@@ -146,14 +147,19 @@ class ApigeeDashboard extends LitElement {
 
   /** Changes the view and keeps it for a reload of the webview. */
   private setView(patch: Partial<ViewState>): void {
+    // Moving to another tab moves the focus, even to the same details or node
+    const moved = patch.tab !== undefined && patch.tab !== this.view.tab;
     // Keyboard focus moves into the details, and back to the row they show
-    if (patch.detail !== undefined && patch.detail !== this.view.detail) {
+    if (
+      patch.detail !== undefined &&
+      (moved || patch.detail !== this.view.detail)
+    ) {
       this.focusNext = patch.detail
         ? '.back'
         : `[data-name="${CSS.escape(`${this.view.kind}/${this.view.detail}`)}"]`;
     }
     // A chosen node keeps the focus, and so does the last one when cleared
-    if (patch.node !== undefined && patch.node !== this.view.node) {
+    if (patch.node !== undefined && (moved || patch.node !== this.view.node)) {
       const node = patch.node || this.view.node;
       this.focusNext = `[data-id="${CSS.escape(node)}"]`;
     }
@@ -250,7 +256,11 @@ class ApigeeDashboard extends LitElement {
       this.focusNext = undefined;
       // Nested tabs show their panels only after updates of their own
       await new Promise(requestAnimationFrame);
-      this.renderRoot.querySelector<HTMLElement>(selector)?.focus();
+      // A graph that is still loading has no nodes yet; its tab takes it
+      (
+        this.renderRoot.querySelector<HTMLElement>(selector) ??
+        this.renderRoot.querySelector<HTMLElement>('vscode-tab-header[active]')
+      )?.focus();
     }
     if (!refocus) return;
     const refresh = this.renderRoot.querySelector<HTMLElement>('.refresh');
