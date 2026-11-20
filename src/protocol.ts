@@ -165,6 +165,93 @@ export type Snapshot = {
 /** An API key by its app and its position among the app's keys. */
 export type KeyRef = { app: string; key: number };
 
+/** Signs of the flow view, by their key in the dashboard's signs. */
+export type FlowSign = 'warning' | 'error' | 'unknown' | 'none';
+
+/** A step of a flow: the policy it runs. */
+export type FlowStep = {
+  /** Stays the same across rebuilds, so that focus can stay on the step. */
+  key: string;
+  /** Where it opens: an index into the places that the host keeps. */
+  at: number;
+  /** The policy's name. */
+  name: string;
+  /** The policy's type; absent when the bundle has no such policy. */
+  type?: string;
+  condition?: string;
+  sign?: FlowSign;
+  /** Whether it shows muted, such as a disabled policy. */
+  muted?: boolean;
+  /** Further facts for its tooltip and screen readers. */
+  facts: string[];
+};
+
+/** A case of a first-match group: a conditional flow, route, or fault rule. */
+export type FlowCase = {
+  key: string;
+  at?: number;
+  /** Its position in evaluation order; absent for No Match. */
+  number?: number;
+  name: string;
+  /** What it matches, in short, such as "POST /orders". */
+  summary?: string;
+  condition?: string;
+  /** Where a route rule sends the request. */
+  destination?: string;
+  sign?: FlowSign;
+  muted?: boolean;
+  /** For route rules: whether the view follows this route to its target. */
+  followed?: boolean;
+  facts: string[];
+  steps: FlowStep[];
+};
+
+/** A part of an endpoint: a list of steps, or a first-match group. */
+export type FlowSegment = {
+  /** Apigee's element name, such as PreFlow or DefaultFaultRule. */
+  label: string;
+  facts: string[];
+} & ({ steps: FlowStep[] } | { cases: FlowCase[] });
+
+/** A stage of a band, in the order in which Apigee runs it. */
+export type FlowItem =
+  | { kind: 'client'; key: string; basePath?: string }
+  | {
+      kind: 'endpoint';
+      key: string;
+      at: number;
+      role: 'proxy' | 'target' | 'shared';
+      name: string;
+      facts: string[];
+      segments: FlowSegment[];
+    }
+  | {
+      kind: 'routes';
+      key: string;
+      /** The proxy endpoint whose route rules these are, by position. */
+      endpoint: number;
+      cases: FlowCase[];
+    }
+  | {
+      kind: 'backend';
+      key: string;
+      at?: number;
+      text: string;
+      sign?: FlowSign;
+      facts: string[];
+    };
+
+/** The stages of one way through an endpoint, such as the request. */
+export type FlowBand = {
+  kind: 'request' | 'response' | 'event' | 'error' | 'after' | 'steps';
+  /** Remarks under the band's heading. */
+  facts: string[];
+  items: FlowItem[];
+};
+
+/** A proxy endpoint from the client to the backend and back, or a shared flow. */
+export type FlowMap = { key: string; title: string; bands: FlowBand[] };
+
 export type HostMessage =
   | { type: 'snapshot'; snapshot: Snapshot }
   // Apart from the snapshot, which is posted often, since it can be large
