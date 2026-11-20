@@ -72,3 +72,11 @@ test('rootElementName is absent without a root element', () => {
   assert.equal(rootElementName(''), undefined);
   assert.equal(rootElementName('<!-- unterminated <Quota>'), undefined);
 });
+
+test('XML nested too deeply to read is a syntax issue, not a failure', () => {
+  const document = parseXml('<a>'.repeat(300));
+  assert.equal(document.root, undefined);
+  assert.deepEqual(document.syntaxIssues, [
+    { message: 'The document is nested too deeply to read.', start: 0, end: 1 },
+  ]);
+});

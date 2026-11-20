@@ -104,6 +104,25 @@ export function rootElementName(xml: string): string | undefined {
 
 /** Parses XML into a position-aware model that tolerates incomplete markup. */
 export function parseXml(text: string): XmlDocument {
+  try {
+    return parseDocument(text);
+  } catch (error) {
+    // Error recovery recurses for each unclosed element and can run out of stack
+    if (!(error instanceof RangeError)) throw error;
+    return {
+      comments: [],
+      syntaxIssues: [
+        {
+          message: 'The document is nested too deeply to read.',
+          start: 0,
+          end: Math.min(1, text.length),
+        },
+      ],
+    };
+  }
+}
+
+function parseDocument(text: string): XmlDocument {
   const result = parse(text);
   const document = result.cst as DocumentCstNode;
 
