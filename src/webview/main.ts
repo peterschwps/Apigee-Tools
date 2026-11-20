@@ -16,6 +16,7 @@ import { html, LitElement, nothing, type TemplateResult } from 'lit';
 import type {
   HostMessage,
   Problem,
+  Relationships,
   Snapshot,
   WebviewMessage,
 } from '../protocol';
@@ -27,7 +28,9 @@ import {
   type Loaded,
 } from './deployments';
 import { details } from './details';
+import type { Column } from './graph';
 import { overview } from './overview';
+import { relationshipsTab, type RelationshipActions } from './relationships';
 import { styles } from './styles';
 import { tooltips } from './tooltip';
 
@@ -36,7 +39,12 @@ type ViewState = DeploymentView & {
   tab: number;
   /** Notes closed by the user, hidden until the dashboard closes. */
   dismissed: string[];
+  /** The node chosen in the Relationships tab, or empty. */
+  node: string;
 };
+
+// The index of the Relationships tab
+const relationshipsIndex = 2;
 
 declare function acquireVsCodeApi(): {
   postMessage(message: WebviewMessage): void;
@@ -75,6 +83,10 @@ class ApigeeDashboard extends LitElement {
   static override properties = {
     snapshot: { state: true },
     view: { state: true },
+    relationships: { state: true },
+    query: { state: true },
+    missingKey: { state: true },
+    roving: { state: true },
   };
 
   static override styles = styles;
@@ -82,6 +94,14 @@ class ApigeeDashboard extends LitElement {
   // Declared rather than initialized as fields, so that Lit's accessors stay intact
   declare snapshot: Snapshot | undefined;
   declare view: ViewState;
+  declare relationships: Relationships | undefined;
+  // The search of the Relationships tab is never kept: it may hold an API key
+  declare query: string;
+  declare missingKey: boolean;
+  declare roving: Partial<Record<Column, string>>;
+
+  /** Whether the Relationships tab asked the host for its data. */
+  private relationshipsRequested = false;
 
   /** Hides the tooltip once a render removed its element. */
   private syncTooltip = () => {};
@@ -101,6 +121,22 @@ class ApigeeDashboard extends LitElement {
     },
   };
 
+  private readonly relationshipActions: RelationshipActions = {
+    select: node => this.setView({ node }),
+    setQuery: query => {
+      this.query = query;
+      this.missingKey = false;
+    },
+    findKey: key => send({ type: 'findKey', key }),
+    copyKey: (app, key) => send({ type: 'copyKey', app, key }),
+    rove: (column, node) => {
+      if (this.roving[column] !== node) {
+        this.roving = { ...this.roving, [column]: node };
+      }
+    },
+    openDetails: row => this.actions.openDetails(row),
+  };
+
   /** Hides a note; keyboard focus moves on to Refresh. */
   private dismiss(text: string): void {
     this.focusNext = '.refresh';
@@ -116,6 +152,11 @@ class ApigeeDashboard extends LitElement {
         ? '.back'
         : `[data-name="${CSS.escape(`${this.view.kind}/${this.view.detail}`)}"]`;
     }
+    // A chosen node keeps the focus, and so does the last one when cleared
+    if (patch.node !== undefined && patch.node !== this.view.node) {
+      const node = patch.node || this.view.node;
+      this.focusNext = `[data-id="${CSS.escape(node)}"]`;
+    }
     this.view = { ...this.view, ...patch };
     vscode.setState(this.view);
   }
@@ -123,6 +164,10 @@ class ApigeeDashboard extends LitElement {
   constructor() {
     super();
     this.snapshot = undefined;
+    this.relationships = undefined;
+    this.query = '';
+    this.missingKey = false;
+    this.roving = {};
     const saved = vscode.getState();
     this.view = {
       tab: 0,
@@ -136,14 +181,28 @@ class ApigeeDashboard extends LitElement {
       // Dashboards saved before filters took several states kept one or ''
       status: Array.isArray(saved?.status) ? saved.status : [],
       comparison: Array.isArray(saved?.comparison) ? saved.comparison : [],
+      node: typeof saved?.node === 'string' ? saved.node : '',
     };
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
-      if (event.data?.type !== 'snapshot') return;
-      const snapshot = event.data.snapshot;
-      // The first snapshot arrives before loading starts, without data yet
-      this.loaded ||=
-        !snapshot.loading && Boolean(snapshot.overview || snapshot.problem);
-      this.snapshot = snapshot;
+      const message = event.data;
+      if (message?.type === 'relationships') {
+        this.relationships = message.relationships;
+      } else if (message?.type === 'keyOwner') {
+        if (message.found) {
+          this.query = '';
+          this.setView({
+            node: `keys:${message.found.app}/${message.found.key}`,
+          });
+        } else {
+          this.missingKey = true;
+        }
+      } else if (message?.type === 'snapshot') {
+        const snapshot = message.snapshot;
+        // The first snapshot arrives before loading starts, without data yet
+        this.loaded ||=
+          !snapshot.loading && Boolean(snapshot.overview || snapshot.problem);
+        this.snapshot = snapshot;
+      }
     });
     // A held-down key repeats clicks on buttons; one refresh is enough
     this.addEventListener(
@@ -177,6 +236,15 @@ class ApigeeDashboard extends LitElement {
    */
   protected override async updated(): Promise<void> {
     this.syncTooltip();
+    // The Relationships tab loads its data once it is first shown
+    if (
+      !this.relationshipsRequested &&
+      this.view.tab === relationshipsIndex &&
+      this.snapshot?.rows
+    ) {
+      this.relationshipsRequested = true;
+      send({ type: 'relationships' });
+    }
     if (this.focusNext) {
       const selector = this.focusNext;
       this.focusNext = undefined;
@@ -227,8 +295,9 @@ class ApigeeDashboard extends LitElement {
                       id="organization"
                       @change=${(event: Event) => {
                         // Details belong to the organization they came from
-                        this.view = { ...this.view, detail: '' };
+                        this.view = { ...this.view, detail: '', node: '' };
                         vscode.setState(this.view);
+                        this.query = '';
                         send({
                           type: 'organization',
                           name: (event.target as VscodeSingleSelect).value,
@@ -336,9 +405,16 @@ class ApigeeDashboard extends LitElement {
       `;
     }
     const { overview: organization, rows } = snapshot;
+    // The notes of the Relationships tab show while it is open
+    const relationshipNotes =
+      this.view.tab === relationshipsIndex &&
+      this.relationships &&
+      this.relationships.organization === snapshot.organization
+        ? this.relationships.notes
+        : [];
     const messages = [
       snapshot.problem ? problemNotice(snapshot.problem) : undefined,
-      ...(snapshot.notes ?? [])
+      ...[...(snapshot.notes ?? []), ...relationshipNotes]
         .filter(note => !this.view.dismissed.includes(note.text))
         .map(note =>
           notice(
@@ -379,8 +455,30 @@ class ApigeeDashboard extends LitElement {
         <vscode-tab-header slot="header">
           <span class="tab-label">Deployments</span>
         </vscode-tab-header>
+        <vscode-tab-header slot="header">
+          <span class="tab-label">Relationships</span>
+        </vscode-tab-header>
         <vscode-tab-panel>${overview(snapshot, this.actions)}</vscode-tab-panel>
         <vscode-tab-panel>${this.deploymentsTab(snapshot)}</vscode-tab-panel>
+        <vscode-tab-panel>
+          ${
+            // Tabs render every panel; this one only renders while shown
+            this.view.tab === relationshipsIndex
+              ? relationshipsTab(
+                  snapshot,
+                  this.relationships,
+                  {
+                    environment: this.effectiveView(snapshot).environment,
+                    node: this.view.node,
+                    query: this.query,
+                    missingKey: this.missingKey,
+                    roving: this.roving,
+                  },
+                  this.relationshipActions,
+                )
+              : nothing
+          }
+        </vscode-tab-panel>
       </vscode-tabs>
     `;
   }

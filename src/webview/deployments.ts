@@ -117,7 +117,7 @@ export const comparisons: Readonly<Record<ComparisonKey, StatusInfo>> = {
 };
 
 // Unknown states while a load may still bring them
-const checking: StatusInfo = { label: 'Checking…', ...signs.loading };
+export const checking: StatusInfo = { label: 'Checking…', ...signs.loading };
 const comparing: StatusInfo = { ...checking, label: 'Comparing…' };
 
 /** What Apigee's route conflicts mean; its own messages follow. */

@@ -650,4 +650,208 @@ export const styles = css`
     gap: 4px;
     margin-left: auto;
   }
+
+  /* Relationships: the graph, and the details beside it on wide windows */
+  .relations {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    align-items: start;
+    gap: 16px;
+  }
+
+  @media (max-width: 1400px) {
+    .relations {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .graph-scroll {
+    overflow-x: auto;
+  }
+
+  /* Six columns with gaps for the edges; the gaps match the graph module */
+  .graph {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(110px, 1fr) 40px) minmax(
+        110px,
+        1fr
+      );
+    align-items: start;
+    min-width: 860px;
+  }
+
+  .column-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    margin-bottom: 8px;
+    white-space: nowrap;
+  }
+
+  .column-title span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .graph-column ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* One row per node, as tall as the pitch of the graph module */
+  .graph-column li {
+    display: flex;
+    align-items: center;
+    height: 28px;
+  }
+
+  /* The edges start below the column titles */
+  .gutter {
+    padding-top: 32px;
+  }
+
+  .gutter svg {
+    display: block;
+    overflow: visible;
+  }
+
+  .node {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--at-border);
+    border-radius: 4px;
+    background: var(--vscode-editor-background);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .node:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+
+  .node:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+  }
+
+  .node.match {
+    border-color: var(--vscode-focusBorder);
+  }
+
+  .node[aria-current='true'] {
+    border-color: var(--vscode-focusBorder);
+    background: var(
+      --vscode-list-inactiveSelectionBackground,
+      var(--vscode-list-hoverBackground)
+    );
+  }
+
+  .node vscode-icon {
+    flex: none;
+  }
+
+  /* vscode-icon sets the icon color itself; the flow hook mark stays muted */
+  .node .hook {
+    color: var(--at-text-muted);
+  }
+
+  .node-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .more {
+    padding: 0 6px;
+    color: var(--at-text-muted);
+  }
+
+  /* Status colors only for lines here too: waiting dashed, revoked dotted */
+  .edge {
+    fill: none;
+    stroke: var(--at-text-muted);
+    stroke-opacity: 0.6;
+  }
+
+  .edge.pending {
+    stroke: var(--at-warning);
+    stroke-opacity: 1;
+    stroke-dasharray: 4 3;
+  }
+
+  .edge.revoked {
+    stroke: var(--at-error);
+    stroke-opacity: 1;
+    stroke-dasharray: 1 3;
+  }
+
+  .edge.hook {
+    stroke-dasharray: 6 3;
+  }
+
+  .side {
+    display: grid;
+    gap: 8px;
+    overflow-wrap: anywhere;
+  }
+
+  .side-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .group-title {
+    margin: 8px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 12px;
+    margin: 0;
+  }
+
+  .facts dt {
+    color: var(--at-text-muted);
+  }
+
+  .facts dd {
+    margin: 0;
+  }
+
+  .relation-list {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .relation-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+  }
+
+  .side .icon-button.labeled {
+    justify-self: start;
+  }
+
+  .hint {
+    margin-top: 4px;
+  }
 `;
