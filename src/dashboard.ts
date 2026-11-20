@@ -9,6 +9,7 @@ import {
   ApigeeError,
   apigeeClient,
   applyStatus,
+  cellOf,
   deployedRevisions,
   loadFlowHooks,
   loadOverview,
@@ -1033,7 +1034,7 @@ export function registerDashboard(
     const row = snapshot.rows?.find(
       item => item.kind === kind && item.name === name,
     );
-    const cell = row?.cells[environment];
+    const cell = row && cellOf(row, environment);
     const bundle = row && localBundle(row);
     const organization = snapshot.organization;
     if (!row || !cell || !bundle || !organization) return;

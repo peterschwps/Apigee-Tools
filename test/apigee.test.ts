@@ -5,6 +5,7 @@ import {
   ApigeeError,
   apigeeClient,
   applyStatus,
+  cellOf,
   deployedRevisions,
   loadFlowHooks,
   loadOverview,
@@ -700,4 +701,17 @@ test('each deployed revision is listed once, the newest first', () => {
     ),
     ['orders/2', 'cors/1'],
   );
+});
+
+test('a row has deployments only in its own environments', () => {
+  const row: Row = {
+    kind: 'apis',
+    name: 'hello',
+    local: false,
+    cells: { dev: { revision: '1' } },
+  };
+  assert.equal(cellOf(row, 'dev')?.revision, '1');
+  for (const name of ['__proto__', 'constructor', 'toString', 'test']) {
+    assert.equal(cellOf(row, name), undefined, name);
+  }
 });

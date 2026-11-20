@@ -728,6 +728,16 @@ function sentence(message: string): string {
   return message.charAt(0).toUpperCase() + message.slice(1);
 }
 
+/**
+ * Returns the deployment of a row in an environment. Names that every object
+ * inherits, such as `constructor`, are no deployment.
+ */
+export function cellOf(row: Row, environment: string): Cell | undefined {
+  return Object.hasOwn(row.cells, environment)
+    ? row.cells[environment]
+    : undefined;
+}
+
 /** Copies a deployment status into its cell, reduced to readable messages. */
 export function applyStatus(cell: Cell, status: DeploymentStatus): void {
   cell.state =
