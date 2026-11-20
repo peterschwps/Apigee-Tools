@@ -349,6 +349,21 @@ export function registerDashboard(
       case 'details':
         await checkDetails(message.kind, message.name);
         break;
+      case 'showFlow': {
+        const row = snapshot.rows?.find(
+          item => item.kind === message.kind && item.name === message.name,
+        );
+        if (row) {
+          await flow.show({
+            kind: row.kind,
+            name: row.name,
+            ...(typeof message.environment === 'string' && {
+              environment: message.environment,
+            }),
+          });
+        }
+        break;
+      }
       case 'relationships':
         relationshipsWanted = true;
         // Before the rows arrive, the running load reads them as well

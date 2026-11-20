@@ -130,6 +130,16 @@ class ApigeeDashboard extends LitElement {
     // Shows the chain of the node, even where another one was pinned
     openRelationships: node =>
       this.setView({ tab: relationshipsIndex, node, pinned: '' }),
+    // The flow opens in the environment chosen at the top, if deployed there
+    openFlow: row => {
+      if (!this.snapshot) return;
+      send({
+        type: 'showFlow',
+        kind: row.kind,
+        name: row.name,
+        environment: this.effectiveView(this.snapshot).environment,
+      });
+    },
   };
 
   private readonly relationshipActions: RelationshipActions = {

@@ -43,6 +43,8 @@ export type Actions = {
   openDetails(row: Row): void;
   /** Shows the relationships of a node, such as `apis:orders-v1`. */
   openRelationships(node: string): void;
+  /** Shows the flow of a row in a panel beside the dashboard. */
+  openFlow(row: Row): void;
 };
 
 /**

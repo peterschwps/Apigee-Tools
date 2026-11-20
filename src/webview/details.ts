@@ -61,6 +61,14 @@ export function details(snapshot: Loaded, row: Row, actions: Actions) {
           <div class="details-actions">
             <button
               class="icon-button"
+              data-tooltip="Show Flow"
+              aria-label="Show Flow"
+              @click=${() => actions.openFlow(row)}
+            >
+              <vscode-icon name="open-preview"></vscode-icon>
+            </button>
+            <button
+              class="icon-button"
               data-tooltip="Show in Relationships"
               aria-label="Show in Relationships"
               @click=${() =>
