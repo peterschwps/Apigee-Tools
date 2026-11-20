@@ -242,6 +242,13 @@ const tests: [string, () => Promise<void>][] = [
           ),
           'expected every request to carry the gcloud token',
         );
+        // The Relationships tab reads its lists only once it is opened
+        const relationshipPaths = paths().filter(path =>
+          /\/(apiproducts|developers|apps|appgroups)(\?|$)|\/flowhooks\//.test(
+            path,
+          ),
+        );
+        assert.deepEqual(relationshipPaths, []);
         assert.deepEqual(
           gcloudCalls()
             .map(call => call.split(' ').slice(0, 2).join(' '))

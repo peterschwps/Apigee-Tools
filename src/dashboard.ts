@@ -9,8 +9,11 @@ import {
   ApigeeError,
   apigeeClient,
   applyStatus,
+  deployedRevisions,
+  loadFlowHooks,
   loadOverview,
   loadRows,
+  relationshipsOf,
   statusTargets,
   type ApigeeClient,
 } from './apigee';
@@ -26,10 +29,12 @@ import {
 } from './gcloud';
 import type {
   HostMessage,
+  KeyRef,
   Kind,
   LocalBundle,
   Note,
   Problem,
+  Relationships,
   Row,
   Snapshot,
   WebviewMessage,
@@ -40,6 +45,7 @@ import {
   differs,
   fingerprints,
   readBundle,
+  sharedFlowCalls,
   unzip,
   type BundleFiles,
 } from './revision';
@@ -74,6 +80,9 @@ const organizationKey = 'apigeeTools.organization';
 // Status requests per load, a small share of the 6,000 management API calls
 // per minute that an organization's users and pipelines share
 const statusLimit = 200;
+
+// Revisions downloaded per load to find the shared flows they call
+const revisionLimit = 200;
 
 // Revisions whose files stay in memory for the comparison editors
 const keptRevisions = 10;
@@ -110,6 +119,15 @@ export function registerDashboard(
   // fingerprints for the whole session
   const revisions = new Map<string, Promise<BundleFiles>>();
   const prints = new Map<string, Promise<Map<string, string>>>();
+  // The shared flows that each deployed revision calls, for the session
+  const calls = new Map<string, string[]>();
+
+  // The Relationships tab loads once opened, and then with every load
+  let relationshipsWanted = false;
+  let relationships: Relationships | undefined;
+  let relationshipsLoading: AbortController | undefined;
+  // Full API keys for the key search and for copying; the webview gets none
+  let keyOwners = new Map<string, KeyRef>();
 
   const statusItem = vscode.window.createStatusBarItem(
     viewType,
@@ -146,7 +164,12 @@ export function registerDashboard(
     vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration('apigeeTools')) session = undefined;
     }),
-    { dispose: () => loading?.abort() },
+    {
+      dispose: () => {
+        loading?.abort();
+        relationshipsLoading?.abort();
+      },
+    },
   );
 
   // While developing, esbuild rebuilds the webview on every change, and the
@@ -220,6 +243,11 @@ export function registerDashboard(
     panel.onDidDispose(() => {
       listener.dispose();
       loading?.abort();
+      relationshipsLoading?.abort();
+      relationshipsLoading = undefined;
+      relationshipsWanted = false;
+      relationships = undefined;
+      keyOwners = new Map();
       panel = undefined;
       ready = false;
       picked = undefined;
@@ -239,6 +267,7 @@ export function registerDashboard(
       case 'ready':
         ready = true;
         post();
+        postRelationships();
         if (
           snapshot.trusted &&
           snapshot.requested &&
@@ -276,6 +305,37 @@ export function registerDashboard(
       case 'details':
         await checkDetails(message.kind, message.name);
         break;
+      case 'relationships':
+        relationshipsWanted = true;
+        // Before the rows arrive, the running load reads them as well
+        if (
+          snapshot.rows &&
+          relationships?.organization !== snapshot.organization &&
+          !relationshipsLoading
+        ) {
+          await loadRelationships();
+        }
+        break;
+      case 'findKey': {
+        // The key is neither logged nor sent back
+        const found =
+          typeof message.key === 'string' &&
+          relationships?.organization === snapshot.organization
+            ? keyOwners.get(message.key.trim())
+            : undefined;
+        send({ type: 'keyOwner', found });
+        break;
+      }
+      case 'copyKey': {
+        const key = [...keyOwners].find(
+          ([, owner]) => owner.app === message.app && owner.key === message.key,
+        )?.[0];
+        if (key) {
+          await vscode.env.clipboard.writeText(key);
+          vscode.window.setStatusBarMessage('$(check) API key copied', 3000);
+        }
+        break;
+      }
       case 'openBundle': {
         const bundle = bundles.find(item => relative(item) === message.path);
         try {
@@ -318,6 +378,8 @@ export function registerDashboard(
   async function load(): Promise<void> {
     if (!vscode.workspace.isTrusted) return;
     loading?.abort();
+    relationshipsLoading?.abort();
+    relationshipsLoading = undefined;
     const controller = new AbortController();
     loading = controller;
     // Each load has notes of its own, so an aborted load cannot add to them
@@ -426,6 +488,8 @@ export function registerDashboard(
         bundles: bundles.map(toLocalBundle),
       };
       post();
+      // Started before any await, so that the tab cannot start a second load
+      const relating = relationshipsWanted ? loadRelationships() : undefined;
 
       // Only an organization chosen in the selector that loaded is remembered
       if (organization === picked) {
@@ -434,6 +498,7 @@ export function registerDashboard(
       await Promise.all([
         checkStatus(client, organization, rows, controller, notes),
         checkDrift(client, organization, rows, controller, notes),
+        relating,
       ]);
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -619,6 +684,224 @@ export function registerDashboard(
       if (alone && !loading) snapshot = { ...snapshot, loading: false };
       post();
     }
+  }
+
+  /**
+   * Loads who uses what for the Relationships tab: API products, developers,
+   * app groups, apps with their keys, flow hooks, and the shared flows that
+   * deployed revisions call. A list that cannot be read becomes a note of the
+   * tab, and a network failure or an exhausted quota stops the rest.
+   */
+  async function loadRelationships(): Promise<void> {
+    const { organization, rows, overview } = snapshot;
+    if (!relationshipsWanted || !organization || !rows || !overview) return;
+    relationshipsLoading?.abort();
+    const controller = new AbortController();
+    relationshipsLoading = controller;
+    const notes: Note[] = [];
+    // The calls of an earlier load stay until new ones arrive
+    const previous =
+      relationships?.organization === organization ? relationships.calls : {};
+    let model: Relationships | undefined;
+    let stopped: ApigeeError | undefined;
+    // A running load reports its own end
+    const alone = !loading;
+    if (alone) {
+      snapshot = { ...snapshot, loading: true };
+      post();
+    }
+
+    /** Returns what a request reads, or nothing, noting why. */
+    const settle = async <T>(
+      what: string,
+      request: Promise<T>,
+    ): Promise<T | undefined> => {
+      try {
+        return await request;
+      } catch (error) {
+        if (controller.signal.aborted) return undefined;
+        if (
+          error instanceof ApigeeError &&
+          (error.status === undefined || error.status === 429)
+        ) {
+          stopped ??= error;
+          controller.abort();
+          return undefined;
+        }
+        host.log.warn(
+          `Reading ${what.toLowerCase()} failed:`,
+          messageOf(error),
+        );
+        const hint = error instanceof ApigeeError ? (error.hint ?? '') : '';
+        notes.push({
+          tone: 'warning',
+          text: `${what} could not be read: ${messageOf(error)} ${hint}`.trim(),
+        });
+        return undefined;
+      }
+    };
+
+    try {
+      const current = (session ??= await startSession());
+      const client = apigeeClient(current.tokens, current.base, {
+        signal: controller.signal,
+      });
+      const [products, developers, apps, hooks] = await Promise.all([
+        settle('API products', client.products(organization)),
+        settle('Developers', client.developers(organization)),
+        settle('Apps', client.apps(organization)),
+        settle(
+          'Flow hooks',
+          loadFlowHooks(
+            client,
+            organization,
+            overview.environments.map(environment => environment.name),
+          ),
+        ),
+      ]);
+      // Organizations without app groups never read them
+      const appGroups = apps?.some(app => app.appGroup)
+        ? await settle('App groups', client.appGroups(organization))
+        : undefined;
+      if (relationshipsLoading !== controller) return;
+      if (developers?.length === 1000) {
+        notes.push({
+          tone: 'info',
+          text: 'Apigee returns at most 1,000 developers with details; the owners of other apps show without name and status.',
+        });
+      }
+      const built = relationshipsOf(organization, {
+        products,
+        developers,
+        appGroups,
+        apps,
+        hooks: hooks ?? {},
+      });
+      keyOwners = built.keyOwners;
+      model = { ...built.relationships, calls: previous, notes };
+      relationships = model;
+      postRelationships();
+
+      if (!stopped) {
+        const read = await readCalls(client, organization, rows, controller);
+        if (relationshipsLoading !== controller) return;
+        stopped ??= read.stopped;
+        notes.push(...read.notes);
+        model = { ...model, calls: read.calls };
+      }
+    } catch (error) {
+      if (!controller.signal.aborted || stopped) {
+        host.log.warn('Loading the relationships failed:', messageOf(error));
+        notes.push({
+          tone: 'warning',
+          text: `Loading the relationships failed: ${messageOf(error)}`,
+        });
+      }
+    } finally {
+      // A replaced load posts nothing; a stopped one posts what it has
+      if (relationshipsLoading === controller) {
+        relationshipsLoading = undefined;
+        if (stopped) {
+          notes.push({
+            tone: 'warning',
+            text: `Loading the relationships stopped: ${stopped.message} ${stopped.hint ?? ''}`.trim(),
+          });
+        }
+        relationships = {
+          ...(model ?? {
+            organization,
+            owners: [],
+            calls: previous,
+            hooks: {},
+          }),
+          notes,
+        };
+        postRelationships();
+      }
+      if (alone && !loading) {
+        snapshot = { ...snapshot, loading: false };
+        post();
+      }
+    }
+  }
+
+  /**
+   * Reads which shared flows the deployed revisions call. Each revision is
+   * read once per session, and at most `revisionLimit` per load, recent
+   * deployments first; a network failure or an exhausted quota stops it.
+   */
+  async function readCalls(
+    client: ApigeeClient,
+    organization: string,
+    rows: Row[],
+    controller: AbortController,
+  ): Promise<{
+    calls: Record<string, string[]>;
+    notes: Note[];
+    stopped?: ApigeeError;
+  }> {
+    const result: Record<string, string[]> = {};
+    const notes: Note[] = [];
+    const targets = deployedRevisions(rows);
+    let downloads = 0;
+    let unread = 0;
+    let failed = 0;
+    let firstFailure: unknown;
+    let stopped: ApigeeError | undefined;
+    await Promise.all(
+      targets.map(async ({ row, revision }) => {
+        const key = revisionKey(organization, row.kind, row.name, revision);
+        let names = calls.get(key);
+        if (!names) {
+          if (downloads >= revisionLimit) {
+            unread++;
+            return;
+          }
+          downloads++;
+          try {
+            const zip = await client.bundle(
+              organization,
+              row.kind,
+              row.name,
+              revision,
+            );
+            names = sharedFlowCalls(unzip(zip));
+            calls.set(key, names);
+          } catch (error) {
+            if (controller.signal.aborted) return;
+            if (
+              error instanceof ApigeeError &&
+              (error.status === undefined || error.status === 429)
+            ) {
+              stopped = error;
+              controller.abort();
+              return;
+            }
+            failed++;
+            firstFailure ??= error;
+            host.log.warn(
+              `Shared flow calls of ${row.name} revision ${revision}:`,
+              messageOf(error),
+            );
+            return;
+          }
+        }
+        result[`${row.kind}/${row.name}/${revision}`] = names;
+      }),
+    );
+    if (failed) {
+      notes.push({
+        tone: 'warning',
+        text: `The shared flow calls of ${failed} revisions could not be read: ${messageOf(firstFailure)}`,
+      });
+    }
+    if (unread && !stopped) {
+      notes.push({
+        tone: 'info',
+        text: `Shared flow calls were read for ${Object.keys(result).length} of ${targets.length} deployed revisions, recent deployments first, to spare the API quota. Refresh to read more.`,
+      });
+    }
+    return { calls: result, notes, stopped };
   }
 
   /**
@@ -859,9 +1142,16 @@ export function registerDashboard(
   function post(): void {
     clearTimeout(postTimer);
     postTimer = undefined;
-    if (!panel || !ready) return;
-    const message: HostMessage = { type: 'snapshot', snapshot };
-    void panel.webview.postMessage(message);
+    send({ type: 'snapshot', snapshot });
+  }
+
+  /** Sends the relationships, which go apart from the snapshot. */
+  function postRelationships(): void {
+    if (relationships) send({ type: 'relationships', relationships });
+  }
+
+  function send(message: HostMessage): void {
+    if (panel && ready) void panel.webview.postMessage(message);
   }
 
   /** Posts at most every 100 ms while statuses and differences arrive. */

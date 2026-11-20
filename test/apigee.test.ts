@@ -5,6 +5,7 @@ import {
   ApigeeError,
   apigeeClient,
   applyStatus,
+  deployedRevisions,
   loadFlowHooks,
   loadOverview,
   loadRows,
@@ -673,4 +674,30 @@ test('products list their proxies, also those their operations name', () => {
   assert.deepEqual(relationships.hooks, {
     eval: { PreProxyFlowHook: 'security' },
   });
+});
+
+test('each deployed revision is listed once, the newest first', () => {
+  const rows: Row[] = [
+    {
+      kind: 'apis',
+      name: 'orders',
+      local: false,
+      cells: {
+        eval: { revision: '2', deployedAt: 300 },
+        test: { revision: '2', deployedAt: 100 },
+      },
+    },
+    {
+      kind: 'sharedflows',
+      name: 'cors',
+      local: false,
+      cells: { eval: { revision: '1', deployedAt: 200 } },
+    },
+  ];
+  assert.deepEqual(
+    deployedRevisions(rows).map(
+      ({ row, revision }) => `${row.name}/${revision}`,
+    ),
+    ['orders/2', 'cors/1'],
+  );
 });

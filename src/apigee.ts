@@ -5,6 +5,7 @@ import type {
   Cell,
   DeploymentState,
   FlowHookPoint,
+  KeyRef,
   Kind,
   Overview,
   Owner,
@@ -429,9 +430,6 @@ export async function loadFlowHooks(
   return Object.fromEntries(entries);
 }
 
-/** Where the extension host finds a full API key: its app and key index. */
-export type KeyOwner = { app: string; key: number };
-
 /**
  * Builds the relationships model from the lists that loaded, and an index of
  * the full API keys for the key search. The model carries only the last four
@@ -446,7 +444,7 @@ export function relationshipsOf(
     apps?: ConsumerApp[];
     hooks: Relationships['hooks'];
   },
-): { relationships: Relationships; keyOwners: Map<string, KeyOwner> } {
+): { relationships: Relationships; keyOwners: Map<string, KeyRef> } {
   const owners = new Map<string, Owner>();
   for (const developer of lists.developers ?? []) {
     const id = `developer/${developer.developerId ?? developer.email}`;
@@ -475,7 +473,7 @@ export function relationshipsOf(
     });
   }
 
-  const keyOwners = new Map<string, KeyOwner>();
+  const keyOwners = new Map<string, KeyRef>();
   const apps = new Map<string, App>();
   for (const app of lists.apps ?? []) {
     if (apps.has(app.appId)) continue;
@@ -709,6 +707,20 @@ function enabledAddons(
     .filter(([, addon]) => addon?.enabled)
     .map(([key]) => addonNames[key] ?? key)
     .sort();
+}
+
+/** Lists each deployed revision once, the most recently deployed first. */
+export function deployedRevisions(
+  rows: readonly Row[],
+): { row: Row; revision: string }[] {
+  const seen = new Set<string>();
+  return statusTargets(rows, Infinity).flatMap(({ row, environment }) => {
+    const revision = row.cells[environment].revision;
+    const key = `${row.kind}/${row.name}/${revision}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ row, revision }];
+  });
 }
 
 /** Starts a message with a capital letter, which Apigee's often lack. */

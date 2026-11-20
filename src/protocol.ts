@@ -162,7 +162,15 @@ export type Snapshot = {
   notes?: Note[];
 };
 
-export type HostMessage = { type: 'snapshot'; snapshot: Snapshot };
+/** An API key by its app and its position among the app's keys. */
+export type KeyRef = { app: string; key: number };
+
+export type HostMessage =
+  | { type: 'snapshot'; snapshot: Snapshot }
+  // Apart from the snapshot, which is posted often, since it can be large
+  | { type: 'relationships'; relationships: Relationships }
+  // The answer to a key search: where the key is, if any app has it
+  | { type: 'keyOwner'; found?: KeyRef };
 
 export type WebviewMessage =
   | { type: 'ready' }
@@ -170,6 +178,10 @@ export type WebviewMessage =
   | { type: 'organization'; name: string }
   | { type: 'compare'; kind: Kind; name: string; environment: string }
   | { type: 'details'; kind: Kind; name: string }
+  // The Relationships tab was opened and needs its data
+  | { type: 'relationships' }
+  | { type: 'findKey'; key: string }
+  | { type: 'copyKey'; app: string; key: number }
   | { type: 'openBundle'; path: string }
   | { type: 'signIn' }
   | { type: 'settings' }
