@@ -57,6 +57,13 @@ Two API products are created:
 
 Three developers each have one app. `mobile-app` is revoked.
 
+The Relationships tab should show:
+
+- The key of `partner-portal` waits for approval of `partner-gold`, and `mobile-app` is revoked. Searching `tier=gold` finds `partner-portal`.
+- `catalog-v1` and `catalog-v2` call `cors`, and `orders-v1` calls `quota-per-app`. `partner-gateway` calls both in eval; in test it is not deployed.
+- `security-baseline` has the flow hook icon in both environments, `logging` only in eval.
+- `admin`, `cart`, `customers`, `inventory-soap`, `LegacyStorefront`, `payments`, `shipping`, and `status` are in no API product.
+
 `npx tsx scripts/test-org.ts conflict PROJECT_ID on` also attaches test to `eval-group`. Every proxy deployed in both environments then shows Warnings in test, because its base path conflicts with the deployment in eval. Turn it off with `conflict PROJECT_ID off` before the next `populate`.
 
 Nothing sends requests to the proxies. In an evaluation organization without VPC peering, that would need billable networking, so debug sessions and analytics stay empty.

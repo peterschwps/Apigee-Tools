@@ -191,7 +191,7 @@ The dashboard selects the organization you chose last in this workspace, otherwi
 
 - **Overview** counts environments, API proxies, shared flows, deployments, and problems. It lists the failed deployments and warnings with their messages; a name opens the details.
 - **Deployments** lists the API proxies and the shared flows of the environment chosen at the top, each in a tab that counts the rows shown. Icons show the status of each deployment (Ready, Warnings, Failed, Deploying, Unknown, or Not deployed) and how it compares with the workspace (Same, Differs, Not compared, or Not in workspace). Hovering over an icon names it. Filter by name above the table, and by status or workspace with the filter icon in their column header. The Name header sorts ascending or descending, and a name opens the details of the proxy or shared flow.
-- **Details** show the deployments of a proxy or shared flow in every environment with status, revision, deployment time, base paths, and the comparison with the workspace, followed by their errors and warnings in full. The header names the proxy type, Standard or Extensible, which sets the price of a call under pay-as-you-go, and the path of its bundle in the workspace; its buttons open the Apigee console and the local bundle.
+- **Details** show the deployments of a proxy or shared flow in every environment with status, revision, deployment time, base paths, and the comparison with the workspace, followed by their errors and warnings in full. The header names the proxy type, Standard or Extensible, which sets the price of a call under pay-as-you-go, and the path of its bundle in the workspace; its buttons show it in Relationships and open the Apigee console and the local bundle.
 - **Warnings:** the deployment is ready, but Apigee reports a base path conflict: another environment in the same environment group serves the same base path, and Apigee routes the requests for it to only one environment. Give the proxies different base paths, or attach the environments to different groups.
 - **Unknown:** the status was not checked; a notice above the tabs says why. Opening the details checks it.
 
@@ -200,6 +200,27 @@ The dashboard selects the organization you chose last in this workspace, otherwi
 A bundle in the workspace matches a deployed proxy or shared flow by name: the `name` attribute of the top-level XML file under `apiproxy` or `sharedflowbundle`. Bundles under `node_modules` or `target` and files matching `apigeeTools.exclude` are not counted, and bundles that share a name are not compared; exclude the extra copies. The dashboard downloads each deployed revision of such a bundle once per session and compares it with the saved files. The **Workspace** column shows whether a deployment is the same as the local bundle, differs from it, was not compared, or has no bundle in the workspace. Where it differs, clicking the icon opens the differing files in VS Code's multi-file diff editor.
 
 XML files of the bundle structure count as different only when their elements, attributes, or values differ; indentation, line endings, attribute order, and comments are ignored. The top-level XML file and `manifests/` are not compared, since Apigee writes them anew on import.
+
+### Relationships
+
+**Relationships** shows how the parts of an organization depend on each other, in six columns: developers (app groups among them), apps, API keys, API products, API proxies, and shared flows. It answers questions that the Apigee console spreads over many pages:
+
+- Whom does a change to a proxy, shared flow, or API product affect?
+- Why does a call fail with 401 or 403: is the app revoked, the key expired or waiting for approval, the product not available in the environment, or the proxy not deployed?
+- Which app and developer does an API key belong to?
+- What can be cleaned up: apps without keys, API products without keys or proxies, proxies in no product, and keys that are revoked, expired, or expire within 30 days?
+
+The tab follows the environment chosen at the top. Proxies and shared flows show their deployment status there, and the shared flows a proxy calls are those of the revision deployed there. A plug icon marks the shared flows attached to a flow hook.
+
+Choose a node to see only its chain: everything it uses and everything that uses it. A panel shows its details, its neighbors, and what keeps the chain from working. **Show All**, or Escape in the graph, shows everything again; without a choice, the panel lists the findings of all columns. Each column is one Tab stop: the up and down arrows move within it, the left and right arrows to a connected node. In the details of a proxy or shared flow, **Show in Relationships** opens its chain.
+
+Search by name, email, attribute as `name=value`, such as `tier=gold`, or the last characters of a key. If nothing matches, Enter looks up the text as a full API key and chooses its key. Keys show only their last four characters; **Copy API Key** copies the full key.
+
+A dashed line in the warning color is a key that waits for approval of an API product, a dotted line in the error color a key revoked for one. For a chosen chain or a search, plain dashed lines lead from its proxies to the shared flows of the environment's flow hooks.
+
+- Each column shows at most 100 nodes, the chosen, found, and troubled ones first; search or choose a node to see others.
+- Shared flow calls come from the FlowCallout policies of the deployed revisions. Names set through variables are not resolved, and a FlowCallout counts even when no step runs it.
+- Apigee lists at most 1,000 developers; app owners beyond them show without name or status.
 
 ### Settings
 
@@ -217,6 +238,8 @@ Organizations with data residency work when gcloud uses their regional endpoint 
 The dashboard runs `gcloud config list` and `gcloud auth print-access-token`, without prompts. The access token stays in memory, is never written to disk or shown, and is sent only to the Apigee API at `apigee.googleapis.com` or a regional Apigee endpoint. The dashboard only reads; it never deploys, undeploys, or changes anything.
 
 Data loads when you open the dashboard, refresh it, or switch the organization; a dashboard restored after restarting VS Code waits until you load it. To spare the API quota, the status is checked for at most 200 deployments per load, local bundles and recent deployments first. A network failure or an exhausted quota stops the remaining checks, and a notice says so. Notes above the tabs close with their × button and stay hidden until you close the dashboard; a note whose text changes shows again.
+
+The Relationships tab loads its data the first time it opens, and with every load after that: API products, developers, app groups, apps with their API keys, flow hooks, and the deployed revisions, whose FlowCallout policies name the shared flows they call. It downloads at most 200 revisions per load, recent deployments first, and each revision once per session; a notice says when a refresh reads more. Consumer secrets are discarded on arrival. Full API keys stay in the memory of the extension: the tab receives only their last four characters, and copying a key or looking one up happens in the extension, without a request to the API. The search text is not saved.
 
 In Restricted Mode, linting keeps working, and the dashboard asks for a trusted workspace.
 
