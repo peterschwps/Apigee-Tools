@@ -22,8 +22,12 @@ import type {
   WebviewMessage,
 } from '../protocol';
 import {
+  comparisons,
   deployments,
   signs,
+  statuses,
+  statusIcon,
+  statusOf,
   type Actions,
   type DeploymentView,
   type Loaded,
@@ -568,6 +572,7 @@ class ApigeeFlow extends LitElement {
   static override properties = {
     flow: { state: true },
     roving: { state: true },
+    announcement: { state: true },
   };
 
   static override styles = styles;
@@ -575,6 +580,8 @@ class ApigeeFlow extends LitElement {
   declare flow: FlowView | undefined;
   /** The focused item of each band, its one tab stop. */
   declare roving: Record<string, string>;
+  /** What screen readers hear when the source changes. */
+  declare announcement: string;
 
   /** Hides the tooltip once a render removed its element. */
   private syncTooltip = () => {};
@@ -596,6 +603,16 @@ class ApigeeFlow extends LitElement {
         });
       }
     },
+    hook: sharedFlow => {
+      if (this.flow) {
+        send({
+          type: 'showFlow',
+          kind: 'sharedflows',
+          name: sharedFlow,
+          environment: this.flow.source,
+        });
+      }
+    },
     rove: (band, key) => {
       if (this.roving[band] !== key) {
         this.roving = { ...this.roving, [band]: key };
@@ -607,11 +624,29 @@ class ApigeeFlow extends LitElement {
     super();
     this.flow = undefined;
     this.roving = {};
+    this.announcement = '';
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       if (event.data?.type !== 'flow') return;
+      const flow = event.data.flow;
       const focused = this.shadowRoot?.activeElement as HTMLElement | null;
       this.focusKey = focused?.dataset.key;
-      this.flow = event.data.flow;
+      // Screen readers hear which source shows, and how far it differs
+      const before = this.flow;
+      if (
+        before &&
+        (before.source !== flow.source || before.name !== flow.name)
+      ) {
+        const label = flow.sources.find(item => item.id === flow.source);
+        this.announcement = [
+          `Showing ${flow.name}, ${label?.label ?? 'Workspace'}.`,
+          flow.changes
+            ? `${flow.changes} ${flow.changes === 1 ? 'file differs' : 'files differ'} from the workspace.`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
+      }
+      this.flow = flow;
     });
     send({ type: 'ready' });
   }
@@ -636,33 +671,156 @@ class ApigeeFlow extends LitElement {
 
   override render() {
     const flow = this.flow;
+    if (!flow) {
+      return html`${progress('Reading the bundle…')}
+        <div class="tooltip" aria-hidden="true" hidden></div>`;
+    }
+    const loaded = ['ready', 'undeployed', 'problem'].includes(
+      flow.environments,
+    );
+    return html`
+      <header class="topbar">
+        <div class="brand flow-brand">
+          <h1>${flow.name}</h1>
+          ${flowSubtitle(flow)}
+        </div>
+        <div class="session">
+          ${
+            loaded
+              ? html`<button
+                  class="icon-button refresh"
+                  data-tooltip="Refresh"
+                  aria-label="Refresh"
+                  @click=${() => send({ type: 'refresh' })}
+                >
+                  <vscode-icon name="refresh"></vscode-icon>
+                </button>`
+              : nothing
+          }
+        </div>
+        <div class="context">${this.source(flow)}</div>
+      </header>
+      ${
+        flow.problem || flow.notes.length
+          ? html`<div class="messages">
+              ${flow.problem ? problemNotice(flow.problem) : nothing}
+              ${flow.notes.map(note =>
+                notice(
+                  note.tone,
+                  note.tone === 'warning' ? signs.warning.icon : 'info',
+                  '',
+                  note.text,
+                ),
+              )}
+            </div>`
+          : nothing
+      }
+      <div class="sr-only" role="status">${this.announcement}</div>
+      ${flowMaps(flow, this.roving, this.actions)}
+      <div class="tooltip" aria-hidden="true" hidden></div>
+    `;
+  }
+
+  /**
+   * The source of the flow: the workspace or an environment, with the
+   * deployment's status and its difference from the workspace, or what keeps
+   * environments from showing.
+   */
+  private source(flow: FlowView) {
+    const status = flow.cell && statusOf(flow.cell);
+    const deployment =
+      status && status !== 'unknown' ? statuses[status] : undefined;
+    const changes = flow.changes;
+    const differ = `${changes} ${changes === 1 ? 'file differs' : 'files differ'} from the workspace`;
     return html`
       ${
-        flow
-          ? html`
-              <header class="topbar">
-                <div class="brand"><h1>${flow.name}</h1></div>
-              </header>
-              ${flowSubtitle(flow)}
-              ${
-                flow.notes.length
-                  ? html`<div class="messages">
-                      ${flow.notes.map(note =>
-                        notice(
-                          note.tone,
-                          note.tone === 'warning' ? signs.warning.icon : 'info',
-                          '',
-                          note.text,
-                        ),
-                      )}
-                    </div>`
-                  : nothing
-              }
-              ${flowMaps(flow, this.roving, this.actions)}
-            `
-          : progress('Reading the bundle…')
+        flow.sources.length
+          ? html`<div class="field">
+              <vscode-label for="source">
+                <span class="field-label">Source</span>
+              </vscode-label>
+              <div class="source">
+                <vscode-single-select
+                  id="source"
+                  @change=${(event: Event) => {
+                    const index = Number(
+                      (event.target as VscodeSingleSelect).value,
+                    );
+                    const chosen = flow.sources[index];
+                    if (chosen) send({ type: 'flowSource', source: chosen.id });
+                  }}
+                >
+                  ${flow.sources.map(
+                    (item, index) =>
+                      html`<vscode-option
+                        value=${String(index)}
+                        ?selected=${item.id === flow.source}
+                        >${item.label}</vscode-option
+                      >`,
+                  )}
+                </vscode-single-select>
+                ${
+                  deployment
+                    ? html`<span class="sign" data-tooltip=${deployment.label}
+                        >${statusIcon(deployment)}<span class="sr-only"
+                          >${deployment.label}</span
+                        ></span
+                      >`
+                    : nothing
+                }
+                ${
+                  changes === undefined
+                    ? nothing
+                    : changes
+                      ? html`<button
+                          class="icon-button"
+                          data-tooltip=${`${differ}\nClick to compare`}
+                          aria-label=${`${differ}. Compare`}
+                          @click=${() =>
+                            send({
+                              type: 'compare',
+                              kind: flow.kind,
+                              name: flow.name,
+                              environment: flow.source,
+                            })}
+                        >
+                          ${statusIcon(signs.differs)}
+                        </button>`
+                      : html`<span
+                          class="sign"
+                          data-tooltip=${comparisons.matches.tooltip ?? ''}
+                          >${statusIcon(comparisons.matches)}<span
+                            class="sr-only"
+                            >${comparisons.matches.tooltip}</span
+                          ></span
+                        >`
+                }
+              </div>
+            </div>`
+          : nothing
       }
-      <div class="tooltip" aria-hidden="true" hidden></div>
+      ${
+        {
+          ready: nothing,
+          problem: nothing,
+          unloaded: html`<button
+            class="link"
+            @click=${() => send({ type: 'refresh' })}
+          >
+            Load Environments
+          </button>`,
+          loading: progress('Loading environments…'),
+          untrusted: html`<p class="muted">
+            Environments need a trusted workspace.
+            <button class="link" @click=${() => send({ type: 'trust' })}>
+              Manage Workspace Trust
+            </button>
+          </p>`,
+          undeployed: html`<p class="muted">
+            Not deployed in ${flow.organization}
+          </p>`,
+        }[flow.environments]
+      }
     `;
   }
 }

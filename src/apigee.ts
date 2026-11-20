@@ -111,7 +111,7 @@ type ConsumerApp = {
   credentials?: Credential[];
 };
 
-const flowHookPoints: readonly FlowHookPoint[] = [
+export const flowHookPoints: readonly FlowHookPoint[] = [
   'PreProxyFlowHook',
   'PreTargetFlowHook',
   'PostTargetFlowHook',
@@ -394,7 +394,7 @@ export function apigeeClient(
 
     /** Returns the shared flow attached to a flow hook, if any. */
     flowHook: (name: string, environment: string, point: FlowHookPoint) =>
-      json<{ sharedFlow?: string }>(
+      json<{ sharedFlow?: string; continueOnError?: boolean }>(
         `${organization(name)}/environments/${encode(environment)}/flowhooks/${encode(point)}`,
       ),
   };

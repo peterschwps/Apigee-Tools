@@ -52,7 +52,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Linting and the flow view of local bundles work in Restricted Mode. The dashboard runs gcloud and reads from the Apigee API, so it needs a trusted workspace."
+      "description": "Linting and the flow view of local bundles work in Restricted Mode. The dashboard and the flow view of environments run gcloud and read from the Apigee API, so they need a trusted workspace."
     }
   },
   "contributes": {

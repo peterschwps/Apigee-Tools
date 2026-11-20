@@ -134,6 +134,25 @@ export function registerDashboard(
   const flow = registerFlowPanel(context, {
     scanWorkspace: host.scanWorkspace,
     pageHtml: webview => pageHtml(webview, webviewRoot, 'apigee-flow'),
+    snapshot: () => snapshot,
+    client: async () => {
+      const current = (session ??= await startSession());
+      return apigeeClient(current.tokens, current.base);
+    },
+    revisionFiles,
+    revisionDocument: (organization, row, revision, files, file) => {
+      const key = revisionKey(organization, row.kind, row.name, revision);
+      // Kept again, since the document reads from the kept revisions
+      if (!revisions.has(key)) keep(key, Promise.resolve(files));
+      return revisionUri(key, file);
+    },
+    compare,
+    refresh: async () => {
+      snapshot = { ...snapshot, requested: true };
+      session = undefined;
+      await load();
+    },
+    signIn,
   });
 
   const statusItem = vscode.window.createStatusBarItem(
@@ -1003,15 +1022,18 @@ export function registerDashboard(
         .then(unzip);
       files.catch(() => revisions.delete(key));
     }
+    keep(key, files);
+    return files;
+  }
 
-    // Keep the most recently used revisions last, and only a few of them
+  /** Keeps the most recently used revisions last, and only a few of them. */
+  function keep(key: string, files: Promise<BundleFiles>): void {
     revisions.delete(key);
     revisions.set(key, files);
     for (const oldest of revisions.keys()) {
       if (revisions.size <= keptRevisions) break;
       revisions.delete(oldest);
     }
-    return files;
   }
 
   function revisionPrints(
@@ -1032,17 +1054,21 @@ export function registerDashboard(
     return result;
   }
 
-  /** Opens the files that differ between a deployment and the local bundle. */
+  /**
+   * Opens the files that differ between a deployment and a local copy: the
+   * given directory, or else the only local bundle with the name.
+   */
   async function compare(
     kind: Kind,
     name: string,
     environment: string,
+    directory?: string,
   ): Promise<void> {
     const row = snapshot.rows?.find(
       item => item.kind === kind && item.name === name,
     );
     const cell = row && cellOf(row, environment);
-    const bundle = row && localBundle(row);
+    const bundle = directory ?? (row && localBundle(row)?.directory);
     const organization = snapshot.organization;
     if (!row || !cell || !bundle || !organization) return;
     try {
@@ -1056,7 +1082,7 @@ export function registerDashboard(
         if ((error as Error)?.name !== 'AbortError') throw error;
         return download();
       });
-      const local = await readBundle(bundle.directory, kind);
+      const local = await readBundle(bundle, kind);
       const { changed, added, removed } = compareBundles(
         fingerprints(remote),
         fingerprints(local),
@@ -1068,16 +1094,10 @@ export function registerDashboard(
         return;
       }
       const remoteUri = (file: string) =>
-        vscode.Uri.from({
-          scheme: revisionScheme,
-          path: `/${revisionKey(organization, kind, name, cell.revision)}/${file}`,
-        });
+        revisionUri(revisionKey(organization, kind, name, cell.revision), file);
       const localUri = (file: string) =>
         vscode.Uri.file(
-          path.join(
-            bundle.directory,
-            file.slice(bundleDirectory(kind).length + 1),
-          ),
+          path.join(bundle, file.slice(bundleDirectory(kind).length + 1)),
         );
       await vscode.commands.executeCommand(
         'vscode.changes',
@@ -1107,8 +1127,12 @@ export function registerDashboard(
     const files = await revisions
       .get(revisionKey(organization, kind as Kind, name, revision))
       ?.catch(() => undefined);
+    // VS Code drops a byte order mark from files, so offsets match without it
     return (
-      files?.get(file.join('/'))?.toString('utf8') ??
+      files
+        ?.get(file.join('/'))
+        ?.toString('utf8')
+        .replace(/^\uFEFF/, '') ??
       'This revision is no longer in memory. Open the comparison again from the Apigee Tools dashboard.'
     );
   }
@@ -1168,6 +1192,7 @@ export function registerDashboard(
     clearTimeout(postTimer);
     postTimer = undefined;
     send({ type: 'snapshot', snapshot });
+    flow.update();
   }
 
   /** Sends the relationships, which go apart from the snapshot. */
@@ -1224,6 +1249,11 @@ function revisionKey(
   revision: string,
 ): string {
   return `${organization}/${kind}/${name}/${revision}`;
+}
+
+/** The read-only document of a file of a kept revision. */
+function revisionUri(key: string, file: string): vscode.Uri {
+  return vscode.Uri.from({ scheme: revisionScheme, path: `/${key}/${file}` });
 }
 
 function relative(bundle: WorkspaceBundle): string {

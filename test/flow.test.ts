@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'node:test';
+import { history } from '../scripts/test-org';
 import { conditionSummary, flowModel, flowView } from '../src/flow';
 import type {
   FlowCase,
@@ -10,7 +11,12 @@ import type {
   FlowStep,
   Kind,
 } from '../src/protocol';
-import { readBundle, type BundleFiles } from '../src/revision';
+import {
+  compareBundles,
+  fingerprints,
+  readBundle,
+  type BundleFiles,
+} from '../src/revision';
 
 const shop = path.join(__dirname, 'sample-shop', 'src', 'main', 'apigee');
 
@@ -88,8 +94,10 @@ const itemText = (item: FlowItem): string => {
   switch (item.kind) {
     case 'client':
       return item.basePath ? `Client ${item.basePath}` : 'Client';
+    case 'hook':
+      return `${item.point} ${item.sharedFlow}${sign(item.sign)}`;
     case 'endpoint':
-      return `${item.role} ${item.name} ${
+      return `${item.role} ${item.name}${sign(item.sign)} ${
         item.segments.map(segmentText).join(' ') || '–'
       }`;
     case 'routes':
@@ -671,4 +679,177 @@ test('generated conditions are shortened, others stay as written', () => {
     assert.equal(conditionSummary(condition), condition);
   }
   assert.equal(conditionSummary(undefined), undefined);
+});
+
+/** A revision of a sample-shop proxy: its local files with a history edit. */
+async function revisionOf(name: string, revision: number) {
+  const directory = path.join(shop, 'apiproxies', name, 'apiproxy');
+  const local = await readBundle(directory, 'apis');
+  const files = new Map(local);
+  history[name][revision - 1](files);
+  return {
+    files,
+    changes: compareBundles(fingerprints(files), fingerprints(local)),
+  };
+}
+
+test('an environment marks what differs from the workspace, file by file', async () => {
+  // In test, orders-v1 runs revision 1, where a header policy stood instead
+  const orders = await revisionOf('orders-v1', 1);
+  const [map] = flowView(flowModel(orders.files, 'apis'), {
+    environment: 'test',
+    changes: orders.changes,
+  }).maps;
+  const card = find<FlowItem & { kind: 'endpoint' }>(map, 'p0/request/proxy');
+  assert.equal(card.sign, 'differs');
+  assert.deepEqual(card.facts, [
+    'Its steps, conditions, or routes differ from the workspace',
+  ]);
+  assert.deepEqual(
+    ['0', '1'].map(index => {
+      const item = find<FlowStep>(map, `p0/request/proxy/flows/0/${index}`);
+      return [item.name, item.sign, item.facts];
+    }),
+    [
+      ['KVM-GetMaxItems', undefined, []],
+      ['AM-LegacyOrderHeader', 'differs', ['Not in the workspace']],
+    ],
+  );
+  const { changed, added, removed } = orders.changes;
+  assert.equal(changed.length + added.length + removed.length, 3);
+
+  // catalog-v2 revision 2 has the flow of the workspace, with other policies
+  const catalog = await revisionOf('catalog-v2', 2);
+  const [other] = flowView(flowModel(catalog.files, 'apis'), {
+    environment: 'test',
+    changes: catalog.changes,
+  }).maps;
+  assert.deepEqual(
+    [
+      'p0/response/proxy/post/0',
+      'p0/response/proxy/flows/0/0',
+      'p0/request/proxy/flows/0/0',
+    ].map(key => {
+      const item = find<FlowStep>(other, key);
+      return [item.name, item.sign, item.facts];
+    }),
+    [
+      ['AM-CatalogVersion', 'differs', ['Differs from the workspace']],
+      [
+        'JS-PageLinks',
+        'differs',
+        ['Its resource page-links.js differs from the workspace'],
+      ],
+      ['OAS-ValidateRequest', undefined, []],
+    ],
+  );
+  assert.equal(
+    find<FlowItem & { kind: 'endpoint' }>(other, 'p0/request/proxy').sign,
+    undefined,
+  );
+
+  // A revision that equals the workspace, apart from formatting, has no marks
+  const directory = path.join(shop, 'apiproxies', 'catalog-v2', 'apiproxy');
+  const local = await readBundle(directory, 'apis');
+  const same = compareBundles(fingerprints(local), fingerprints(local));
+  const [plain] = flowView(flowModel(local, 'apis'), {
+    environment: 'eval',
+    changes: same,
+  }).maps;
+  assert.doesNotMatch(JSON.stringify(plain), /differs/);
+});
+
+test('an environment draws the shared flows of its flow hooks where they run', async () => {
+  const deployed = new Map([
+    ['security-baseline', { revision: '2' }],
+    ['logging', { revision: '1', differs: true }],
+  ]);
+  const environment = {
+    environment: 'eval',
+    hooks: {
+      PreProxyFlowHook: {
+        sharedFlow: 'security-baseline',
+        continueOnError: false,
+      },
+      PostProxyFlowHook: { sharedFlow: 'logging', continueOnError: true },
+    },
+    sharedFlow: (name: string) => deployed.get(name),
+  };
+  const [map] = flowView(await shopModel('orders-v1'), environment).maps;
+  assert.deepEqual(
+    map.bands.map(band => band.items.map(item => item.kind)),
+    [
+      ['client', 'hook', 'endpoint', 'routes', 'endpoint', 'backend'],
+      ['endpoint', 'endpoint', 'hook', 'client'],
+    ],
+  );
+  const pre = find<FlowItem & { kind: 'hook' }>(
+    map,
+    'p0/request/PreProxyFlowHook',
+  );
+  const post = find<FlowItem & { kind: 'hook' }>(
+    map,
+    'p0/response/PostProxyFlowHook',
+  );
+  assert.deepEqual(
+    [pre.sharedFlow, pre.revision, pre.sign, pre.facts],
+    ['security-baseline', '2', undefined, ['Runs for every API proxy in eval']],
+  );
+  assert.deepEqual(
+    [post.sharedFlow, post.revision, post.sign, post.facts],
+    [
+      'logging',
+      '1',
+      'differs',
+      [
+        'Runs for every API proxy in eval',
+        'Continues on error',
+        'Differs from the workspace',
+      ],
+    ],
+  );
+
+  // A FlowCallout names the revision the environment runs, or fails without one
+  assert.deepEqual(find<FlowStep>(map, 'p0/request/proxy/pre/1').facts, [
+    'Calls quota-per-app, which is not deployed in eval, so the call fails with flow.SharedFlowNotFound (500)',
+  ]);
+  deployed.set('quota-per-app', { revision: '1' });
+  const [called] = flowView(await shopModel('orders-v1'), environment).maps;
+  assert.deepEqual(find<FlowStep>(called, 'p0/request/proxy/pre/1').facts, [
+    'Calls quota-per-app, revision 1 in eval',
+  ]);
+
+  // A target hook on a path without a target endpoint may not run
+  const [status] = flowView(await shopModel('status'), {
+    ...environment,
+    hooks: { PreTargetFlowHook: { sharedFlow: 'security-baseline' } },
+  }).maps;
+  const target = find<FlowItem & { kind: 'hook' }>(
+    status,
+    'p0/request/PreTargetFlowHook',
+  );
+  assert.equal(target.sign, 'unknown');
+
+  // The workspace has no environment, so no flow hooks
+  const [local] = flowView(await shopModel('orders-v1'), {
+    ...environment,
+    environment: undefined,
+  }).maps;
+  assert.doesNotMatch(JSON.stringify(local), /"hook"/);
+});
+
+test('policies list the resources they name, outside comments and templates', () => {
+  const model = proxy(
+    '',
+    policy(
+      'Javascript',
+      'JS',
+      '',
+      '<!-- <ResourceURL>jsc://old.js</ResourceURL> --><ResourceURL>jsc://links.js</ResourceURL><IncludeURL>jsc://helpers.js</IncludeURL><IncludeURL>jsc://links.js</IncludeURL><IncludeURL>jsc://{name}.js</IncludeURL>',
+    ),
+  );
+  assert.deepEqual(model.policies.get('JS')?.resources, [
+    'apiproxy/resources/jsc/links.js',
+    'apiproxy/resources/jsc/helpers.js',
+  ]);
 });

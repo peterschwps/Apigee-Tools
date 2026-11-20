@@ -75,7 +75,7 @@ const titles: Readonly<Record<Column, string>> = {
   sharedflows: 'Shared Flows',
 };
 
-const hookNames: Readonly<Record<FlowHookPoint, string>> = {
+export const hookNames: Readonly<Record<FlowHookPoint, string>> = {
   PreProxyFlowHook: 'Pre-Proxy',
   PreTargetFlowHook: 'Pre-Target',
   PostTargetFlowHook: 'Post-Target',

@@ -40,6 +40,18 @@ const apigee: Record<string, unknown> = {
   },
   '/v1/organizations/acme/deployments?sharedFlows=true': { deployments: [] },
   [statusPath]: { state: 'READY' },
+  // No shared flow is attached to the flow hooks of dev
+  ...Object.fromEntries(
+    [
+      'PreProxyFlowHook',
+      'PreTargetFlowHook',
+      'PostTargetFlowHook',
+      'PostProxyFlowHook',
+    ].map(point => [
+      `/v1/organizations/acme/environments/dev/flowhooks/${point}`,
+      {},
+    ]),
+  ),
 };
 
 /** Returns the recorded calls of the fake gcloud, none if it never ran. */
@@ -297,6 +309,47 @@ const tests: [string, () => Promise<void>][] = [
         assert.notEqual(tab.group.viewColumn, editor?.viewColumn);
         assert.equal(gcloudCalls().length, calls);
         assert.deepEqual(requests, []);
+      } finally {
+        globalThis.fetch = original;
+      }
+    },
+  ],
+  [
+    'the flow of an environment reads only its flow hooks',
+    async () => {
+      // The dashboard test before loaded the organization through the fake gcloud
+      if (process.platform === 'win32') {
+        console.log('  skipped on Windows: the fake gcloud is a shell script');
+        return;
+      }
+      const calls = gcloudCalls().length;
+      const requests: string[] = [];
+      const original = globalThis.fetch;
+      globalThis.fetch = async input => {
+        const url = new URL(String(input));
+        const path = `${url.pathname}${url.search}`;
+        requests.push(path);
+        const body = apigee[path];
+        return new Response(JSON.stringify(body ?? {}), {
+          status: body ? 200 : 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      };
+      try {
+        await vscode.commands.executeCommand('apigeeTools.showFlow', {
+          kind: 'apis',
+          name: 'hello',
+          environment: 'dev',
+        });
+        const hooks = Object.keys(apigee).filter(path =>
+          path.includes('/flowhooks/'),
+        );
+        await waitFor('the flow hooks', () =>
+          hooks.every(path => requests.includes(path)),
+        );
+        // The revision is still in memory from the dashboard's comparison
+        assert.deepEqual([...requests].sort(), hooks.sort());
+        assert.equal(gcloudCalls().length, calls);
       } finally {
         globalThis.fetch = original;
       }

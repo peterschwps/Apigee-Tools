@@ -166,7 +166,7 @@ export type Snapshot = {
 export type KeyRef = { app: string; key: number };
 
 /** Signs of the flow view, by their key in the dashboard's signs. */
-export type FlowSign = 'warning' | 'error' | 'unknown' | 'none';
+export type FlowSign = 'warning' | 'error' | 'unknown' | 'differs' | 'none';
 
 /** A step of a flow: the policy it runs. */
 export type FlowStep = {
@@ -217,11 +217,23 @@ export type FlowSegment = {
 export type FlowItem =
   | { kind: 'client'; key: string; basePath?: string }
   | {
+      kind: 'hook';
+      key: string;
+      point: FlowHookPoint;
+      /** The shared flow attached to the hook. */
+      sharedFlow: string;
+      /** Its revision deployed in the environment. */
+      revision?: string;
+      sign?: FlowSign;
+      facts: string[];
+    }
+  | {
       kind: 'endpoint';
       key: string;
       at: number;
       role: 'proxy' | 'target' | 'shared';
       name: string;
+      sign?: FlowSign;
       facts: string[];
       segments: FlowSegment[];
     }
@@ -252,14 +264,33 @@ export type FlowBand = {
 /** A proxy endpoint from the client to the backend and back, or a shared flow. */
 export type FlowMap = { key: string; title: string; bands: FlowBand[] };
 
+/** Where the flow view reads a bundle: the workspace, or an environment. */
+export type FlowSource = {
+  /** Empty for the workspace, else the environment's name. */
+  id: string;
+  label: string;
+};
+
 /** What the flow view shows: the flow of one bundle. */
 export type FlowView = {
   /** Counts the models; places of other versions are ignored. */
   version: number;
   kind: Kind;
   name: string;
-  /** Workspace-relative path of the bundle. */
+  /** Workspace-relative path of the local copy; absent without one. */
   path?: string;
+  /** The source shown, by its id. */
+  source: string;
+  sources: FlowSource[];
+  organization?: string;
+  /** Whether environments can be chosen, or what keeps them from it. */
+  environments:
+    'ready' | 'untrusted' | 'unloaded' | 'loading' | 'problem' | 'undeployed';
+  problem?: Problem;
+  /** The deployment shown, in an environment. */
+  cell?: Cell;
+  /** How many files differ from the local copy, in an environment. */
+  changes?: number;
   maps: FlowMap[];
   notes: Note[];
 };
@@ -288,6 +319,9 @@ export type WebviewMessage =
   // The flow view: open a place of a model, or follow another route rule
   | { type: 'flowOpen'; version: number; at: number }
   | { type: 'flowRoute'; version: number; endpoint: number; route: number }
+  | { type: 'flowSource'; source: string }
+  // Shows the flow of a proxy or shared flow, in an environment if given
+  | { type: 'showFlow'; kind: Kind; name: string; environment?: string }
   | { type: 'signIn' }
   | { type: 'settings' }
   | { type: 'trust' };

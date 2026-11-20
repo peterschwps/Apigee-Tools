@@ -7,14 +7,16 @@ import { classifyDocument } from './linter';
 import type {
   FlowBand,
   FlowCase,
+  FlowHookPoint,
   FlowItem,
   FlowMap,
   FlowSegment,
+  FlowSign,
   FlowStep,
   Kind,
   Note,
 } from './protocol';
-import type { BundleFiles } from './revision';
+import type { BundleChanges, BundleFiles } from './revision';
 import { parseXml, type XmlNode } from './xml';
 
 /** Where an element can be opened: a bundle file and an offset in it. */
@@ -31,6 +33,8 @@ export type Policy = {
   continueOnError: boolean;
   /** The shared flow a FlowCallout names; null for a name with a template. */
   calls?: string | null;
+  /** The bundle files of the resources it names, such as a script. */
+  resources: string[];
 };
 
 /** A step: the policy it runs, and the condition under which it does. */
@@ -110,7 +114,7 @@ export type FlowModel = {
   kind: Kind;
   proxyEndpoints: Endpoint[];
   targetEndpoints: Endpoint[];
-  sharedFlow?: { name: string; at: number; steps: Step[] };
+  sharedFlow?: { name: string; file: string; at: number; steps: Step[] };
   /** By name; a file named after its policy wins over copies. */
   policies: Map<string, Policy>;
   places: Place[];
@@ -121,7 +125,25 @@ export type FlowModel = {
 export type ViewContext = {
   /** The route rule to follow for each proxy endpoint, by position. */
   routes?: readonly (number | undefined)[];
+  /** The environment whose deployed revision the model is; absent for the workspace. */
+  environment?: string;
+  /** The shared flows attached to the environment's flow hooks. */
+  hooks?: Partial<
+    Record<FlowHookPoint, { sharedFlow: string; continueOnError?: boolean }>
+  >;
+  /**
+   * The revision of a shared flow deployed in the environment, and whether it
+   * differs from the workspace; nothing when it is not deployed there.
+   */
+  sharedFlow?(
+    name: string,
+  ): { revision: string; differs?: boolean } | undefined;
+  /** The files of the revision that differ from the local copy. */
+  changes?: BundleChanges;
 };
+
+/** The model and what the view needs besides it. */
+type Scope = { model: FlowModel; context: ViewContext };
 
 /** Where a step runs, which decides what some of its policies do. */
 type Stage = 'request' | 'response' | 'fault' | 'event' | 'after';
@@ -319,6 +341,7 @@ export function flowModel(files: BundleFiles, kind: Kind): FlowModel {
             : referencePattern.test(called)
               ? called
               : null,
+        resources: resourcesOf(xml, file.slice(0, file.indexOf('/'))),
       });
     } else if (documentKind === 'proxyEndpoint') {
       if (root?.name === 'ProxyEndpoint') {
@@ -341,6 +364,7 @@ export function flowModel(files: BundleFiles, kind: Kind): FlowModel {
       sharedFlowFile = file;
       model.sharedFlow = {
         name,
+        file,
         at: place(file, root.start),
         steps: stepsOf(root, file),
       };
@@ -371,13 +395,14 @@ export function flowView(
   model: FlowModel,
   context: ViewContext = {},
 ): { maps: FlowMap[]; notes: Note[] } {
+  const scope = { model, context };
   const maps =
     model.kind === 'sharedflows'
       ? model.sharedFlow
-        ? [sharedFlowMap(model, model.sharedFlow)]
+        ? [sharedFlowMap(scope, model.sharedFlow)]
         : []
       : model.proxyEndpoints.map((endpoint, index) =>
-          proxyMap(model, endpoint, index, context.routes?.[index]),
+          proxyMap(scope, endpoint, index, context.routes?.[index]),
         );
   return { maps, notes: model.notes };
 }
@@ -398,68 +423,69 @@ export function conditionSummary(
 
 /** Arranges a proxy endpoint, following the chosen route to its target. */
 function proxyMap(
-  model: FlowModel,
+  scope: Scope,
   proxy: Endpoint,
   index: number,
   chosen: number | undefined,
 ): FlowMap {
   const key = `p${index}`;
+  const { model, context } = scope;
   const { item: routes, route } = routeItem(model, proxy, index, chosen, key);
   const target =
     route && 'target' in route.to
       ? targetNamed(model, route.to.target)
       : undefined;
   const backend = route && backendItem(route, target, `${key}/backend`);
+  const hook = (point: FlowHookPoint, side: string) =>
+    hookItem(context, point, `${key}/${side}/${point}`, Boolean(target));
   const bands: FlowBand[] = [
     {
       kind: 'request',
       facts: [],
-      items: [
+      items: present(
         {
           kind: 'client',
           key: `${key}/request/client`,
           basePath: proxy.basePath,
         },
-        endpointItem(model, proxy, 'proxy', 'request', `${key}/request/proxy`),
+        hook('PreProxyFlowHook', 'request'),
+        endpointItem(scope, proxy, 'proxy', 'request', `${key}/request/proxy`),
         routes,
-        ...(target
-          ? [
-              endpointItem(
-                model,
-                target,
-                'target',
-                'request',
-                `${key}/request/target`,
-              ),
-            ]
-          : []),
-        ...(backend ? [backend] : []),
-      ],
+        hook('PreTargetFlowHook', 'request'),
+        target &&
+          endpointItem(
+            scope,
+            target,
+            'target',
+            'request',
+            `${key}/request/target`,
+          ),
+        backend,
+      ),
     },
     {
       kind: 'response',
       facts: [],
-      items: [
-        ...(target
-          ? [
-              endpointItem(
-                model,
-                target,
-                'target',
-                'response',
-                `${key}/response/target`,
-              ),
-            ]
-          : []),
+      items: present(
+        target &&
+          endpointItem(
+            scope,
+            target,
+            'target',
+            'response',
+            `${key}/response/target`,
+          ),
+        hook('PostTargetFlowHook', 'response'),
         endpointItem(
-          model,
+          scope,
           proxy,
           'proxy',
           'response',
           `${key}/response/proxy`,
         ),
+        hook('PostProxyFlowHook', 'response'),
         { kind: 'client', key: `${key}/response/client` },
-      ],
+      ),
     },
   ];
 
@@ -476,7 +502,7 @@ function proxyMap(
           {
             label: 'EventFlow',
             facts: [],
-            steps: stepsView(model, events.eventFlow, `${key}/event`, 'event'),
+            steps: stepsView(scope, events.eventFlow, `${key}/event`, 'event'),
           },
         ]),
       ],
@@ -485,8 +511,8 @@ function proxyMap(
 
   // Each endpoint handles only the faults that occur in it
   const errors = [
-    errorItem(model, proxy, 'proxy', `${key}/error/proxy`),
-    target && errorItem(model, target, 'target', `${key}/error/target`),
+    errorItem(scope, proxy, 'proxy', `${key}/error/proxy`),
+    target && errorItem(scope, target, 'target', `${key}/error/target`),
   ].filter(item => item !== undefined);
   if (errors.length) {
     bands.push({
@@ -508,7 +534,7 @@ function proxyMap(
             label: 'PostClientFlow',
             facts: [],
             steps: stepsView(
-              model,
+              scope,
               proxy.postClientFlow,
               `${key}/after`,
               'after',
@@ -530,11 +556,12 @@ function proxyMap(
 
 /** Arranges the steps of a shared flow. */
 function sharedFlowMap(
-  model: FlowModel,
+  scope: Scope,
   flow: NonNullable<FlowModel['sharedFlow']>,
 ): FlowMap {
   // A shared flow runs where a proxy calls it, so its steps follow that flow
-  const steps = stepsView(model, flow.steps, 's/steps', 'request');
+  const steps = stepsView(scope, flow.steps, 's/steps', 'request');
+  const changed = difference(scope.context, flow.file);
   return {
     key: 's',
     title: `Shared Flow ${flow.name}`,
@@ -543,12 +570,18 @@ function sharedFlowMap(
         kind: 'steps',
         facts: [],
         items: [
-          card(
-            flow,
-            'shared',
-            's/steps',
-            steps.length ? [{ label: 'Steps', facts: [], steps }] : [],
-          ),
+          {
+            ...card(
+              flow,
+              'shared',
+              's/steps',
+              steps.length ? [{ label: 'Steps', facts: [], steps }] : [],
+              changed
+                ? ['Its steps or conditions differ from the workspace']
+                : [],
+            ),
+            ...(changed && { sign: 'differs' }),
+          },
         ],
       },
     ],
@@ -557,7 +590,7 @@ function sharedFlowMap(
 
 /** Lists what runs in an endpoint in one direction; empty parts drop out. */
 function endpointItem(
-  model: FlowModel,
+  scope: Scope,
   endpoint: Endpoint,
   role: 'proxy' | 'target',
   direction: 'request' | 'response',
@@ -569,7 +602,7 @@ function endpointItem(
     segments.push({
       label: 'PreFlow',
       facts: [],
-      steps: stepsView(model, pre, `${key}/pre`, direction),
+      steps: stepsView(scope, pre, `${key}/pre`, direction),
     });
   }
   if (endpoint.flows.some(flow => flow[direction].length)) {
@@ -579,7 +612,7 @@ function endpointItem(
         direction === 'response'
           ? ['Apigee checks the conditions again for the response']
           : [],
-      cases: flowCases(model, endpoint.flows, direction, `${key}/flows`),
+      cases: flowCases(scope, endpoint.flows, direction, `${key}/flows`),
     });
   }
   const post = endpoint.postFlow?.[direction] ?? [];
@@ -587,16 +620,28 @@ function endpointItem(
     segments.push({
       label: 'PostFlow',
       facts: [],
-      steps: stepsView(model, post, `${key}/post`, direction),
+      steps: stepsView(scope, post, `${key}/post`, direction),
     });
   }
-  return card(
-    endpoint,
-    role,
-    key,
-    segments,
-    endpoint.description ? [endpoint.description] : [],
-  );
+  const changed = difference(scope.context, endpoint.file);
+  return {
+    ...card(endpoint, role, key, segments, [
+      ...(endpoint.description ? [endpoint.description] : []),
+      ...(changed === 'changed'
+        ? ['Its steps, conditions, or routes differ from the workspace']
+        : changed === 'removed'
+          ? ['Not in the workspace']
+          : []),
+    ]),
+    ...(changed && { sign: 'differs' }),
+  };
+}
+
+/** Leaves out the items that are absent. */
+function present(
+  ...items: (FlowItem | undefined | false | null | '')[]
+): FlowItem[] {
+  return items.filter(item => !!item);
 }
 
 /** An endpoint or shared flow card with the segments that run in it. */
@@ -641,7 +686,7 @@ function firstMatch(
 
 /** Lists conditional flows as a first-match group. */
 function flowCases(
-  model: FlowModel,
+  scope: Scope,
   flows: readonly Flow[],
   direction: 'request' | 'response',
   key: string,
@@ -658,7 +703,7 @@ function flowCases(
       condition: flow.condition,
       ...(shadowed && { sign: 'warning', muted: true }),
       facts: [shadowed, flow.description].filter(fact => fact !== undefined),
-      steps: stepsView(model, flow[direction], `${key}/${index}`, direction),
+      steps: stepsView(scope, flow[direction], `${key}/${index}`, direction),
     };
   });
   if (match.open < 0) {
@@ -866,7 +911,7 @@ function backendItem(
  * its DefaultFaultRule. Nothing when the endpoint handles no faults.
  */
 function errorItem(
-  model: FlowModel,
+  scope: Scope,
   endpoint: Endpoint,
   role: 'proxy' | 'target',
   key: string,
@@ -889,7 +934,7 @@ function errorItem(
         ...(shadowed && { sign: 'warning', muted: true }),
         facts: shadowed ? [shadowed] : [],
         steps: stepsView(
-          model,
+          scope,
           rule.steps,
           `${key}/rules/${position}`,
           'fault',
@@ -906,7 +951,7 @@ function errorItem(
         ...(shadowed && { sign: 'warning', muted: true }),
         facts: [shadowed ?? 'Runs when no fault rule ran'],
         steps: stepsView(
-          model,
+          scope,
           fallback.steps,
           `${key}/rules/otherwise`,
           'fault',
@@ -931,7 +976,7 @@ function errorItem(
           ? 'Also runs after a fault rule, unless that rule raised a fault with RaiseFault'
           : 'Runs for every fault, since there are no fault rules',
       ],
-      steps: stepsView(model, fallback.steps, `${key}/default`, 'fault'),
+      steps: stepsView(scope, fallback.steps, `${key}/default`, 'fault'),
     });
   }
   return segments.length ? card(endpoint, role, key, segments) : undefined;
@@ -949,11 +994,12 @@ const raisedFault: Readonly<Record<Stage, string | undefined>> = {
 
 /** Shows steps with what the bundle says about their policies. */
 function stepsView(
-  model: FlowModel,
+  scope: Scope,
   steps: readonly Step[],
   key: string,
   stage: Stage,
 ): FlowStep[] {
+  const { model, context } = scope;
   return steps.map((step, index): FlowStep => {
     const policy = model.policies.get(step.policy);
     const base = {
@@ -970,22 +1016,37 @@ function stepsView(
       };
     }
     const facts: string[] = [];
-    let sign: FlowStep['sign'];
+    const signs: FlowSign[] = [];
     if (policy.displayName && policy.displayName !== step.policy) {
       facts.push(`Display name: ${policy.displayName}`);
     }
     // A disabled policy does nothing else
     if (!policy.enabled) {
       facts.push('Disabled: Apigee skips this step');
-      sign = 'none';
+      signs.push('none');
     } else {
       if (policy.continueOnError) facts.push('Continues on error');
-      if (policy.calls) facts.push(`Calls ${policy.calls}`);
+      if (policy.calls) {
+        const deployed = context.environment
+          ? context.sharedFlow?.(policy.calls)
+          : undefined;
+        if (!context.environment) facts.push(`Calls ${policy.calls}`);
+        else if (deployed) {
+          facts.push(
+            `Calls ${policy.calls}, revision ${deployed.revision} in ${context.environment}`,
+          );
+        } else {
+          facts.push(
+            `Calls ${policy.calls}, which is not deployed in ${context.environment}, so the call fails with flow.SharedFlowNotFound (500)`,
+          );
+          signs.push('error');
+        }
+      }
       if (policy.calls === null) {
         facts.push(
           "Names its shared flow with a template; Google's documentation describes only a literal name",
         );
-        sign = 'unknown';
+        signs.push('unknown');
       }
       const raised = policy.type === 'RaiseFault' && raisedFault[stage];
       if (raised) facts.push(raised);
@@ -995,6 +1056,25 @@ function stepsView(
         );
       }
     }
+
+    // In an environment: where the revision differs from the local copy
+    const file = model.places[policy.at].file;
+    const changed = difference(context, file);
+    const resource = policy.resources.find(item => difference(context, item));
+    if (changed) {
+      facts.push(
+        changed === 'removed'
+          ? 'Not in the workspace'
+          : 'Differs from the workspace',
+      );
+      signs.push('differs');
+    } else if (resource) {
+      facts.push(
+        `Its resource ${resource.slice(resource.lastIndexOf('/') + 1)} differs from the workspace`,
+      );
+      signs.push('differs');
+    }
+    const sign = strongest(signs);
     return {
       ...base,
       at: policy.at,
@@ -1004,6 +1084,92 @@ function stepsView(
       facts,
     };
   });
+}
+
+// Signs by precedence, when an item has reasons for several
+const precedence: readonly FlowSign[] = [
+  'error',
+  'differs',
+  'warning',
+  'unknown',
+  'none',
+];
+
+function strongest(signs: readonly FlowSign[]): FlowSign | undefined {
+  return precedence.find(sign => signs.includes(sign));
+}
+
+/** How a file of the shown revision differs from the local copy, if it does. */
+function difference(
+  context: ViewContext,
+  file: string,
+): 'changed' | 'removed' | undefined {
+  if (context.changes?.changed.includes(file)) return 'changed';
+  if (context.changes?.removed.includes(file)) return 'removed';
+  return undefined;
+}
+
+/**
+ * The shared flow of a flow hook, in an environment. A target hook on a path
+ * without a target endpoint gets the unknown sign, since Google's
+ * documentation does not say whether it runs.
+ */
+function hookItem(
+  context: ViewContext,
+  point: FlowHookPoint,
+  key: string,
+  withTarget: boolean,
+): FlowItem | undefined {
+  const hook = context.environment ? context.hooks?.[point] : undefined;
+  if (!hook) return undefined;
+  const deployed = context.sharedFlow?.(hook.sharedFlow);
+  const facts = [`Runs for every API proxy in ${context.environment}`];
+  const signs: FlowSign[] = [];
+  // The API sets continueOnError to true unless the hook says otherwise
+  if (hook.continueOnError !== false) facts.push('Continues on error');
+  if (!deployed) {
+    facts.push(`${hook.sharedFlow} is not deployed in ${context.environment}`);
+    signs.push('error');
+  } else if (deployed.differs) {
+    facts.push('Differs from the workspace');
+    signs.push('differs');
+  }
+  if (
+    !withTarget &&
+    (point === 'PreTargetFlowHook' || point === 'PostTargetFlowHook')
+  ) {
+    facts.push(
+      "Google's documentation does not say whether target flow hooks run without a target endpoint",
+    );
+    signs.push('unknown');
+  }
+  const sign = strongest(signs);
+  return {
+    kind: 'hook',
+    key,
+    point,
+    sharedFlow: hook.sharedFlow,
+    ...(deployed && { revision: deployed.revision }),
+    ...(sign && { sign }),
+    facts,
+  };
+}
+
+// Resource URLs in policies, such as jsc://page-links.js; names with
+// templates are left out, since they resolve at runtime
+const resourceUrl =
+  /\b(jsc|py|java|xsl|xsd|wsdl|oas|graphql):\/\/([^\s<>"'{}]+)(?=[\s<"']|$)/g;
+
+/** The bundle files of the resources a policy names, outside comments. */
+function resourcesOf(xml: string, directory: string): string[] {
+  const named = [...xml.replace(/<!--[\s\S]*?-->/g, '').matchAll(resourceUrl)];
+  return [
+    ...new Set(
+      named.map(
+        ([, scheme, file]) => `${directory}/resources/${scheme}/${file}`,
+      ),
+    ),
+  ];
 }
 
 function child(node: XmlNode | undefined, name: string): XmlNode | undefined {

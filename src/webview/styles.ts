@@ -873,9 +873,42 @@ export const styles = css`
    * as a rail from top to bottom; from 1000 px, Apigee's bands: the request
    * from left to right, the response below it from right to left.
    */
+  /* The bundle's name with its kind and path below */
+  .flow-brand {
+    flex-direction: column;
+    align-items: start;
+    gap: 4px;
+    min-width: 0;
+  }
+
   .flow-path {
-    padding: 4px 20px 0;
     overflow-wrap: anywhere;
+  }
+
+  /* The source with the status of its deployment and its difference */
+  .source {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #source {
+    width: 250px;
+    max-width: 100%;
+  }
+
+  .sign {
+    display: inline-flex;
+  }
+
+  .context .loading {
+    padding: 0;
+  }
+
+  .hook-mark {
+    margin-right: 4px;
+    color: var(--at-text-muted);
+    vertical-align: text-bottom;
   }
 
   .flow-maps {

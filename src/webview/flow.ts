@@ -13,6 +13,7 @@ import type {
   FlowView,
 } from '../protocol';
 import { kindLabels, none, signs, statusIcon } from './deployments';
+import { hookNames } from './relationships';
 
 /** How the flow view reports what the user does. */
 export type FlowActions = {
@@ -20,6 +21,8 @@ export type FlowActions = {
   open(at: number): void;
   /** Follows another route rule of a proxy endpoint. */
   route(endpoint: number, route: number): void;
+  /** Shows the flow of a flow hook's shared flow in the same environment. */
+  hook(sharedFlow: string): void;
   /** Remembers the focused item of a band, its tab stop. */
   rove(band: string, key: string): void;
 };
@@ -97,9 +100,13 @@ function bandView(
 
 /** Classes that place a stage in its column of the wide layout. */
 function stageClass(item: FlowItem): string {
-  return item.kind === 'endpoint'
-    ? `stage endpoint ${item.role}`
-    : `stage ${item.kind}`;
+  if (item.kind === 'endpoint') return `stage endpoint ${item.role}`;
+  if (item.kind === 'hook') {
+    const proxy =
+      item.point === 'PreProxyFlowHook' || item.point === 'PostProxyFlowHook';
+    return `stage hook ${proxy ? 'proxy-hook' : 'target-hook'}`;
+  }
+  return `stage ${item.kind}`;
 }
 
 /** The keys of the focusable parts of an item, in DOM order. */
@@ -119,6 +126,8 @@ function keysOf(item: FlowItem): string[] {
       return cases(item.cases);
     case 'backend':
       return item.at === undefined ? [] : [item.key];
+    case 'hook':
+      return [item.key];
     case 'client':
       return [];
   }
@@ -158,6 +167,32 @@ function itemView(
         <span class="segment-label">Route Rules</span>
         ${casesView(item.cases, 'Route Rules', entry, actions, item.endpoint)}
       </div>`;
+    case 'hook': {
+      const label = `${hookNames[item.point]} Flow Hook`;
+      return html`<div class="terminal">
+        <span class="terminal-name"
+          ><vscode-icon name="plug" class="hook-mark"></vscode-icon
+          >${hookNames[item.point]}</span
+        >
+        <button
+          class="link"
+          data-key=${item.key}
+          tabindex=${item.key === entry ? 0 : -1}
+          data-tooltip=${[label, item.sharedFlow, ...item.facts].join('\n')}
+          @click=${() => actions.hook(item.sharedFlow)}
+        >
+          ${item.sharedFlow}<span class="sr-only"
+            >. ${label}. ${item.facts.join('. ')}</span
+          >
+        </button>
+        ${signView(item.sign)}
+        ${
+          item.revision
+            ? html`<span class="muted">Revision ${item.revision}</span>`
+            : nothing
+        }
+      </div>`;
+    }
     case 'endpoint':
       return html`<div class="card endpoint-card">
         <h4>
@@ -168,8 +203,14 @@ function itemView(
             data-tooltip=${[`${roleTitles[item.role]} ${item.name}`, ...item.facts].join('\n')}
             @click=${() => actions.open(item.at)}
           >
-            ${roleTitles[item.role]} ${item.name}
+            ${roleTitles[item.role]}
+            ${item.name}${
+              item.facts.length
+                ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
+                : nothing
+            }
           </button>
+          ${signView(item.sign)}
         </h4>
         ${
           item.segments.length
