@@ -5,6 +5,7 @@ import {
   ApigeeError,
   apigeeClient,
   applyStatus,
+  loadFlowHooks,
   loadOverview,
   loadRows,
   statusTargets,
@@ -421,4 +422,97 @@ test('pay-as-you-go organizations list add-ons per environment', async t => {
       addons: ['Advanced API Security', 'Analytics'],
     },
   ]);
+});
+
+test('products are read by name, without the repeated first item', async t => {
+  const page = (from: number) =>
+    Array.from({ length: 1000 }, (_, index) => ({
+      name: `p${String(from + index).padStart(4, '0')}`,
+    }));
+  const requests = serve(t, path =>
+    path.includes('startKey=p0999')
+      ? reply({ apiProduct: [{ name: 'p0999' }, { name: 'p1000' }] })
+      : reply({ apiProduct: page(0) }),
+  );
+  const products = await client().products('acme');
+  assert.equal(products.length, 1001);
+  assert.equal(products.at(-1)?.name, 'p1000');
+  assert.deepEqual(
+    requests.map(request => request.path),
+    [
+      '/organizations/acme/apiproducts?expand=true&count=1000',
+      '/organizations/acme/apiproducts?expand=true&count=1000&startKey=p0999',
+    ],
+  );
+});
+
+test('apps are listed by page size and arrive without secrets', async t => {
+  const requests = serve(t, path =>
+    path.includes('pageToken=next')
+      ? reply({ app: [{ appId: 'b', name: 'second', status: 'revoked' }] })
+      : reply({
+          app: [
+            {
+              appId: 'a',
+              name: 'first',
+              developerEmail: 'dev@example.com',
+              credentials: [
+                {
+                  consumerKey: 'key-1234',
+                  consumerSecret: 'secret-5678',
+                  status: 'approved',
+                  expiresAt: '-1',
+                  apiProducts: [{ apiproduct: 'gold', status: 'pending' }],
+                },
+              ],
+            },
+          ],
+          nextPageToken: 'next',
+        }),
+  );
+  const apps = await client().apps('acme');
+  assert.deepEqual(
+    requests.map(request => request.path),
+    [
+      '/organizations/acme/apps?pageSize=1000',
+      '/organizations/acme/apps?pageSize=1000&pageToken=next',
+    ],
+  );
+  assert.deepEqual(
+    apps.map(app => [app.name, app.status]),
+    [
+      ['first', undefined],
+      ['second', 'revoked'],
+    ],
+  );
+  assert.equal(apps[0].credentials?.[0].consumerKey, 'key-1234');
+  assert.doesNotMatch(JSON.stringify(apps), /secret-5678|consumerSecret/);
+});
+
+test('developers come expanded in one request', async t => {
+  const requests = serve(t, () =>
+    reply({ developer: [{ email: 'dev@example.com', status: 'active' }] }),
+  );
+  const developers = await client().developers('acme');
+  assert.deepEqual(developers, [
+    { email: 'dev@example.com', status: 'active' },
+  ]);
+  assert.deepEqual(
+    requests.map(request => request.path),
+    ['/organizations/acme/developers?expand=true'],
+  );
+});
+
+test('flow hooks name their shared flow, and empty hooks are left out', async t => {
+  const requests = serve(t, path =>
+    path.endsWith('/eval/flowhooks/PreProxyFlowHook')
+      ? reply({ flowHookPoint: 'PreProxyFlowHook', sharedFlow: 'security' })
+      : reply({ continueOnError: true }),
+  );
+  const hooks = await loadFlowHooks(client(), 'acme', ['eval', 'test']);
+  assert.deepEqual(hooks, {
+    eval: { PreProxyFlowHook: 'security' },
+    test: {},
+  });
+  assert.equal(requests.length, 8);
 });

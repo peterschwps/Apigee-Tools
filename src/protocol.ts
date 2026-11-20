@@ -51,6 +51,13 @@ export type Overview = {
   groups: { name: string; hostnames: string[]; environments: string[] }[];
 };
 
+/** Where an environment runs a shared flow for every proxy. */
+export type FlowHookPoint =
+  | 'PreProxyFlowHook'
+  | 'PreTargetFlowHook'
+  | 'PostTargetFlowHook'
+  | 'PostProxyFlowHook';
+
 /** A bundle in the workspace. */
 export type LocalBundle = {
   kind: Kind;

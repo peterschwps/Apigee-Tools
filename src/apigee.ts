@@ -1,5 +1,12 @@
 import type { TokenSource } from './gcloud';
-import type { Cell, DeploymentState, Kind, Overview, Row } from './protocol';
+import type {
+  Cell,
+  DeploymentState,
+  FlowHookPoint,
+  Kind,
+  Overview,
+  Row,
+} from './protocol';
 
 /** Reports a failed Apigee API request with a hint on how to resolve it. */
 export class ApigeeError extends Error {
@@ -32,6 +39,78 @@ type Deployment = {
   deployStartTime?: string;
   proxyDeploymentType?: string;
 };
+
+type Attribute = { name?: string; value?: string };
+
+/** An API product; its operation groups name proxies in `apiSource`. */
+type ApiProduct = {
+  name: string;
+  displayName?: string;
+  approvalType?: string;
+  environments?: string[];
+  proxies?: string[];
+  quota?: string;
+  quotaInterval?: string;
+  quotaTimeUnit?: string;
+  attributes?: Attribute[];
+} & {
+  [group: `${string}OperationGroup`]:
+    | {
+        operationConfigType?: string;
+        operationConfigs?: { apiSource?: string }[];
+      }
+    | undefined;
+};
+
+type Developer = {
+  developerId?: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  status?: string;
+  createdAt?: string;
+  attributes?: Attribute[];
+};
+
+type AppGroup = {
+  name: string;
+  displayName?: string;
+  status?: string;
+  createdAt?: string;
+  attributes?: Attribute[];
+};
+
+/** A credential without its secret, which is dropped on arrival. */
+type Credential = {
+  consumerKey?: string;
+  status?: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  apiProducts?: { apiproduct?: string; status?: string }[];
+};
+
+/** An app of a developer or an app group, with its credentials. */
+type ConsumerApp = {
+  appId: string;
+  name?: string;
+  developerId?: string;
+  developerEmail?: string;
+  appGroup?: string;
+  status?: string;
+  createdAt?: string;
+  attributes?: Attribute[];
+  credentials?: Credential[];
+};
+
+const flowHookPoints: readonly FlowHookPoint[] = [
+  'PreProxyFlowHook',
+  'PreTargetFlowHook',
+  'PostTargetFlowHook',
+  'PostProxyFlowHook',
+];
+
+// Apigee lists at most this many products or developers per request
+const listLimit = 1000;
 
 /** The status of one deployment, which list requests leave out. */
 export type DeploymentStatus = {
@@ -157,9 +236,12 @@ export function apigeeClient(
   /** Collects the items of all pages of a list request. */
   async function pages<T>(path: string, key: string): Promise<T[]> {
     const items: T[] = [];
+    const separator = path.includes('?') ? '&' : '?';
     let pageToken = '';
     do {
-      const query = pageToken ? `?pageToken=${encode(pageToken)}` : '';
+      const query = pageToken
+        ? `${separator}pageToken=${encode(pageToken)}`
+        : '';
       const page = await json<Record<string, unknown>>(`${path}${query}`);
       items.push(...((page[key] as T[] | undefined) ?? []));
       pageToken = (page.nextPageToken as string | undefined) ?? '';
@@ -244,7 +326,99 @@ export function apigeeClient(
         '*/*',
       );
     },
+
+    /**
+     * Returns every API product with details, read by name in pages whose
+     * first item repeats the last one of the previous page.
+     */
+    async products(name: string): Promise<ApiProduct[]> {
+      const products: ApiProduct[] = [];
+      let startKey = '';
+      for (;;) {
+        const query = startKey ? `&startKey=${encode(startKey)}` : '';
+        const list = await json<{ apiProduct?: ApiProduct[] }>(
+          `${organization(name)}/apiproducts?expand=true&count=${listLimit}${query}`,
+        );
+        const page = list.apiProduct ?? [];
+        const fresh =
+          startKey && page[0]?.name === startKey ? page.slice(1) : page;
+        products.push(...fresh);
+        if (page.length < listLimit || !fresh.length) return products;
+        startKey = page[page.length - 1].name;
+      }
+    },
+
+    /**
+     * Returns the developers with details. Apigee cannot page such a list, so
+     * it holds at most 1,000.
+     */
+    async developers(name: string): Promise<Developer[]> {
+      const list = await json<{ developer?: Developer[] }>(
+        `${organization(name)}/developers?expand=true`,
+      );
+      return list.developer ?? [];
+    },
+
+    appGroups: (name: string) =>
+      pages<AppGroup>(`${organization(name)}/appgroups`, 'appGroups'),
+
+    /**
+     * Returns every app, approved or revoked, with its credentials; listed by
+     * page size, Apigee returns apps in full. Secrets are dropped here.
+     */
+    async apps(name: string): Promise<ConsumerApp[]> {
+      const apps = await pages<ConsumerApp>(
+        `${organization(name)}/apps?pageSize=${listLimit}`,
+        'app',
+      );
+      return apps.map(app => ({
+        ...app,
+        credentials: app.credentials?.map(credential => ({
+          consumerKey: credential.consumerKey,
+          status: credential.status,
+          issuedAt: credential.issuedAt,
+          expiresAt: credential.expiresAt,
+          apiProducts: credential.apiProducts,
+        })),
+      }));
+    },
+
+    /** Returns the shared flow attached to a flow hook, if any. */
+    flowHook: (name: string, environment: string, point: FlowHookPoint) =>
+      json<{ sharedFlow?: string }>(
+        `${organization(name)}/environments/${encode(environment)}/flowhooks/${encode(point)}`,
+      ),
   };
+}
+
+/**
+ * Loads the shared flows attached to the flow hooks of each environment,
+ * leaving out the hooks without one.
+ */
+export async function loadFlowHooks(
+  client: ApigeeClient,
+  name: string,
+  environments: readonly string[],
+): Promise<Record<string, Partial<Record<FlowHookPoint, string>>>> {
+  const entries = await Promise.all(
+    environments.map(async environment => {
+      const hooks = await Promise.all(
+        flowHookPoints.map(async point => {
+          const { sharedFlow } = await client.flowHook(
+            name,
+            environment,
+            point,
+          );
+          return [point, sharedFlow] as const;
+        }),
+      );
+      return [
+        environment,
+        Object.fromEntries(hooks.filter(([, sharedFlow]) => sharedFlow)),
+      ] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
 }
 
 /** Loads the organization with its environments and environment groups. */
