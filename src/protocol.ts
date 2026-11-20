@@ -58,6 +58,74 @@ export type FlowHookPoint =
   | 'PostTargetFlowHook'
   | 'PostProxyFlowHook';
 
+/** A custom attribute of a developer, app group, app, or API product. */
+export type Attribute = { name: string; value: string };
+
+/** Who owns apps: a developer or an app group. */
+export type Owner = {
+  /** `developer/<developerId>` or `appgroup/<name>`. */
+  id: string;
+  kind: 'developer' | 'appGroup';
+  /** The developer's email, or the app group's name. */
+  name: string;
+  /** First and last name, or the app group's display name. */
+  displayName?: string;
+  /** Absent when only an app names the owner. */
+  status?: 'active' | 'inactive';
+  createdAt?: number;
+  attributes: Attribute[];
+};
+
+/** An API key of an app; the key itself never leaves the extension host. */
+export type ApiKey = {
+  /** The last four characters of the key. */
+  hint: string;
+  status?: 'approved' | 'revoked';
+  issuedAt?: number;
+  /** Absent for keys that never expire. */
+  expiresAt?: number;
+  /** The API products the key is for, with the approval of each. */
+  products: { name: string; status?: 'approved' | 'pending' | 'revoked' }[];
+};
+
+export type App = {
+  id: string;
+  name: string;
+  /** The owner's id, or empty when Apigee names none. */
+  owner: string;
+  status?: 'approved' | 'revoked';
+  createdAt?: number;
+  attributes: Attribute[];
+  keys: ApiKey[];
+};
+
+export type Product = {
+  name: string;
+  displayName?: string;
+  approvalType?: 'auto' | 'manual';
+  /** Empty when the product is available in every environment. */
+  environments: string[];
+  /** Its proxies, including those that its operations name. */
+  proxies: string[];
+  /** The quota, such as "100 per 1 minute". */
+  quota?: string;
+  attributes: Attribute[];
+};
+
+/** Who uses what in an organization; loaded only for the Relationships tab. */
+export type Relationships = {
+  organization: string;
+  owners: Owner[];
+  /** Absent when the list could not be read; a note says why. */
+  apps?: App[];
+  products?: Product[];
+  /** Shared flows that FlowCallout policies call, by `kind/name/revision`. */
+  calls: Record<string, string[]>;
+  /** The shared flows attached to flow hooks, by environment. */
+  hooks: Record<string, Partial<Record<FlowHookPoint, string>>>;
+  notes: Note[];
+};
+
 /** A bundle in the workspace. */
 export type LocalBundle = {
   kind: Kind;

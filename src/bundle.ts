@@ -18,7 +18,7 @@ const routeTargetSource =
   'https://docs.cloud.google.com/apigee/docs/api-platform/reference/api-proxy-configuration-reference#proxyendpoint-howtoconfigurerouterules';
 
 // Static references; values with templates or other characters are not checked
-const referencePattern = /^[A-Za-z0-9._$ %\-]+$/;
+export const referencePattern = /^[A-Za-z0-9._$ %\-]+$/;
 
 // Policies that validate messages against a bundle resource
 const resourcePolicies = new Map<string, ResourcePolicy>([

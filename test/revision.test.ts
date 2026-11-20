@@ -17,6 +17,7 @@ import {
   differs,
   fingerprints,
   readBundle,
+  sharedFlowCalls,
   unzip,
 } from '../src/revision';
 
@@ -185,4 +186,27 @@ test('linked directories are read and link cycles end', async t => {
     differs(fingerprints(await revision()), fingerprints(local)),
     false,
   );
+});
+
+test('shared flow calls come from FlowCallout policies with static names', () => {
+  const callout = (name: string) =>
+    Buffer.from(
+      `<FlowCallout name="FC-${name.length}">\n  <SharedFlowBundle>${name}</SharedFlowBundle>\n</FlowCallout>`,
+    );
+  const files = new Map([
+    ['apiproxy/policies/FC-Cors.xml', callout('cors')],
+    ['apiproxy/policies/FC-Again.xml', callout('cors')],
+    ['apiproxy/policies/FC-Dynamic.xml', callout('{flow.target}')],
+    [
+      'apiproxy/policies/FC-Bom.xml',
+      Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), callout('bom')]),
+    ],
+    ['sharedflowbundle/policies/FC-Nested.xml', callout('nested')],
+    [
+      'apiproxy/policies/AM-Set.xml',
+      Buffer.from('<AssignMessage name="AM-Set"/>'),
+    ],
+    ['apiproxy/proxies/default.xml', callout('not-a-policy')],
+  ]);
+  assert.deepEqual(sharedFlowCalls(files), ['bom', 'cors', 'nested']);
 });

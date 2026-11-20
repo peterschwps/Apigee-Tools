@@ -8,6 +8,7 @@ import {
   loadFlowHooks,
   loadOverview,
   loadRows,
+  relationshipsOf,
   statusTargets,
 } from '../src/apigee';
 import { tokenSource } from '../src/gcloud';
@@ -515,4 +516,161 @@ test('flow hooks name their shared flow, and empty hooks are left out', async t 
     test: {},
   });
   assert.equal(requests.length, 8);
+});
+
+test('the relationships carry key hints, and only the host has the full keys', () => {
+  const { relationships, keyOwners } = relationshipsOf('acme', {
+    apps: [
+      {
+        appId: 'app-1',
+        name: 'mobile',
+        developerId: 'dev-1',
+        developerEmail: 'dev@example.com',
+        status: 'revoked',
+        createdAt: '1700000000000',
+        attributes: [{ name: 'tier', value: 'gold' }],
+        credentials: [
+          {
+            consumerKey: 'full-key-abcd',
+            status: 'approved',
+            issuedAt: '1700000000000',
+            expiresAt: '-1',
+            apiProducts: [{ apiproduct: 'gold', status: 'pending' }],
+          },
+          {
+            consumerKey: 'other-key-wxyz',
+            status: 'revoked',
+            expiresAt: '1800000000000',
+          },
+        ],
+      },
+    ],
+    hooks: {},
+  });
+  assert.deepEqual(relationships.apps?.[0].keys, [
+    {
+      hint: 'abcd',
+      status: 'approved',
+      issuedAt: 1700000000000,
+      expiresAt: undefined,
+      products: [{ name: 'gold', status: 'pending' }],
+    },
+    {
+      hint: 'wxyz',
+      status: 'revoked',
+      issuedAt: undefined,
+      expiresAt: 1800000000000,
+      products: [],
+    },
+  ]);
+  assert.doesNotMatch(JSON.stringify(relationships), /full-key|other-key/);
+  assert.deepEqual(keyOwners.get('other-key-wxyz'), { app: 'app-1', key: 1 });
+  assert.equal(relationships.apps?.[0].status, 'revoked');
+  assert.deepEqual(relationships.apps?.[0].attributes, [
+    { name: 'tier', value: 'gold' },
+  ]);
+});
+
+test('apps belong to developers, app groups, or owners only they name', () => {
+  const { relationships } = relationshipsOf('acme', {
+    developers: [
+      {
+        developerId: 'dev-1',
+        email: 'ann@example.com',
+        firstName: 'Ann',
+        lastName: 'Lee',
+        status: 'inactive',
+      },
+    ],
+    appGroups: [
+      { name: 'partners', displayName: 'Partners', status: 'active' },
+    ],
+    apps: [
+      { appId: 'a', name: 'portal', developerId: 'dev-1' },
+      { appId: 'b', name: 'b2b', appGroup: 'partners' },
+      {
+        appId: 'c',
+        name: 'legacy',
+        developerId: 'dev-9',
+        developerEmail: 'old@example.com',
+      },
+      { appId: 'c', name: 'legacy' },
+    ],
+    hooks: {},
+  });
+  assert.deepEqual(
+    relationships.owners.map(owner => [
+      owner.id,
+      owner.name,
+      owner.displayName,
+      owner.status,
+    ]),
+    [
+      ['developer/dev-1', 'ann@example.com', 'Ann Lee', 'inactive'],
+      ['developer/dev-9', 'old@example.com', undefined, undefined],
+      ['appgroup/partners', 'partners', 'Partners', 'active'],
+    ],
+  );
+  assert.deepEqual(
+    relationships.apps?.map(app => [app.name, app.owner]),
+    [
+      ['b2b', 'appgroup/partners'],
+      ['legacy', 'developer/dev-9'],
+      ['portal', 'developer/dev-1'],
+    ],
+  );
+});
+
+test('products list their proxies, also those their operations name', () => {
+  const { relationships } = relationshipsOf('acme', {
+    products: [
+      {
+        name: 'gold',
+        displayName: 'Gold',
+        approvalType: 'manual',
+        environments: ['test', 'eval'],
+        proxies: ['orders'],
+        quota: '100',
+        quotaInterval: '1',
+        quotaTimeUnit: 'minute',
+        operationGroup: {
+          operationConfigs: [{ apiSource: 'catalog' }, { apiSource: 'orders' }],
+        },
+        graphqlOperationGroup: { operationConfigs: [{ apiSource: 'graph' }] },
+      },
+      {
+        name: 'mesh',
+        displayName: 'mesh',
+        operationGroup: {
+          operationConfigType: 'remoteservice',
+          operationConfigs: [{ apiSource: 'envoy-service' }],
+        },
+      },
+    ],
+    hooks: { eval: { PreProxyFlowHook: 'security' } },
+  });
+  assert.deepEqual(relationships.products, [
+    {
+      name: 'gold',
+      displayName: 'Gold',
+      approvalType: 'manual',
+      environments: ['eval', 'test'],
+      proxies: ['catalog', 'graph', 'orders'],
+      quota: '100 per 1 minute',
+      attributes: [],
+    },
+    {
+      name: 'mesh',
+      displayName: undefined,
+      approvalType: undefined,
+      environments: [],
+      proxies: [],
+      quota: undefined,
+      attributes: [],
+    },
+  ]);
+  assert.equal(relationships.apps, undefined);
+  assert.deepEqual(relationships.hooks, {
+    eval: { PreProxyFlowHook: 'security' },
+  });
 });

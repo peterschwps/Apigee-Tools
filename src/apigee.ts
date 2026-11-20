@@ -1,10 +1,15 @@
 import type { TokenSource } from './gcloud';
 import type {
+  ApiKey,
+  App,
   Cell,
   DeploymentState,
   FlowHookPoint,
   Kind,
   Overview,
+  Owner,
+  Product,
+  Relationships,
   Row,
 } from './protocol';
 
@@ -42,7 +47,16 @@ type Deployment = {
 
 type Attribute = { name?: string; value?: string };
 
-/** An API product; its operation groups name proxies in `apiSource`. */
+/** Operations of an API product; `apiSource` names a proxy. */
+type OperationGroup = {
+  operationConfigType?: string;
+  operationConfigs?: { apiSource?: string }[];
+};
+
+/**
+ * An API product. Its operation groups, such as `operationGroup` and
+ * `graphqlOperationGroup`, sit beside the listed fields.
+ */
 type ApiProduct = {
   name: string;
   displayName?: string;
@@ -53,13 +67,7 @@ type ApiProduct = {
   quotaInterval?: string;
   quotaTimeUnit?: string;
   attributes?: Attribute[];
-} & {
-  [group: `${string}OperationGroup`]:
-    | {
-        operationConfigType?: string;
-        operationConfigs?: { apiSource?: string }[];
-      }
-    | undefined;
+  [group: string]: unknown;
 };
 
 type Developer = {
@@ -419,6 +427,177 @@ export async function loadFlowHooks(
     }),
   );
   return Object.fromEntries(entries);
+}
+
+/** Where the extension host finds a full API key: its app and key index. */
+export type KeyOwner = { app: string; key: number };
+
+/**
+ * Builds the relationships model from the lists that loaded, and an index of
+ * the full API keys for the key search. The model carries only the last four
+ * characters of each key; shared flow calls are added later.
+ */
+export function relationshipsOf(
+  organization: string,
+  lists: {
+    products?: ApiProduct[];
+    developers?: Developer[];
+    appGroups?: AppGroup[];
+    apps?: ConsumerApp[];
+    hooks: Relationships['hooks'];
+  },
+): { relationships: Relationships; keyOwners: Map<string, KeyOwner> } {
+  const owners = new Map<string, Owner>();
+  for (const developer of lists.developers ?? []) {
+    const id = `developer/${developer.developerId ?? developer.email}`;
+    owners.set(id, {
+      id,
+      kind: 'developer',
+      name: developer.email,
+      displayName:
+        [developer.firstName, developer.lastName].filter(Boolean).join(' ') ||
+        undefined,
+      status: oneOf(developer.status, ['active', 'inactive']),
+      createdAt: timestamp(developer.createdAt),
+      attributes: attributesOf(developer.attributes),
+    });
+  }
+  for (const group of lists.appGroups ?? []) {
+    const id = `appgroup/${group.name}`;
+    owners.set(id, {
+      id,
+      kind: 'appGroup',
+      name: group.name,
+      displayName: group.displayName,
+      status: oneOf(group.status, ['active', 'inactive']),
+      createdAt: timestamp(group.createdAt),
+      attributes: attributesOf(group.attributes),
+    });
+  }
+
+  const keyOwners = new Map<string, KeyOwner>();
+  const apps = new Map<string, App>();
+  for (const app of lists.apps ?? []) {
+    if (apps.has(app.appId)) continue;
+    const owner = app.appGroup
+      ? `appgroup/${app.appGroup}`
+      : app.developerId
+        ? `developer/${app.developerId}`
+        : '';
+    // An owner that only the app names still shows, without details
+    if (owner && !owners.has(owner)) {
+      owners.set(owner, {
+        id: owner,
+        kind: app.appGroup ? 'appGroup' : 'developer',
+        name: app.appGroup ?? app.developerEmail ?? app.developerId ?? owner,
+        attributes: [],
+      });
+    }
+    const keys = (app.credentials ?? []).map((credential, index): ApiKey => {
+      const key = credential.consumerKey ?? '';
+      if (key) keyOwners.set(key, { app: app.appId, key: index });
+      return {
+        hint: key.slice(-4),
+        status: oneOf(credential.status, ['approved', 'revoked']),
+        issuedAt: timestamp(credential.issuedAt),
+        expiresAt: timestamp(credential.expiresAt),
+        products: (credential.apiProducts ?? []).flatMap(product =>
+          product.apiproduct
+            ? [
+                {
+                  name: product.apiproduct,
+                  status: oneOf(product.status, [
+                    'approved',
+                    'pending',
+                    'revoked',
+                  ]),
+                },
+              ]
+            : [],
+        ),
+      };
+    });
+    apps.set(app.appId, {
+      id: app.appId,
+      name: app.name ?? app.appId,
+      owner,
+      status: oneOf(app.status, ['approved', 'revoked']),
+      createdAt: timestamp(app.createdAt),
+      attributes: attributesOf(app.attributes),
+      keys,
+    });
+  }
+
+  return {
+    relationships: {
+      organization,
+      owners: [...owners.values()].sort(byName),
+      ...(lists.apps && { apps: [...apps.values()].sort(byName) }),
+      ...(lists.products && {
+        products: lists.products.map(productOf).sort(byName),
+      }),
+      calls: {},
+      hooks: lists.hooks,
+      notes: [],
+    },
+    keyOwners,
+  };
+}
+
+/**
+ * Converts an API product. Its proxies include the sources of its operations;
+ * operations of remote services name Envoy services, not proxies.
+ */
+function productOf(product: ApiProduct): Product {
+  const proxies = new Set(product.proxies ?? []);
+  for (const [key, group] of Object.entries(product)) {
+    if (!/operationgroup$/i.test(key) || !group || typeof group !== 'object') {
+      continue;
+    }
+    const operations = group as OperationGroup;
+    if (operations.operationConfigType === 'remoteservice') continue;
+    for (const config of operations.operationConfigs ?? []) {
+      if (config.apiSource) proxies.add(config.apiSource);
+    }
+  }
+  return {
+    name: product.name,
+    displayName:
+      product.displayName && product.displayName !== product.name
+        ? product.displayName
+        : undefined,
+    approvalType: oneOf(product.approvalType, ['auto', 'manual']),
+    environments: [...(product.environments ?? [])].sort(),
+    proxies: [...proxies].sort(),
+    quota: product.quota
+      ? `${product.quota} per ${product.quotaInterval ?? 1} ${product.quotaTimeUnit ?? ''}`.trim()
+      : undefined,
+    attributes: attributesOf(product.attributes),
+  };
+}
+
+function attributesOf(
+  attributes: Attribute[] = [],
+): { name: string; value: string }[] {
+  return attributes.flatMap(attribute =>
+    attribute.name
+      ? [{ name: attribute.name, value: attribute.value ?? '' }]
+      : [],
+  );
+}
+
+/** Returns a time in milliseconds since the epoch; nothing for -1 or 0. */
+function timestamp(value?: string): number | undefined {
+  const time = Number(value);
+  return time > 0 ? time : undefined;
+}
+
+/** Returns a value if it is one of the known ones. */
+function oneOf<T extends string>(
+  value: string | undefined,
+  known: readonly T[],
+): T | undefined {
+  return known.find(item => item === value);
 }
 
 /** Loads the organization with its environments and environment groups. */

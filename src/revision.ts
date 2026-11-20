@@ -3,9 +3,10 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
+import { referencePattern } from './bundle';
 import { classifyDocument } from './linter';
 import type { Kind } from './protocol';
-import { parseXml, type XmlNode } from './xml';
+import { parseXml, rootElementName, type XmlNode } from './xml';
 
 /** Bundle files by path, such as `apiproxy/policies/AM-Set.xml`. */
 export type BundleFiles = Map<string, Buffer>;
@@ -188,6 +189,25 @@ export function differs(
 ): boolean {
   const { changed, added, removed } = compareBundles(remote, local);
   return Boolean(changed.length || added.length || removed.length);
+}
+
+/**
+ * Returns the shared flows that the FlowCallout policies of a bundle call,
+ * sorted. Names with templates are left out, since they resolve at runtime.
+ */
+export function sharedFlowCalls(files: BundleFiles): string[] {
+  const names = new Set<string>();
+  for (const [file, content] of files) {
+    if (classifyDocument(file) !== 'policy') continue;
+    const xml = content.toString('utf8').replace(/^﻿/, '');
+    // Most policies are something else, which the root name tells cheaply
+    if (rootElementName(xml) !== 'FlowCallout') continue;
+    const name = parseXml(xml).root?.children.find(
+      child => child.name === 'SharedFlowBundle',
+    )?.text?.value;
+    if (name && referencePattern.test(name)) names.add(name);
+  }
+  return [...names].sort();
 }
 
 /**
