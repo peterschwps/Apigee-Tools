@@ -35,7 +35,8 @@ body.vscode-high-contrast {
 }
 
 /* VS Code leaves the list hover text undefined; VS Code Elements would draw it white */
-apigee-dashboard {
+apigee-dashboard,
+apigee-flow {
   --vscode-list-hoverForeground: var(--vscode-foreground);
 }
 
@@ -43,13 +44,16 @@ apigee-dashboard {
  * High contrast: no full-width line under the tabs, as in VS Code's panel, and
  * the selected option keeps the text color instead of the library's white.
  */
-body.vscode-high-contrast apigee-dashboard {
+body.vscode-high-contrast apigee-dashboard,
+body.vscode-high-contrast apigee-flow {
   --vscode-settings-headerBorder: transparent;
   --vscode-list-activeSelectionForeground: var(--vscode-foreground);
 }
 
 /* Native parts, such as the input of the filter field, follow dark themes */
 body.vscode-dark apigee-dashboard,
-body.vscode-high-contrast:not(.vscode-high-contrast-light) apigee-dashboard {
+body.vscode-dark apigee-flow,
+body.vscode-high-contrast:not(.vscode-high-contrast-light) apigee-dashboard,
+body.vscode-high-contrast:not(.vscode-high-contrast-light) apigee-flow {
   color-scheme: dark;
 }

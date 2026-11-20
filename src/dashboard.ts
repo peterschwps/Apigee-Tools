@@ -18,6 +18,7 @@ import {
   statusTargets,
   type ApigeeClient,
 } from './apigee';
+import { registerFlowPanel } from './flowPanel';
 import {
   gcloudCommand,
   gcloudConfig,
@@ -130,6 +131,11 @@ export function registerDashboard(
   // Full API keys for the key search and for copying; the webview gets none
   let keyOwners = new Map<string, KeyRef>();
 
+  const flow = registerFlowPanel(context, {
+    scanWorkspace: host.scanWorkspace,
+    pageHtml: webview => pageHtml(webview, webviewRoot, 'apigee-flow'),
+  });
+
   const statusItem = vscode.window.createStatusBarItem(
     viewType,
     vscode.StatusBarAlignment.Left,
@@ -212,6 +218,7 @@ export function registerDashboard(
     const watcher = watch(webviewRoot.fsPath, () => {
       clearTimeout(reload);
       reload = setTimeout(() => {
+        flow.reload();
         if (!panel) return;
         ready = false;
         panel.webview.html = pageHtml(panel.webview, webviewRoot);
@@ -1178,8 +1185,12 @@ export function registerDashboard(
   }
 }
 
-/** Returns the page with a strict content security policy. */
-function pageHtml(webview: vscode.Webview, root: vscode.Uri): string {
+/** Returns the page of an element with a strict content security policy. */
+function pageHtml(
+  webview: vscode.Webview,
+  root: vscode.Uri,
+  element: 'apigee-dashboard' | 'apigee-flow' = 'apigee-dashboard',
+): string {
   const nonce = randomBytes(16).toString('base64');
   const asset = (file: string) =>
     webview.asWebviewUri(vscode.Uri.joinPath(root, file)).toString();
@@ -1200,7 +1211,7 @@ function pageHtml(webview: vscode.Webview, root: vscode.Uri): string {
     <title>Apigee Tools</title>
   </head>
   <body>
-    <apigee-dashboard></apigee-dashboard>
+    <${element}></${element}>
     <script nonce="${nonce}" src="${asset('main.js')}"></script>
   </body>
 </html>`;

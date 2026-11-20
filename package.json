@@ -52,7 +52,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Linting works in Restricted Mode. The dashboard runs gcloud and reads from the Apigee API, so it needs a trusted workspace."
+      "description": "Linting and the flow view of local bundles work in Restricted Mode. The dashboard runs gcloud and reads from the Apigee API, so it needs a trusted workspace."
     }
   },
   "contributes": {
@@ -111,6 +111,12 @@
         "command": "apigeeTools.unpin",
         "title": "Unpin",
         "category": "Apigee Tools"
+      },
+      {
+        "command": "apigeeTools.showFlow",
+        "title": "Show Flow",
+        "category": "Apigee Tools",
+        "icon": "$(open-preview)"
       }
     ],
     "menus": {
@@ -122,6 +128,13 @@
         {
           "command": "apigeeTools.unpin",
           "when": "false"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "apigeeTools.showFlow",
+          "when": "resourceScheme == file && resourceExtname =~ /^\\.xml$/i && resourcePath =~ /[\\\\\\/](apiproxy|sharedflowbundle)[\\\\\\/]/i",
+          "group": "navigation"
         }
       ],
       "webview/context": [

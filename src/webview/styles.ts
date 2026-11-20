@@ -867,4 +867,436 @@ export const styles = css`
   .hint {
     margin-top: 4px;
   }
+
+  /*
+   * Flow view. The DOM lists the stages in run order. Narrow panels show it
+   * as a rail from top to bottom; from 1000 px, Apigee's bands: the request
+   * from left to right, the response below it from right to left.
+   */
+  .flow-path {
+    padding: 4px 20px 0;
+    overflow-wrap: anywhere;
+  }
+
+  .flow-maps {
+    container-type: inline-size;
+    display: grid;
+    gap: 28px;
+    padding: 20px 20px 24px;
+  }
+
+  .flow-map,
+  .band {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .band h3,
+  .endpoint-card h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .band-fact {
+    color: var(--at-text-muted);
+  }
+
+  /* The rail, with a mark per kind of stage: shapes, never read aloud */
+  .stages {
+    position: relative;
+    display: grid;
+    gap: 14px;
+    margin: 0;
+    padding: 0 0 0 24px;
+    list-style: none;
+  }
+
+  .stages::before {
+    content: '';
+    position: absolute;
+    top: 12px;
+    bottom: 12px;
+    left: 7px;
+    border-left: 1px solid var(--at-border);
+  }
+
+  .stage {
+    position: relative;
+    min-width: 0;
+  }
+
+  .stage.client::before,
+  .stage.backend::before,
+  .stage.routes::before {
+    content: '';
+    position: absolute;
+    top: 7px;
+    left: -21px;
+    width: 9px;
+    height: 9px;
+    box-sizing: border-box;
+    border: 1px solid var(--at-text-muted);
+    background: var(--vscode-editor-background);
+  }
+
+  .stage.client::before {
+    border-radius: 50%;
+  }
+
+  .stage.routes::before {
+    transform: rotate(45deg);
+  }
+
+  .terminal {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    min-height: 24px;
+  }
+
+  .terminal-name {
+    font-weight: 600;
+  }
+
+  .endpoint-card {
+    display: grid;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .endpoint-card h4 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .no-steps {
+    display: flex;
+  }
+
+  .segments {
+    display: grid;
+    gap: 8px;
+  }
+
+  /* A label, then a chain of steps or the cases of a first-match group */
+  .segment,
+  .routes-group {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    align-items: start;
+    gap: 4px 8px;
+  }
+
+  .segment-label {
+    color: var(--at-text-muted);
+    line-height: 24px;
+    overflow-wrap: anywhere;
+  }
+
+  .steps,
+  .cases {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 0;
+  }
+
+  .step {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  /* Arrows between the steps of a chain */
+  .step + .step::before {
+    content: '›' / '';
+    padding: 0 6px;
+    color: var(--at-text-muted);
+  }
+
+  .steps .node {
+    width: auto;
+    max-width: 100%;
+  }
+
+  /* Names keep their full width as long as they fit; other text gives way */
+  .steps .node-name,
+  .case-name {
+    flex: none;
+    max-width: 100%;
+  }
+
+  /* The type gives way first when a step runs out of room */
+  .node .type {
+    flex: 0 100 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--at-text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* A step that runs only under a condition */
+  .node.conditional {
+    border-style: dashed;
+  }
+
+  .node.muted .node-name {
+    color: var(--at-text-muted);
+  }
+
+  .step-condition {
+    display: none;
+  }
+
+  .cases {
+    display: grid;
+    gap: 6px;
+  }
+
+  .case {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .case-head {
+    justify-self: start;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 24px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .case-head:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+
+  .case-head:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+  }
+
+  /* The route the view follows */
+  .case-head[aria-pressed='true'] {
+    border-color: var(--vscode-focusBorder);
+    background: var(
+      --vscode-list-inactiveSelectionBackground,
+      var(--vscode-list-hoverBackground)
+    );
+  }
+
+  .case-head .number,
+  .case-head .summary,
+  .case-head .destination,
+  .case-head.muted .case-name {
+    color: var(--at-text-muted);
+  }
+
+  .case-head .number {
+    min-width: 1ch;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .case-name,
+  .case-head .summary {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The condition gives way before the name */
+  .case-head .summary {
+    flex: 0 100 auto;
+  }
+
+  .case .steps {
+    padding-left: 24px;
+  }
+
+  @container (max-width: 699px) {
+    .node .type {
+      display: none;
+    }
+  }
+
+  /* Wide panels: seven columns that every band shares */
+  @container (min-width: 1000px) {
+    .flow-map {
+      grid-template-columns:
+        [client] auto [proxy-hook] auto [proxy] auto [routes] auto
+        [target-hook] auto [target] auto [backend] auto;
+      justify-content: start;
+      column-gap: 0;
+      overflow-x: auto;
+    }
+
+    .flow-map > h2,
+    .band,
+    .band > h3,
+    .band-fact,
+    .stages {
+      grid-column: 1 / -1;
+    }
+
+    .band,
+    .stages {
+      grid-template-columns: subgrid;
+    }
+
+    .stages {
+      gap: 0;
+      padding: 0;
+    }
+
+    .stages::before,
+    .stage::before {
+      display: none;
+    }
+
+    /* One row: the columns, not the DOM order, place the stages */
+    .stage {
+      grid-row: 1;
+      padding: 0 12px;
+    }
+
+    .terminal {
+      flex-direction: column;
+      align-items: start;
+      gap: 2px;
+    }
+
+    /* Cards as wide as their steps; the response arrives from the right */
+    .endpoint-card {
+      width: fit-content;
+      max-width: 100%;
+    }
+
+    .band.response .endpoint-card {
+      margin-left: auto;
+    }
+
+    .stage.client {
+      grid-column: client;
+      padding-left: 0;
+    }
+
+    .stage.proxy-hook {
+      grid-column: proxy-hook;
+    }
+
+    .stage.proxy,
+    .stage.shared {
+      grid-column: proxy;
+    }
+
+    .stage.routes {
+      grid-column: routes;
+    }
+
+    .stage.target-hook {
+      grid-column: target-hook;
+    }
+
+    .stage.target {
+      grid-column: target;
+    }
+
+    .stage.backend {
+      grid-column: backend;
+    }
+
+    /* Arrows in run order: to the right in the request, back to the left */
+    .band.request .stage:not(:last-child)::after,
+    .band.response .stage:not(:last-child)::after {
+      position: absolute;
+      top: 4px;
+      color: var(--at-text-muted);
+    }
+
+    .band.request .stage:not(:last-child)::after {
+      content: '›' / '';
+      right: -2px;
+    }
+
+    .band.response .stage:not(:last-child)::after {
+      content: '‹' / '';
+      left: -2px;
+    }
+
+    /* The keyboard follows the arrows */
+    .band.response .stages {
+      --mirrored: 1;
+    }
+
+    /* Long names and conditions shorten, so all columns stay in view */
+    .routes-group,
+    .segment {
+      grid-template-columns: minmax(0, 1fr);
+      max-width: 360px;
+    }
+
+    /* Side by side while there is room; below one another otherwise */
+    .segments {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: start;
+      gap: 12px 20px;
+    }
+
+    .segments > .segment {
+      flex: 0 1 auto;
+      min-width: 180px;
+    }
+
+    .band.response .segments {
+      flex-direction: row-reverse;
+    }
+
+    .steps {
+      flex-direction: column;
+      flex-wrap: nowrap;
+      align-items: stretch;
+      gap: 4px;
+    }
+
+    .step {
+      display: grid;
+    }
+
+    .step + .step::before {
+      display: none;
+    }
+
+    .step-condition {
+      display: block;
+      padding-left: 7px;
+      color: var(--at-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
 `;

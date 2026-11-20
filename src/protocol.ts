@@ -252,6 +252,18 @@ export type FlowBand = {
 /** A proxy endpoint from the client to the backend and back, or a shared flow. */
 export type FlowMap = { key: string; title: string; bands: FlowBand[] };
 
+/** What the flow view shows: the flow of one bundle. */
+export type FlowView = {
+  /** Counts the models; places of other versions are ignored. */
+  version: number;
+  kind: Kind;
+  name: string;
+  /** Workspace-relative path of the bundle. */
+  path?: string;
+  maps: FlowMap[];
+  notes: Note[];
+};
+
 export type HostMessage =
   | { type: 'snapshot'; snapshot: Snapshot }
   // Apart from the snapshot, which is posted often, since it can be large
@@ -259,7 +271,8 @@ export type HostMessage =
   // Pin or Unpin from the context menu of a node in the graph; empty unpins
   | { type: 'pin'; node: string }
   // The answer to a key search: where the key is, if any app has it
-  | { type: 'keyOwner'; found?: KeyRef };
+  | { type: 'keyOwner'; found?: KeyRef }
+  | { type: 'flow'; flow: FlowView };
 
 export type WebviewMessage =
   | { type: 'ready' }
@@ -272,6 +285,9 @@ export type WebviewMessage =
   | { type: 'findKey'; key: string }
   | { type: 'copyKey'; app: string; key: number }
   | { type: 'openBundle'; path: string }
+  // The flow view: open a place of a model, or follow another route rule
+  | { type: 'flowOpen'; version: number; at: number }
+  | { type: 'flowRoute'; version: number; endpoint: number; route: number }
   | { type: 'signIn' }
   | { type: 'settings' }
   | { type: 'trust' };

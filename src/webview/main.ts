@@ -14,6 +14,7 @@ import '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import type { VscodeSingleSelect } from '@vscode-elements/elements/dist/vscode-single-select/index.js';
 import { html, LitElement, nothing, type TemplateResult } from 'lit';
 import type {
+  FlowView,
   HostMessage,
   Problem,
   Relationships,
@@ -28,6 +29,7 @@ import {
   type Loaded,
 } from './deployments';
 import { details } from './details';
+import { flowMaps, flowSubtitle, type FlowActions } from './flow';
 import type { Column } from './graph';
 import { overview } from './overview';
 import { relationshipsTab, type RelationshipActions } from './relationships';
@@ -561,6 +563,110 @@ class ApigeeDashboard extends LitElement {
   }
 }
 
+/** The flow view of one bundle, in a panel beside the editor. */
+class ApigeeFlow extends LitElement {
+  static override properties = {
+    flow: { state: true },
+    roving: { state: true },
+  };
+
+  static override styles = styles;
+
+  declare flow: FlowView | undefined;
+  /** The focused item of each band, its one tab stop. */
+  declare roving: Record<string, string>;
+
+  /** Hides the tooltip once a render removed its element. */
+  private syncTooltip = () => {};
+
+  /** The item to focus again when a rebuild replaced the focused one. */
+  private focusKey?: string;
+
+  private readonly actions: FlowActions = {
+    open: at => {
+      if (this.flow) send({ type: 'flowOpen', version: this.flow.version, at });
+    },
+    route: (endpoint, route) => {
+      if (this.flow) {
+        send({
+          type: 'flowRoute',
+          version: this.flow.version,
+          endpoint,
+          route,
+        });
+      }
+    },
+    rove: (band, key) => {
+      if (this.roving[band] !== key) {
+        this.roving = { ...this.roving, [band]: key };
+      }
+    },
+  };
+
+  constructor() {
+    super();
+    this.flow = undefined;
+    this.roving = {};
+    window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
+      if (event.data?.type !== 'flow') return;
+      const focused = this.shadowRoot?.activeElement as HTMLElement | null;
+      this.focusKey = focused?.dataset.key;
+      this.flow = event.data.flow;
+    });
+    send({ type: 'ready' });
+  }
+
+  protected override firstUpdated(): void {
+    this.syncTooltip = tooltips(this, () =>
+      this.renderRoot.querySelector('.tooltip'),
+    );
+  }
+
+  /** Keeps the focus on the same item when a rebuild replaced it. */
+  protected override updated(): void {
+    this.syncTooltip();
+    const key = this.focusKey;
+    this.focusKey = undefined;
+    if (key && !this.shadowRoot?.activeElement) {
+      this.renderRoot
+        .querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)
+        ?.focus();
+    }
+  }
+
+  override render() {
+    const flow = this.flow;
+    return html`
+      ${
+        flow
+          ? html`
+              <header class="topbar">
+                <div class="brand"><h1>${flow.name}</h1></div>
+              </header>
+              ${flowSubtitle(flow)}
+              ${
+                flow.notes.length
+                  ? html`<div class="messages">
+                      ${flow.notes.map(note =>
+                        notice(
+                          note.tone,
+                          note.tone === 'warning' ? signs.warning.icon : 'info',
+                          '',
+                          note.text,
+                        ),
+                      )}
+                    </div>`
+                  : nothing
+              }
+              ${flowMaps(flow, this.roving, this.actions)}
+            `
+          : progress('Reading the bundle…')
+      }
+      <div class="tooltip" aria-hidden="true" hidden></div>
+    `;
+  }
+}
+
 /** A notice with a colored edge and icon; its text keeps the theme color. */
 function notice(
   tone: 'error' | 'warning' | 'info',
@@ -636,3 +742,4 @@ function progress(text: string) {
 }
 
 customElements.define('apigee-dashboard', ApigeeDashboard);
+customElements.define('apigee-flow', ApigeeFlow);
