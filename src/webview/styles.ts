@@ -932,11 +932,6 @@ export const styles = css`
     color: inherit;
   }
 
-  .hook-mark {
-    margin-right: 2px;
-    color: var(--at-text-muted);
-  }
-
   /* Map and list stay readable in wide tabs */
   .flow-maps {
     box-sizing: border-box;
@@ -954,19 +949,26 @@ export const styles = css`
   }
 
   /* The map stays at the top while the list of its endpoint scrolls by */
+  /* Above everything that scrolls by, opaque up to the edge of the tab */
   .overview {
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: 5;
     margin: 0 -20px;
-    padding: 8px 20px;
-    border-bottom: 1px solid var(--at-border);
+    padding: 8px 20px 10px;
     background: var(--vscode-editor-background);
   }
 
-  /* Classes place the cells: the page allows no inline styles */
+  /*
+   * The map is framed like the dashboard's cards. Classes place the cells:
+   * the page allows no inline styles.
+   */
   .stations {
     position: relative;
+    padding: 10px 12px;
+    border: 1px solid var(--at-border);
+    border-radius: 6px;
+    background: var(--at-surface-raised);
     display: grid;
     grid-template-columns: 24px;
     grid-auto-columns: minmax(0, auto);
@@ -1195,7 +1197,7 @@ export const styles = css`
   }
 
   /*
-   * The cases of a first-match group branch off a decision, a diamond: one
+   * The cases of a first-match group branch apart, since only one runs: one
    * line down the group, a short one to each case. Steps sit inside.
    */
   .row.in-branch {
@@ -1254,19 +1256,6 @@ export const styles = css`
       color-mix(in srgb, var(--at-text-muted) 60%, transparent);
   }
 
-  .fork {
-    position: absolute;
-    top: 10px;
-    left: -4px;
-    z-index: 1;
-    width: 9px;
-    height: 9px;
-    box-sizing: border-box;
-    border: 1px solid var(--at-text-muted);
-    background: var(--vscode-editor-background);
-    transform: rotate(45deg);
-  }
-
   .twisty {
     flex: none;
     display: inline-grid;
@@ -1319,10 +1308,6 @@ export const styles = css`
     font-weight: 600;
   }
 
-  .band-title vscode-icon {
-    color: var(--at-text-muted);
-  }
-
   .station-name {
     flex: none;
     max-width: 100%;
@@ -1341,16 +1326,10 @@ export const styles = css`
     color: var(--at-text-muted);
   }
 
-  .label .number,
   .label .summary,
   .label .destination,
   .label.muted .case-name {
     color: var(--at-text-muted);
-  }
-
-  .label .number {
-    min-width: 1ch;
-    font-variant-numeric: tabular-nums;
   }
 
   .case-name {
@@ -1459,7 +1438,6 @@ export const styles = css`
   }
 
   .mark-circle::after,
-  .mark-diamond::after,
   .mark-square::after {
     content: '';
     position: absolute;
@@ -1474,9 +1452,5 @@ export const styles = css`
 
   .mark-circle::after {
     border-radius: 50%;
-  }
-
-  .mark-diamond::after {
-    transform: rotate(45deg);
   }
 `;

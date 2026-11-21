@@ -336,7 +336,7 @@ export function drawLinks(root: ParentNode): void {
   for (const bar of root.querySelectorAll<HTMLElement>('.stations')) {
     const svg = bar.querySelector('svg.links');
     if (!svg) continue;
-    const origin = bar.getBoundingClientRect();
+    const origin = svg.getBoundingClientRect();
     const turn = bar.querySelector<HTMLElement>('[data-band="turn"]');
     const paths: string[] = [];
     for (const [kind, way] of [
@@ -435,7 +435,7 @@ type Row = {
   tip?: string;
   activate?: () => void;
   /** The shape on the line: stations of a band hang on one line. */
-  marker?: 'circle' | 'diamond' | 'square';
+  marker?: 'circle' | 'square';
   rail?: 'first' | 'middle' | 'last' | 'through';
   /** A route rule that the view follows. */
   current?: boolean;
@@ -443,7 +443,7 @@ type Row = {
    * Where a row sits in a first-match group, which draws its alternatives as
    * branches of a decision: the head of each case, or a step under one.
    */
-  branch?: 'first' | 'middle' | 'last' | 'only' | 'through' | 'end';
+  branch?: 'first' | 'middle' | 'last' | 'through' | 'end';
 };
 
 function tree(
@@ -510,13 +510,7 @@ function rowView(
   >
     ${
       row.branch
-        ? html`<span class="branch ${row.branch}" aria-hidden="true"
-            >${
-              row.branch === 'first' || row.branch === 'only'
-                ? html`<span class="fork"></span>`
-                : nothing
-            }</span
-          >`
+        ? html`<span class="branch ${row.branch}" aria-hidden="true"></span>`
         : nothing
     }
     ${
@@ -598,24 +592,23 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
     }
   };
 
-  // A first-match group: its cases branch off a decision, one runs
+  // A first-match group: its cases branch apart, since only one runs; a
+  // single case has nothing to set apart
   const cases = (
     list: readonly FlowCase[],
     level: number,
     endpoint?: number,
   ) => {
-    // The order matters only when there is more than one case to try
-    const numbered = list.filter(item => item.number !== undefined).length > 1;
+    const several = list.length > 1;
     list.forEach((item, position) => {
       const last = position === list.length - 1;
-      const branch =
-        list.length === 1
-          ? 'only'
-          : position === 0
-            ? 'first'
-            : last
-              ? 'last'
-              : 'middle';
+      const branch = !several
+        ? undefined
+        : position === 0
+          ? 'first'
+          : last
+            ? 'last'
+            : 'middle';
       const follows = endpoint !== undefined && item.number !== undefined;
       const extra = [
         item.condition && item.condition !== item.summary
@@ -628,7 +621,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
         key: item.key,
         level,
         kind: 'part',
-        branch,
+        ...(branch && { branch }),
         ...(item.steps.length && { expanded: open(item.key) }),
         ...(follows && { current: Boolean(item.followed) }),
         tip: [item.name, item.condition, ...item.facts]
@@ -643,11 +636,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
               : undefined,
         content: html`<span
           class="label case ${item.muted ? 'muted' : ''} ${follows ? 'route' : ''}"
-          >${signView(item.sign)}${
-            numbered && item.number !== undefined
-              ? html`<span class="number">${item.number}</span>`
-              : nothing
-          }<span class="case-name">${item.name}</span>${
+          >${signView(item.sign)}<span class="case-name">${item.name}</span>${
             item.summary
               ? html`<span class="summary">${item.summary}</span>`
               : nothing
@@ -663,7 +652,8 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
         >`,
       });
       if (item.steps.length && open(item.key)) {
-        steps(item.steps, level + 1, undefined, last ? 'end' : 'through');
+        const inside = !several ? undefined : last ? 'end' : 'through';
+        steps(item.steps, level + 1, undefined, inside);
       }
     });
   };
@@ -671,19 +661,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
   const station = (item: FlowItem) => {
     switch (item.kind) {
       case 'client':
-        rows.push({
-          key: item.key,
-          level: 2,
-          kind: 'station',
-          marker: 'circle',
-          content: html`<span class="label"
-            ><span class="station-name">Client</span>${
-              item.basePath
-                ? html`<span class="muted">${item.basePath}</span>`
-                : nothing
-            }</span
-          >`,
-        });
+        // The map's dot stands for the client; the title names the base path
         return;
       case 'hook': {
         const title = `${hookNames[item.point]} Flow Hook`;
@@ -695,7 +673,6 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           expanded: open(item.key),
           activate: toggle(item.key),
           content: html`<span class="label"
-            ><vscode-icon name="plug" class="hook-mark"></vscode-icon
             ><span class="station-name">${title}</span></span
           >`,
         });
@@ -776,7 +753,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           key: item.key,
           level: 2,
           kind: 'station',
-          marker: 'diamond',
+          marker: 'circle',
           expanded: open(item.key),
           activate: toggle(item.key),
           tip: ['Route Rules', ...item.facts].join('\n'),
@@ -829,7 +806,6 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
       expanded,
       activate: toggle(key),
       content: html`<span class="label band-title"
-        ><vscode-icon name=${bandIcons[band.kind]}></vscode-icon
         >${bandTitles[band.kind]}${
           band.facts.length
             ? html`<span class="sr-only">. ${band.facts.join(' ')}</span>`
