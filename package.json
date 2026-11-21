@@ -132,7 +132,7 @@
         },
         {
           "command": "apigeeTools.unpin",
-          "when": "webviewId == 'apigeeTools.dashboard' && webviewSection == 'node' && viewPinned",
+          "when": "webviewId == 'apigeeTools.dashboard' && webviewSection == 'node' && nodePinned",
           "group": "pin@2"
         }
       ]

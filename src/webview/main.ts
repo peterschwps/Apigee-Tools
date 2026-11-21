@@ -276,7 +276,6 @@ class ApigeeDashboard extends LitElement {
           webviewSection: 'node',
           node: id,
           nodePinned: Boolean(node.querySelector('.pin')),
-          viewPinned: Boolean(this.renderRoot.querySelector('.graph .pin')),
           preventDefaultContextMenuItems: true,
         });
       } else {

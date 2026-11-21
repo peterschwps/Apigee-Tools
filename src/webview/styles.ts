@@ -738,6 +738,11 @@ export const styles = css`
     background: var(--vscode-list-hoverBackground);
   }
 
+  /* The name stands out under the pointer */
+  .node:hover .node-name {
+    font-weight: 600;
+  }
+
   .node:focus-visible {
     outline: 1px solid var(--vscode-focusBorder);
     outline-offset: -1px;

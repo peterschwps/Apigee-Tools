@@ -262,7 +262,7 @@ export function buildGraph(
       data.products &&
       !incoming.has(node.id)
     ) {
-      node.findings.push({ tone: 'info', text: 'In no API product' });
+      node.findings.push({ tone: 'info', text: 'No linked API product' });
     }
   }
   return { nodes, edges, outgoing, incoming };

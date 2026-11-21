@@ -399,7 +399,7 @@ test('findings mark what nothing uses, what is missing, and what is off', () => 
   assert.deepEqual(findings('products:partner-gold'), [
     'info: Not available in eval',
   ]);
-  assert.deepEqual(findings('apis:admin'), ['info: In no API product']);
+  assert.deepEqual(findings('apis:admin'), ['info: No linked API product']);
   assert.deepEqual(findings('apis:partner-gateway'), ['warning: Not found']);
   assert.deepEqual(findings('owners:developer/d3'), ['error: Inactive']);
   assert.deepEqual(findings('apps:a3'), [

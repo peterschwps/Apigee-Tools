@@ -668,7 +668,7 @@ function keysView(
             : 'Never expires',
           products.length
             ? `API products: ${products.join(', ')}`
-            : 'For no API product',
+            : 'No linked API product',
         ].filter(Boolean);
         return html`<li data-tooltip=${more.join('\n')}>
           ${statusIcon(signs[state.sign])}<span>${state.name}</span>
