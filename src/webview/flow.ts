@@ -713,6 +713,13 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
         return;
       case 'hook': {
         const title = `${hookNames[item.point]} Flow Hook`;
+        // Its shared flow and revision follow the title, as a description
+        const flow = [
+          item.sharedFlow,
+          item.revision && `Revision ${item.revision}`,
+        ]
+          .filter(Boolean)
+          .join(' · ');
         rows.push({
           key: item.key,
           level: 2,
@@ -720,29 +727,20 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           marker: 'circle',
           expanded: open(item.key),
           activate: toggle(item.key),
+          tip: [title, flow, ...item.facts].join('\n'),
           content: html`<span class="label"
             ><span class="station-name ${item.steps?.length ? '' : 'muted'}"
               >${title}</span
-            ></span
-          >`,
-        });
-        if (!open(item.key)) return;
-        rows.push({
-          key: `${item.key}#flow`,
-          level: 3,
-          kind: 'part',
-          tip: [title, item.sharedFlow, ...item.facts].join('\n'),
-          content: html`<span class="label"
-            ><span>${item.sharedFlow}</span>${signView(item.sign)}${
-              item.revision
-                ? html`<span class="muted">· Revision ${item.revision}</span>`
+            >${signView(item.sign)}<span class="summary">${flow}</span>${
+              item.facts.length
+                ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
                 : nothing
-            }<span class="sr-only"
-              >. ${[title, ...item.facts].join('. ')}</span
-            ></span
+            }</span
           >`,
         });
-        if (item.steps?.length) steps(item.steps, 3, item.point);
+        if (open(item.key) && item.steps?.length) {
+          steps(item.steps, 3, item.point);
+        }
         return;
       }
       case 'endpoint': {

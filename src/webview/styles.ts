@@ -1333,7 +1333,7 @@ export const styles = css`
     white-space: nowrap;
   }
 
-  /* Conditions and destinations give way before the name */
+  /* Conditions, destinations, and descriptions give way before the name */
   .label .summary,
   .label .destination {
     flex: 0 100 auto;
