@@ -218,7 +218,7 @@ test('route rules are a first-match group, and the followed one draws the target
   const [map] = flowView(model).maps;
   assert.equal(
     itemText(find(map, 'p0/routes')),
-    'Routes [1 ratesFromCarrier (/rates) → No Target !none; 2 default → Target Endpoint *]',
+    'Routes [1 ratesFromCarrier (/rates) !none; 2 default → Target Endpoint *]',
   );
   // Following the null route leaves out the target endpoint and the backend
   const [nullRoute] = flowView(model, { routes: [0] }).maps;
@@ -237,7 +237,7 @@ test('route rules are a first-match group, and the followed one draws the target
   // The response repeats every case, since getRates has response steps
   assert.equal(
     band(map, 'response')?.[2],
-    'proxy default [Flows: 1 getRates (GET /rates) {AM-RatesResponse:AssignMessage if (responsecache.RC-ShippingRates.cachehit = false), RC-ShippingRates:ResponseCache}; 2 createShipment (POST /shipments); 3 trackShipment (GET /shipments/*/tracking); 4 unknownResource (Every other request)]',
+    'proxy default [Flows: 1 getRates (GET /rates) {AM-RatesResponse:AssignMessage if (responsecache.RC-ShippingRates.cachehit = false), RC-ShippingRates:ResponseCache}; 2 createShipment (POST /shipments); 3 trackShipment (GET /shipments/*/tracking); 4 unknownResource (No condition)]',
   );
   assert.deepEqual(find<FlowStep>(map, 'p0/request/proxy/flows/0/1').facts, [
     'On a cache hit, the rest of the request and the backend call are skipped',
@@ -250,13 +250,11 @@ test('route rules are a first-match group, and the followed one draws the target
 
 test('a null route without target endpoints ends the request at the route rules', async () => {
   const [map] = flowView(await shopModel('status')).maps;
-  assert.deepEqual(bands(map)[0].slice(-1), [
-    'Routes [1 noTarget → No Target * !none]',
-  ]);
+  assert.deepEqual(bands(map)[0].slice(-1), ['Routes [1 noTarget * !none]']);
   assert.equal(band(map, 'backend'), undefined);
   assert.deepEqual(band(map, 'response'), [
     'response',
-    'proxy default [Flows: 1 getHealth (GET /health) {AM-HealthResponse:AssignMessage}; 2 unknownResource (Every other request)]',
+    'proxy default [Flows: 1 getHealth (GET /health) {AM-HealthResponse:AssignMessage}; 2 unknownResource (No condition)]',
     'Client',
   ]);
 });
@@ -349,7 +347,7 @@ test('flows after a flow without a condition never run', () => {
   // The flow without a condition catches the rest
   assert.equal(
     bands(map)[0][2],
-    'proxy default [Flows: 1 a (request.verb = "GET") {A:AssignMessage}; 2 other (Every other request) {A:AssignMessage}; 3 late (request.verb = "PUT") !warning {A:AssignMessage}]',
+    'proxy default [Flows: 1 a (request.verb = "GET") {A:AssignMessage}; 2 other (No condition) {A:AssignMessage}; 3 late (request.verb = "PUT") !warning {A:AssignMessage}]',
   );
 });
 
@@ -372,16 +370,9 @@ test('fault rules count in evaluation order, and DefaultFaultRule follows them',
   ).maps;
   assert.deepEqual(band(map, 'error'), [
     'error',
-    'proxy default [FaultRules: 1 last (fault.name = "Two") {A:AssignMessage}; 2 catchAll (Every fault) {A:AssignMessage}; 3 first (fault.name = "One") !warning {A:AssignMessage}; DefaultFaultRule (Otherwise) !warning {A:AssignMessage}]',
-    'target default [FaultRules: 1 first (fault.name = "One") {A:AssignMessage}; 2 catchAll (Every fault) {A:AssignMessage}; 3 last (fault.name = "Two") !warning {A:AssignMessage}] [DefaultFaultRule: A:AssignMessage]',
+    'proxy default [FaultRules: 1 last (fault.name = "Two") {A:AssignMessage}; 2 catchAll (No condition) {A:AssignMessage}; 3 first (fault.name = "One") !warning {A:AssignMessage}; DefaultFaultRule (Otherwise) !warning {A:AssignMessage}]',
+    'target default [FaultRules: 1 first (fault.name = "One") {A:AssignMessage}; 2 catchAll (No condition) {A:AssignMessage}; 3 last (fault.name = "Two") !warning {A:AssignMessage}] [DefaultFaultRule: A:AssignMessage]',
   ]);
-  assert.deepEqual(
-    find<FlowItem & { kind: 'endpoint' }>(map, 'p0/error/target').segments[1]
-      .facts,
-    [
-      'Also runs after a fault rule, unless that rule raised a fault with RaiseFault',
-    ],
-  );
   // Apigee ignores the condition of a DefaultFaultRule, so it never shows
   assert.doesNotMatch(JSON.stringify(map), /ignored/);
 

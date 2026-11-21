@@ -1319,11 +1319,6 @@ export const styles = css`
     color: var(--at-text-muted);
   }
 
-  .fact {
-    margin-left: 26px;
-    color: var(--at-text-muted);
-  }
-
   .label .summary,
   .label .destination,
   .label.muted .case-name {

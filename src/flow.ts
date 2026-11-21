@@ -444,7 +444,6 @@ function proxyMap(
   const bands: FlowBand[] = [
     {
       kind: 'request',
-      facts: [],
       items: present(
         {
           kind: 'client',
@@ -466,12 +465,9 @@ function proxyMap(
       ),
     },
     // Between the request and the response: where the target endpoint calls
-    ...(backend
-      ? [{ kind: 'backend' as const, facts: [], items: [backend] }]
-      : []),
+    ...(backend ? [{ kind: 'backend' as const, items: [backend] }] : []),
     {
       kind: 'response',
-      facts: [],
       items: present(
         target &&
           endpointItem(
@@ -500,14 +496,10 @@ function proxyMap(
   if (events.eventFlow?.length) {
     bands.push({
       kind: 'event',
-      facts: [
-        "Runs for each server-sent event; Google's documentation does not say how it is ordered with the response flows.",
-      ],
       items: [
         card(events, events === proxy ? 'proxy' : 'target', `${key}/event`, [
           {
             label: 'EventFlow',
-            facts: [],
             steps: stepsView(scope, events.eventFlow, `${key}/event`, 'event'),
           },
         ]),
@@ -523,9 +515,6 @@ function proxyMap(
   if (errors.length) {
     bands.push({
       kind: 'error',
-      facts: [
-        'Only the fault rules of the endpoint where the error occurs run.',
-      ],
       items: errors,
     });
   }
@@ -533,12 +522,10 @@ function proxyMap(
   if (proxy.postClientFlow.length) {
     bands.push({
       kind: 'after',
-      facts: ['Runs after the response is sent, also after errors.'],
       items: [
         card(proxy, 'proxy', `${key}/after`, [
           {
             label: 'PostClientFlow',
-            facts: [],
             steps: stepsView(
               scope,
               proxy.postClientFlow,
@@ -574,14 +561,13 @@ function sharedFlowMap(
     bands: [
       {
         kind: 'steps',
-        facts: [],
         items: [
           {
             ...card(
               flow,
               'shared',
               's/steps',
-              steps.length ? [{ label: 'Steps', facts: [], steps }] : [],
+              steps.length ? [{ label: 'Steps', steps }] : [],
               changed
                 ? ['Its steps or conditions differ from the workspace']
                 : [],
@@ -607,17 +593,12 @@ function endpointItem(
   if (pre.length) {
     segments.push({
       label: 'PreFlow',
-      facts: [],
       steps: stepsView(scope, pre, `${key}/pre`, direction),
     });
   }
   if (endpoint.flows.some(flow => flow[direction].length)) {
     segments.push({
       label: 'Flows',
-      facts:
-        direction === 'response'
-          ? ['Apigee checks the conditions again for the response']
-          : [],
       cases: flowCases(scope, endpoint.flows, direction, `${key}/flows`),
     });
   }
@@ -625,7 +606,6 @@ function endpointItem(
   if (post.length) {
     segments.push({
       label: 'PostFlow',
-      facts: [],
       steps: stepsView(scope, post, `${key}/post`, direction),
     });
   }
@@ -705,7 +685,7 @@ function flowCases(
       at: flow.at,
       number: index + 1,
       name: match.nameOf(index),
-      summary: conditionSummary(flow.condition) ?? 'Every other request',
+      summary: conditionSummary(flow.condition) ?? 'No condition',
       condition: flow.condition,
       ...(shadowed && { sign: 'warning', muted: true }),
       facts: [shadowed, flow.description].filter(fact => fact !== undefined),
@@ -746,7 +726,7 @@ function routeItem(
       name: match.nameOf(position),
       summary: conditionSummary(route.condition),
       condition: route.condition,
-      destination,
+      ...(destination && { destination }),
       ...(shadowed ? { sign: 'warning', muted: true } : sign && { sign }),
       followed: position === followed,
       facts: shadowed ? [shadowed, ...facts] : facts,
@@ -773,7 +753,7 @@ function routeItem(
 function describeRoute(
   model: FlowModel,
   to: Destination,
-): { destination: string; sign?: FlowCase['sign']; facts: string[] } {
+): { destination?: string; sign?: FlowCase['sign']; facts: string[] } {
   if ('target' in to) {
     const destination = named('Target Endpoint', to.target);
     return targetNamed(model, to.target)
@@ -799,7 +779,6 @@ function describeRoute(
     };
   }
   return {
-    destination: 'No Target',
     sign: 'none',
     facts: [
       'A null route: nothing is forwarded, and the proxy endpoint builds the response',
@@ -926,7 +905,7 @@ function errorItem(
         at: rule.at,
         number: position + 1,
         name: match.nameOf(position),
-        summary: conditionSummary(rule.condition) ?? 'Every fault',
+        summary: conditionSummary(rule.condition) ?? 'No condition',
         condition: rule.condition,
         ...(shadowed && { sign: 'warning', muted: true }),
         facts: shadowed ? [shadowed] : [],
@@ -957,22 +936,12 @@ function errorItem(
     }
     segments.push({
       label: 'FaultRules',
-      facts: [
-        role === 'proxy'
-          ? 'Checked from the bottom up; the first match runs'
-          : 'Checked from the top down; the first match runs',
-      ],
       cases,
     });
   }
   if (fallback && (fallback.alwaysEnforce || !rules.length)) {
     segments.push({
       label: 'DefaultFaultRule',
-      facts: [
-        fallback.alwaysEnforce
-          ? 'Also runs after a fault rule, unless that rule raised a fault with RaiseFault'
-          : 'Runs for every fault, since there are no fault rules',
-      ],
       steps: stepsView(scope, fallback.steps, `${key}/default`, 'fault'),
     });
   }

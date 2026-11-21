@@ -178,7 +178,8 @@ function chipOf(map: FlowMap, band: FlowBand, item: FlowItem): Chip {
         label: 'Routes',
         tip: [
           'Route Rules',
-          followed && `${followed.name} → ${followed.destination}`,
+          followed &&
+            [followed.name, followed.destination].filter(Boolean).join(' → '),
         ]
           .filter(Boolean)
           .join('\n'),
@@ -242,7 +243,7 @@ function overview(
           band: bandKey(map, request),
           label: 'No Target',
           tip: [
-            `${followed.name} → ${followed.destination}`,
+            [followed.name, followed.destination].filter(Boolean).join(' → '),
             ...followed.facts,
           ].join('\n'),
           empty: true,
@@ -486,7 +487,7 @@ function moveInMap(event: KeyboardEvent): void {
 type Row = {
   key: string;
   level: number;
-  kind: 'band' | 'station' | 'part' | 'step' | 'note';
+  kind: 'band' | 'station' | 'part' | 'step';
   /** Absent for rows that cannot collapse. */
   expanded?: boolean;
   content: TemplateResult;
@@ -511,10 +512,9 @@ function tree(
 ): TemplateResult {
   const rows = rowsOf(map, state, actions);
   const group = `${map.key}#list`;
-  const focusable = rows.filter(row => row.kind !== 'note');
-  const entry = focusable.some(row => row.key === state.roving[group])
+  const entry = rows.some(row => row.key === state.roving[group])
     ? state.roving[group]
-    : focusable[0]?.key;
+    : rows[0]?.key;
   return html`<div
     class="tree"
     role="tree"
@@ -550,9 +550,6 @@ function rowView(
   ]
     .filter(Boolean)
     .join(' ');
-  if (row.kind === 'note') {
-    return html`<div class=${classes} role="none">${row.content}</div>`;
-  }
   return html`<div
     class=${classes}
     role="treeitem"
@@ -595,13 +592,6 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
   const rows: Row[] = [];
   const open = (key: string) => !state.collapsed.has(key);
   const toggle = (key: string) => () => actions.toggle(key);
-  const note = (text: string, level: number) =>
-    rows.push({
-      key: `#note${rows.length}`,
-      level,
-      kind: 'note',
-      content: html`<span class="fact">${text}</span>`,
-    });
 
   const steps = (
     list: readonly FlowStep[],
@@ -731,7 +721,9 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           expanded: open(item.key),
           activate: toggle(item.key),
           content: html`<span class="label"
-            ><span class="station-name">${title}</span></span
+            ><span class="station-name ${item.steps?.length ? '' : 'muted'}"
+              >${title}</span
+            ></span
           >`,
         });
         if (!open(item.key)) return;
@@ -756,21 +748,21 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
       case 'endpoint': {
         const name = named(roleTitles[item.role], item.name);
         const parts = item.segments.length > 0;
+        const extra = [...(parts ? [] : ['No steps']), ...item.facts];
         rows.push({
           key: item.key,
           level: 2,
           kind: 'station',
           marker: 'circle',
           ...(parts && { expanded: open(item.key) }),
-          tip: [name, ...item.facts].join('\n'),
+          tip: [name, ...extra].join('\n'),
           activate: () => actions.open(item.at, undefined, item.key),
           content: html`<span class="label"
-            ><span class="station-name link">${name}</span
+            ><span class="station-name link ${parts ? '' : 'muted'}"
+              >${name}</span
             >${signView(item.sign)}${
-              parts ? nothing : html`<span class="muted">no steps</span>`
-            }${
-              item.facts.length
-                ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
+              extra.length
+                ? html`<span class="sr-only">. ${extra.join('. ')}</span>`
                 : nothing
             }</span
           >`,
@@ -786,21 +778,10 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
             expanded: open(key),
             activate: toggle(key),
             content: html`<span class="label segment-label"
-              >${segment.label}${
-                'cases' in segment && segment.label === 'Flows'
-                  ? html`<span class="muted">· the first match runs</span>`
-                  : nothing
-              }${
-                segment.facts.length
-                  ? html`<span class="sr-only"
-                      >. ${segment.facts.join(' ')}</span
-                    >`
-                  : nothing
-              }</span
+              >${segment.label}</span
             >`,
           });
           if (!open(key)) return;
-          for (const fact of segment.facts) note(fact, 4);
           if ('cases' in segment) cases(segment.cases, 4);
           else steps(segment.steps, 4);
         });
@@ -816,8 +797,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           activate: toggle(item.key),
           tip: ['Route Rules', ...item.facts].join('\n'),
           content: html`<span class="label"
-            ><span class="station-name">Route Rules</span
-            ><span class="muted">· the first match runs</span>${signView(
+            ><span class="station-name">Route Rules</span>${signView(
               item.sign,
             )}${
               item.facts.length
@@ -827,7 +807,6 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           >`,
         });
         if (!open(item.key)) return;
-        for (const fact of item.facts) note(fact, 3);
         cases(item.cases, 3, item.endpoint);
         return;
       case 'backend':
@@ -864,15 +843,10 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
       expanded,
       activate: toggle(key),
       content: html`<span class="label band-title"
-        >${bandTitles[band.kind]}${
-          band.facts.length
-            ? html`<span class="sr-only">. ${band.facts.join(' ')}</span>`
-            : nothing
-        }</span
+        >${bandTitles[band.kind]}</span
       >`,
     });
     if (!expanded) continue;
-    for (const fact of band.facts) note(fact, 2);
     const start = rows.length;
     band.items.forEach(station);
     // The stations of a band hang on one line, from the first to the last

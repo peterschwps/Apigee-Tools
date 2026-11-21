@@ -196,7 +196,7 @@ export type FlowCase = {
   /** What it matches, in short, such as "POST /orders". */
   summary?: string;
   condition?: string;
-  /** Where a route rule sends the request. */
+  /** Where a route rule sends the request; absent for a null route. */
   destination?: string;
   sign?: FlowSign;
   muted?: boolean;
@@ -210,7 +210,6 @@ export type FlowCase = {
 export type FlowSegment = {
   /** Apigee's element name, such as PreFlow or DefaultFaultRule. */
   label: string;
-  facts: string[];
 } & ({ steps: FlowStep[] } | { cases: FlowCase[] });
 
 /** A stage of a band, in the order in which Apigee runs it. */
@@ -262,8 +261,6 @@ export type FlowItem =
 export type FlowBand = {
   kind:
     'request' | 'backend' | 'response' | 'event' | 'error' | 'after' | 'steps';
-  /** Remarks under the band's heading. */
-  facts: string[];
   items: FlowItem[];
 };
 
