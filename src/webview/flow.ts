@@ -615,19 +615,24 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
         tip,
         ...(branch && { branch }),
         activate: () => actions.open(step.at, hook, step.key),
+        // A condition is a second block of the step's box, below its name
         content: html`<span class="step-box"
-          ><span
-            class="pill ${step.condition ? 'conditional' : ''} ${step.muted ? 'muted' : ''}"
-            >${signView(step.sign)}<span class="pill-name">${step.name}</span>${
-              step.type ? html`<span class="type">${step.type}</span>` : nothing
+          ><span class="pill ${step.muted ? 'muted' : ''}"
+            ><span class="pill-head"
+              >${signView(step.sign)}<span class="pill-name">${step.name}</span
+              >${
+                step.type
+                  ? html`<span class="type">${step.type}</span>`
+                  : nothing
+              }</span
+            >${
+              step.condition
+                ? html`<span class="condition" aria-hidden="true"
+                    >if ${step.condition}</span
+                  >`
+                : nothing
             }</span
           >${
-            step.condition
-              ? html`<span class="condition" aria-hidden="true"
-                  >if ${step.condition}</span
-                >`
-              : nothing
-          }${
             step.condition || step.facts.length
               ? html`<span class="sr-only"
                   >.

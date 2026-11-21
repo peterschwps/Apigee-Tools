@@ -1343,7 +1343,7 @@ export const styles = css`
     white-space: nowrap;
   }
 
-  /* A step: its policy as a pill, with its condition below */
+  /* A step: its policy in a box, with its condition in a block below */
   .step-box {
     display: grid;
     justify-items: start;
@@ -1352,21 +1352,22 @@ export const styles = css`
   }
 
   .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    display: inline-grid;
     min-width: 0;
     max-width: 100%;
-    height: 24px;
-    padding: 0 6px;
     border: 1px solid var(--at-border);
     border-radius: 4px;
     background: var(--vscode-editor-background);
     white-space: nowrap;
   }
 
-  .pill.conditional {
-    border-style: dashed;
+  .pill-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
   }
 
   .pill.muted .pill-name {
@@ -1395,12 +1396,12 @@ export const styles = css`
   }
 
   .condition {
-    max-width: 100%;
-    padding: 0 0 4px 7px;
+    min-width: 0;
+    padding: 3px 6px 4px;
     overflow: hidden;
+    border-top: 1px solid var(--at-border);
     color: var(--at-text-muted);
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   /* The stations of a band hang on a line: shapes, never read aloud */
