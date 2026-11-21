@@ -169,6 +169,8 @@ export type HostMessage =
   | { type: 'snapshot'; snapshot: Snapshot }
   // Apart from the snapshot, which is posted often, since it can be large
   | { type: 'relationships'; relationships: Relationships }
+  // Pin or Unpin from the context menu of a node in the graph; empty unpins
+  | { type: 'pin'; node: string }
   // The answer to a key search: where the key is, if any app has it
   | { type: 'keyOwner'; found?: KeyRef };
 

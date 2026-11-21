@@ -759,8 +759,9 @@ export const styles = css`
     flex: none;
   }
 
-  /* vscode-icon sets the icon color itself; the flow hook mark stays muted */
-  .node .hook {
+  /* vscode-icon sets the icon color itself; flow hook and pin marks stay muted */
+  .node .hook,
+  .node .pin {
     color: var(--at-text-muted);
   }
 

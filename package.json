@@ -101,8 +101,42 @@
         "title": "Open Dashboard",
         "category": "Apigee Tools",
         "icon": "$(dashboard)"
+      },
+      {
+        "command": "apigeeTools.pin",
+        "title": "Pin",
+        "category": "Apigee Tools"
+      },
+      {
+        "command": "apigeeTools.unpin",
+        "title": "Unpin",
+        "category": "Apigee Tools"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "apigeeTools.pin",
+          "when": "false"
+        },
+        {
+          "command": "apigeeTools.unpin",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "apigeeTools.pin",
+          "when": "webviewId == 'apigeeTools.dashboard' && webviewSection == 'node' && !nodePinned",
+          "group": "pin@1"
+        },
+        {
+          "command": "apigeeTools.unpin",
+          "when": "webviewId == 'apigeeTools.dashboard' && webviewSection == 'node' && viewPinned",
+          "group": "pin@2"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "npm run typecheck && npm run build:extension && npm run build:webview && tsx scripts/notices.ts",

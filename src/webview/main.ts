@@ -41,6 +41,8 @@ type ViewState = DeploymentView & {
   dismissed: string[];
   /** The node chosen in the Relationships tab, or empty. */
   node: string;
+  /** The node whose chain stays shown in the Relationships tab, or empty. */
+  pinned: string;
 };
 
 // The index of the Relationships tab
@@ -119,7 +121,9 @@ class ApigeeDashboard extends LitElement {
       this.setView({ tab: 1, kind: row.kind, detail: row.name });
       send({ type: 'details', kind: row.kind, name: row.name });
     },
-    openRelationships: node => this.setView({ tab: relationshipsIndex, node }),
+    // Shows the chain of the node, even where another one was pinned
+    openRelationships: node =>
+      this.setView({ tab: relationshipsIndex, node, pinned: '' }),
   };
 
   private readonly relationshipActions: RelationshipActions = {
@@ -136,6 +140,24 @@ class ApigeeDashboard extends LitElement {
       }
     },
     openDetails: row => this.actions.openDetails(row),
+    // Pinning chooses the node too; releasing the pin keeps the choice, and
+    // the focus on it, or else on the node that was pinned
+    pin: node => {
+      if (!node) {
+        const kept = this.view.node || this.view.pinned;
+        if (kept) this.focusNext = `[data-id="${CSS.escape(kept)}"]`;
+      }
+      this.setView(node ? { pinned: node, node } : { pinned: '' });
+    },
+    showAll: () => {
+      this.query = '';
+      this.missingKey = false;
+      // Focus stays in the graph: on the chosen node, or else the pinned one
+      if (!this.view.node && this.view.pinned) {
+        this.focusNext = `[data-id="${CSS.escape(this.view.pinned)}"]`;
+      }
+      this.setView({ node: '', pinned: '' });
+    },
   };
 
   /** Hides a note; keyboard focus moves on to Refresh. */
@@ -188,11 +210,15 @@ class ApigeeDashboard extends LitElement {
       status: Array.isArray(saved?.status) ? saved.status : [],
       comparison: Array.isArray(saved?.comparison) ? saved.comparison : [],
       node: typeof saved?.node === 'string' ? saved.node : '',
+      pinned: typeof saved?.pinned === 'string' ? saved.pinned : '',
     };
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       const message = event.data;
       if (message?.type === 'relationships') {
         this.relationships = message.relationships;
+      } else if (message?.type === 'pin') {
+        // Pin or Unpin, chosen in the context menu of a node
+        this.relationshipActions.pin(message.node);
       } else if (message?.type === 'keyOwner') {
         // The app with the key; its details list the key
         if (message.found) {
@@ -233,6 +259,30 @@ class ApigeeDashboard extends LitElement {
     this.syncTooltip = tooltips(this, () =>
       this.renderRoot.querySelector('.tooltip'),
     );
+    // VS Code builds the context menu from data-vscode-context of the element
+    // that the event targets, which outside the shadow root is this one: a
+    // node of the graph offers Pin and Unpin, anything else the usual menu.
+    // The pinned node is always drawn, with its pin, while its pin holds.
+    this.addEventListener('contextmenu', event => {
+      const node = event
+        .composedPath()
+        .find(
+          (item): item is HTMLElement =>
+            item instanceof HTMLElement && item.matches('.graph [data-id]'),
+        );
+      const id = node?.dataset.id;
+      if (id) {
+        this.dataset.vscodeContext = JSON.stringify({
+          webviewSection: 'node',
+          node: id,
+          nodePinned: Boolean(node.querySelector('.pin')),
+          viewPinned: Boolean(this.renderRoot.querySelector('.graph .pin')),
+          preventDefaultContextMenuItems: true,
+        });
+      } else {
+        delete this.dataset.vscodeContext;
+      }
+    });
   }
 
   /**
@@ -255,9 +305,11 @@ class ApigeeDashboard extends LitElement {
       this.focusNext = undefined;
       // Nested tabs show their panels only after updates of their own
       await new Promise(requestAnimationFrame);
-      // A graph that is still loading has no nodes yet; its tab takes it
+      // A node outside a pinned chain is not drawn, so its details take the
+      // focus; a graph that is still loading has no nodes yet, so its tab
       (
         this.renderRoot.querySelector<HTMLElement>(selector) ??
+        this.renderRoot.querySelector<HTMLElement>('.side-head h3') ??
         this.renderRoot.querySelector<HTMLElement>('vscode-tab-header[active]')
       )?.focus();
     }
@@ -304,7 +356,12 @@ class ApigeeDashboard extends LitElement {
                       id="organization"
                       @change=${(event: Event) => {
                         // Details belong to the organization they came from
-                        this.view = { ...this.view, detail: '', node: '' };
+                        this.view = {
+                          ...this.view,
+                          detail: '',
+                          node: '',
+                          pinned: '',
+                        };
                         vscode.setState(this.view);
                         this.query = '';
                         send({
@@ -479,6 +536,7 @@ class ApigeeDashboard extends LitElement {
                   {
                     environment: this.effectiveView(snapshot).environment,
                     node: this.view.node,
+                    pinned: this.view.pinned,
                     query: this.query,
                     missingKey: this.missingKey,
                     roving: this.roving,

@@ -29,11 +29,13 @@ import {
   type Layout,
 } from './graph';
 
-/** The state of the tab; only `node` is kept with the view. */
+/** The state of the tab; only `node` and `pinned` are kept with the view. */
 export type RelationshipState = {
   environment: string;
   /** The chosen node, or empty. */
   node: string;
+  /** The node whose chain stays shown while others are chosen, or empty. */
+  pinned: string;
   /** The search text, never kept: it may hold a full API key. */
   query: string;
   /** Whether the host found no app with the key searched for. */
@@ -44,6 +46,10 @@ export type RelationshipState = {
 
 export type RelationshipActions = {
   select(node: string): void;
+  /** Keeps the chain of a node shown, or with an empty node, no longer. */
+  pin(node: string): void;
+  /** Clears the search, the choice, and the pin. */
+  showAll(): void;
   setQuery(query: string): void;
   findKey(key: string): void;
   copyKey(app: string, key: number): void;
@@ -107,6 +113,11 @@ export function relationshipsTab(
   const total = prepared.graph.nodes.size;
   const shown = prepared.shown?.size ?? total;
   const query = state.query.trim();
+  // A pin from another organization or a node since deleted does nothing;
+  // without a choice of its own, a pinned chain shows its node's details
+  const nodes = prepared.graph.nodes;
+  const pinned = nodes.has(state.pinned) ? state.pinned : '';
+  const chosen = nodes.has(state.node) ? state.node : query ? '' : pinned;
   return html`
     <div class="page">
       <div class="toolbar">
@@ -131,13 +142,10 @@ export function relationshipsTab(
           <vscode-icon slot="content-before" name="search"></vscode-icon>
         </vscode-textfield>
         ${
-          state.node || query
+          state.node || pinned || query
             ? html`<button
                 class="icon-button labeled show-all"
-                @click=${() => {
-                  actions.setQuery('');
-                  actions.select('');
-                }}
+                @click=${() => actions.showAll()}
               >
                 <vscode-icon name="clear-all"></vscode-icon>Show All
               </button>`
@@ -161,11 +169,11 @@ export function relationshipsTab(
       <div class="relations">
         <section class="card graph-card">
           <div class="graph-scroll">
-            ${graphView(prepared, state, actions, live)}
+            ${graphView(prepared, state, { chosen, pinned }, actions, live)}
           </div>
         </section>
         <aside class="card side" aria-label="Details">
-          ${side(prepared, state, actions, live)}
+          ${side(prepared, state, chosen, actions, live)}
         </aside>
       </div>
     </div>
@@ -174,7 +182,8 @@ export function relationshipsTab(
 
 /**
  * Builds the graph and its layout, again only when the data, the
- * environment's revisions, the choice, or the search changed.
+ * environment's revisions, the choice, the pin, or the search changed. A
+ * pinned chain stays shown, whatever is chosen or searched.
  */
 function prepare(
   data: Relationships,
@@ -187,7 +196,14 @@ function prepare(
         `${row.kind}/${row.name}@${row.cells[state.environment]?.revision ?? ''}`,
     )
     .join(',');
-  const key = [data, state.environment, revisions, state.node, state.query];
+  const key = [
+    data,
+    state.environment,
+    revisions,
+    state.node,
+    state.query,
+    state.pinned,
+  ];
   if (cache?.key.every((part, index) => part === key[index])) {
     return cache.value;
   }
@@ -199,7 +215,12 @@ function prepare(
       ? cache.value.graph
       : buildGraph(data, rows, state.environment, Date.now());
   const matches = search(graph, state.query);
-  const roots = graph.nodes.has(state.node) ? [state.node] : matches;
+  const chosen = graph.nodes.has(state.node) ? [state.node] : [];
+  const roots = graph.nodes.has(state.pinned)
+    ? [state.pinned]
+    : chosen.length
+      ? chosen
+      : matches;
   const shown = roots.length
     ? lineage(graph, roots)
     : state.query.trim()
@@ -212,7 +233,8 @@ function prepare(
     layout: layout(graph, shown, {
       limit,
       hooks: roots.length > 0,
-      first: new Set(roots),
+      // The node chosen in a pinned chain stays in view too
+      first: new Set([...roots, ...chosen]),
     }),
   };
   cache = { key, value };
@@ -222,6 +244,7 @@ function prepare(
 function graphView(
   prepared: Prepared,
   state: RelationshipState,
+  { chosen, pinned }: { chosen: string; pinned: string },
   actions: RelationshipActions,
   live: (node: GraphNode) => { sign: Sign; label: string },
 ): TemplateResult {
@@ -254,14 +277,12 @@ function graphView(
             <ul>
               ${ids.map(id => {
                 const node = graph.nodes.get(id)!;
-                return nodeItem(
-                  node,
-                  live(node),
-                  id === entry,
-                  id === state.node,
-                  matches.has(id),
-                  actions,
-                );
+                return nodeItem(node, live(node), actions, {
+                  tabbable: id === entry,
+                  chosen: id === chosen,
+                  pinned: id === pinned,
+                  match: matches.has(id),
+                });
               })}
               ${
                 hidden
@@ -293,18 +314,27 @@ function graphView(
   `;
 }
 
+/**
+ * A node of the graph. Its context menu pins its chain: the dashboard tells
+ * VS Code which node it is when the menu opens.
+ */
 function nodeItem(
   node: GraphNode,
   state: { sign: Sign; label: string },
-  tabbable: boolean,
-  chosen: boolean,
-  match: boolean,
   actions: RelationshipActions,
+  {
+    tabbable,
+    chosen,
+    pinned,
+    match,
+  }: { tabbable: boolean; chosen: boolean; pinned: boolean; match: boolean },
 ): TemplateResult {
   const hooks = node.hooks?.length
     ? `Flow hook: ${node.hooks.map(point => hookNames[point]).join(', ')}`
     : '';
-  const description = [state.label, hooks].filter(Boolean);
+  const description = [state.label, hooks, pinned ? 'Pinned' : ''].filter(
+    Boolean,
+  );
   return html`
     <li>
       <button
@@ -321,6 +351,10 @@ function nodeItem(
           hooks
             ? html`<vscode-icon name="plug" class="hook"></vscode-icon>`
             : nothing
+        }${
+          pinned
+            ? html`<vscode-icon name="pinned" class="pin"></vscode-icon>`
+            : nothing
         }<span class="sr-only">${description.join(', ')}</span>
       </button>
     </li>
@@ -330,7 +364,7 @@ function nodeItem(
 /**
  * Moves the focus with the arrow keys: up and down within a column, left and
  * right to a connected node of the next column, or else the same row there.
- * Escape shows all nodes again.
+ * Escape clears the choice, which shows all nodes again unless pinned.
  */
 function moveInGraph(
   event: KeyboardEvent,
@@ -389,12 +423,13 @@ function moveInGraph(
 function side(
   prepared: Prepared,
   state: RelationshipState,
+  chosen: string,
   actions: RelationshipActions,
   live: (node: GraphNode) => { sign: Sign; label: string },
 ): TemplateResult {
   const { graph } = prepared;
-  const chosen = graph.nodes.get(state.node);
-  if (chosen) return details(chosen, prepared, state, actions, live);
+  const node = graph.nodes.get(chosen);
+  if (node) return details(node, graph, state, actions, live);
   const link = (node: GraphNode, text = node.name) => html`
     <button class="link" @click=${() => actions.select(node.id)}>
       ${text}
@@ -464,12 +499,11 @@ const singular: Readonly<Record<Column, string>> = {
 
 function details(
   node: GraphNode,
-  prepared: Prepared,
+  graph: Graph,
   state: RelationshipState,
   actions: RelationshipActions,
   live: (node: GraphNode) => { sign: Sign; label: string },
 ): TemplateResult {
-  const { graph } = prepared;
   const current = live(node);
   const link = (other: GraphNode, text = other.name) => html`
     <button class="link" @click=${() => actions.select(other.id)}>
@@ -499,8 +533,10 @@ function details(
     );
   }
 
-  // The findings along the chain explain why calls may fail
-  const chain = [...(prepared.shown ?? [])]
+  // The findings along its chain explain why calls may fail; a pinned chain
+  // may be another one
+  const lineal = [...lineage(graph, [node.id])];
+  const chain = lineal
     .map(id => graph.nodes.get(id)!)
     .flatMap(other =>
       other.findings
@@ -517,9 +553,7 @@ function details(
       column =>
         [
           column,
-          [...(prepared.shown ?? [])].filter(
-            id => graph.nodes.get(id)?.column === column,
-          ).length,
+          lineal.filter(id => graph.nodes.get(id)?.column === column).length,
         ] as const,
     )
     .filter(([, count]) => count);
@@ -527,7 +561,7 @@ function details(
   return html`
     <div class="side-head">
       ${statusIcon(current.sign)}
-      <h3>${node.name}</h3>
+      <h3 tabindex="-1">${node.name}</h3>
     </div>
     <p class="muted">${kind} · ${current.label}</p>
     <dl class="facts">${facts(node, state)}</dl>

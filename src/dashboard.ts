@@ -172,6 +172,23 @@ export function registerDashboard(
     },
   );
 
+  // Pin and Unpin in the context menu of a node in the Relationships graph.
+  // The menu passes the context that the webview set; the webview checks the
+  // node, which is its own.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'apigeeTools.pin',
+      (target?: { node?: unknown }) => {
+        if (typeof target?.node === 'string') {
+          send({ type: 'pin', node: target.node });
+        }
+      },
+    ),
+    vscode.commands.registerCommand('apigeeTools.unpin', () =>
+      send({ type: 'pin', node: '' }),
+    ),
+  );
+
   // While developing, esbuild rebuilds the webview on every change, and the
   // dashboard reloads at once and keeps its data; esbuild stops with this host,
   // whose end closes its standard input
