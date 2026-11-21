@@ -3,7 +3,7 @@
 // the chosen node beside them.
 import type { VscodeTextfield } from '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import { html, nothing, svg, type TemplateResult } from 'lit';
-import type { FlowHookPoint, Relationships, Row } from '../protocol';
+import type { App, FlowHookPoint, Relationships, Row } from '../protocol';
 import {
   checking,
   signs,
@@ -25,6 +25,7 @@ import {
   type Finding,
   type Graph,
   type GraphNode,
+  type KeyState,
   type Layout,
 } from './graph';
 
@@ -63,7 +64,6 @@ const titles: Readonly<Record<Column, string>> = {
   // App groups own apps like developers and show among them
   owners: 'Developers',
   apps: 'Apps',
-  keys: 'API Keys',
   products: 'API Products',
   apis: 'API Proxies',
   sharedflows: 'Shared Flows',
@@ -457,7 +457,6 @@ function side(
 const singular: Readonly<Record<Column, string>> = {
   owners: 'Developer',
   apps: 'App',
-  keys: 'API Key',
   products: 'API Product',
   apis: 'API Proxy',
   sharedflows: 'Shared Flow',
@@ -505,7 +504,10 @@ function details(
     .map(id => graph.nodes.get(id)!)
     .flatMap(other =>
       other.findings
-        .filter(finding => other === node || finding.tone !== 'info')
+        // The node's own keys show their state in its list of keys
+        .filter(finding =>
+          other === node ? finding.key === undefined : finding.tone !== 'info',
+        )
         .map(finding => ({ node: other, finding })),
     )
     .sort((a, b) => rank(a.finding) - rank(b.finding));
@@ -530,13 +532,8 @@ function details(
     <p class="muted">${kind} · ${current.label}</p>
     <dl class="facts">${facts(node, state)}</dl>
     ${
-      node.key
-        ? html`<button
-            class="icon-button labeled"
-            @click=${() => actions.copyKey(node.app!.id, node.key!.index)}
-          >
-            <vscode-icon name="copy"></vscode-icon>Copy API Key
-          </button>`
+      node.app && node.keys?.length
+        ? keysView(node.app, node.keys, actions)
         : nothing
     }
     ${
@@ -585,7 +582,7 @@ function details(
                       ${statusIcon(toneSign(finding.tone))}
                       ${
                         other === node
-                          ? finding.text
+                          ? html`<span class="fill">${finding.text}</span>`
                           : html`${link(other)}<span class="muted"
                                 >${finding.text}</span
                               >`
@@ -606,6 +603,58 @@ function details(
           </p>`
         : nothing
     }
+  `;
+}
+
+/**
+ * The API keys of an app, by their last four characters, each with its state
+ * and a button that copies the full key, which only the extension knows.
+ */
+function keysView(
+  app: App,
+  keys: readonly KeyState[],
+  actions: RelationshipActions,
+): TemplateResult {
+  return html`
+    <h4 class="group-title">API Keys</h4>
+    <ul class="relation-list keys">
+      ${app.keys.map((key, index) => {
+        const state = keys[index];
+        const products = key.products.map(product =>
+          product.status === 'pending'
+            ? `${product.name} (waiting for approval)`
+            : product.status === 'revoked'
+              ? `${product.name} (revoked)`
+              : product.name,
+        );
+        const more = [
+          key.issuedAt ? `Issued on ${date(key.issuedAt)}` : '',
+          key.expiresAt
+            ? `${key.expiresAt > Date.now() ? 'Expires' : 'Expired'} on ${date(key.expiresAt)}`
+            : 'Never expires',
+          products.length
+            ? `API products: ${products.join(', ')}`
+            : 'For no API product',
+        ].filter(Boolean);
+        return html`<li data-tooltip=${more.join('\n')}>
+          ${statusIcon(signs[state.sign])}<span>${state.name}</span>
+          ${
+            key.hint
+              ? html`<button
+                  class="icon-button"
+                  data-tooltip="Copy API Key"
+                  aria-label=${`Copy API Key ${state.name}`}
+                  @click=${() => actions.copyKey(app.id, index)}
+                >
+                  <vscode-icon name="copy"></vscode-icon>
+                </button>`
+              : nothing
+          }
+          <span class="muted">${state.label}</span>
+          <span class="sr-only">${more.join('. ')}</span>
+        </li>`;
+      })}
+    </ul>
   `;
 }
 
@@ -637,17 +686,9 @@ function facts(node: GraphNode, state: RelationshipState): TemplateResult[] {
       ...attributes(node.owner.attributes),
     ];
   }
-  if (node.key && node.app) {
-    const key = node.key.value;
-    return [
-      ...fact('Issued', date(key.issuedAt)),
-      ...fact('Expires', key.expiresAt ? date(key.expiresAt) : 'Never'),
-    ];
-  }
   if (node.app) {
     return [
       ...fact('Created', date(node.app.createdAt)),
-      ...fact('Keys', String(node.app.keys.length)),
       ...attributes(node.app.attributes),
     ];
   }
@@ -699,9 +740,10 @@ function liveState(
   return { sign: status, label: `${status.label} · Revision ${cell.revision}` };
 }
 
+/** What an edge between an app and an API product says, if anything. */
 function approval(kind: string | undefined): string | undefined {
   if (kind === 'pending') return 'Waiting for approval';
-  if (kind === 'revoked') return 'Revoked';
+  if (kind === 'revoked') return 'No working API key';
   return undefined;
 }
 

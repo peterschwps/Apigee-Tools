@@ -18,7 +18,7 @@ Run **Apigee Tools: Open Dashboard** from the Command Palette, or click **Apigee
 
 - **Overview:** key figures and the failed deployments and warnings with their messages.
 - **Deployments:** the API proxies and the shared flows of the environment chosen at the top, each in a tab, with status, revision, and whether each deployment is the same as in your workspace. Filter by name, status, or workspace; where a deployment differs, its icon opens the differing files side by side. A name opens its details: the deployments in every environment with their base paths, and their errors and warnings in full.
-- **Relationships:** a graph of how developers, apps, API keys, API products, proxies, and shared flows depend on each other in the environment. Choose a node to see what it uses, who uses it, and what keeps it from working; search by attribute, or find the app of an API key.
+- **Relationships:** a graph of how developers, apps, API products, proxies, and shared flows depend on each other in the environment. Choose a node to see what it uses, who uses it, and what keeps it from working; search by attribute, or find the app of an API key.
 
 The dashboard needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), signed in with `gcloud auth login`, and a role that can read Apigee, such as Apigee Read-only Admin (`roles/apigee.readOnlyAdmin`). The access token stays in memory and is sent only to the Apigee API, and API keys show only their last four characters. Data loads when you open or refresh the dashboard, for Relationships once its tab is open, never in the background, and nothing is deployed or changed. See the [dashboard section](docs/index.md#dashboard) for details.
 

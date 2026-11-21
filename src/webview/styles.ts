@@ -669,15 +669,15 @@ export const styles = css`
     overflow-x: auto;
   }
 
-  /* Six columns with gaps for the edges; the gaps match the graph module */
+  /* Five columns with gaps for the edges; the gaps match the graph module */
   .graph {
     display: grid;
-    grid-template-columns: repeat(5, minmax(110px, 1fr) 40px) minmax(
+    grid-template-columns: repeat(4, minmax(110px, 1fr) 40px) minmax(
         110px,
         1fr
       );
     align-items: start;
-    min-width: 860px;
+    min-width: 710px;
   }
 
   .column-title {
@@ -845,6 +845,13 @@ export const styles = css`
     flex-wrap: wrap;
     align-items: center;
     gap: 4px 6px;
+  }
+
+  /* Texts after a name stay beside it while there is room, and wrap there */
+  .relation-list li > .muted,
+  .relation-list .fill {
+    flex: 1 1 10em;
+    min-width: 0;
   }
 
   .side .icon-button.labeled {

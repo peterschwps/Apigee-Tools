@@ -1,4 +1,4 @@
-// The relationships of an organization as a graph of six columns, from the
+// The relationships of an organization as a graph of five columns, from the
 // owners of apps to the shared flows that proxies call, and its layout. Pure:
 // no Lit and no DOM, so that node tests cover it.
 import type {
@@ -15,7 +15,6 @@ import type {
 export const columns = [
   'owners',
   'apps',
-  'keys',
   'products',
   'apis',
   'sharedflows',
@@ -25,11 +24,27 @@ export type Column = (typeof columns)[number];
 /** A sign of `signs` in deployments.ts. */
 export type SignKey = 'good' | 'warning' | 'error' | 'unknown' | 'none';
 
-/** Something worth knowing about a node, such as a revoked key. */
-export type Finding = { tone: 'error' | 'warning' | 'info'; text: string };
+/** Something worth knowing about a node, such as a revoked app. */
+export type Finding = {
+  tone: 'error' | 'warning' | 'info';
+  text: string;
+  /** The API key of an app that it is about, by position. */
+  key?: number;
+};
+
+/** The state of an API key, which the details of its app list. */
+export type KeyState = {
+  /** The last four characters, or the key's position without them. */
+  name: string;
+  sign: SignKey;
+  label: string;
+  /** Whether calls can use it: it is neither revoked nor expired. */
+  usable: boolean;
+  findings: Finding[];
+};
 
 export type GraphNode = {
-  /** `<column>:<key>`, such as `apps:<appId>` or `keys:<appId>/0`. */
+  /** `<column>:<key>`, such as `apps:<appId>` or `products:<name>`. */
   id: string;
   column: Column;
   name: string;
@@ -41,9 +56,9 @@ export type GraphNode = {
   label?: string;
   findings: Finding[];
   owner?: Owner;
-  /** The app of an app or key node. */
   app?: App;
-  key?: { value: ApiKey; index: number };
+  /** The state of each API key of an app, in the app's order. */
+  keys?: KeyState[];
   product?: Product;
   /** The proxy or shared flow, absent for one that does not exist. */
   row?: Row;
@@ -54,7 +69,10 @@ export type GraphNode = {
 export type GraphEdge = {
   from: string;
   to: string;
-  /** A key waiting for or revoked from a product, or a flow hook. */
+  /**
+   * An app whose keys wait for approval of a product or may not use it, or a
+   * flow hook.
+   */
   kind?: 'pending' | 'revoked' | 'hook';
 };
 
@@ -79,10 +97,17 @@ export const gutterWidth = 40;
 // Keys that expire within this time get a warning
 const expiringMs = 30 * 86_400_000;
 
+// How an app reaches an API product through its keys, the best first
+const reaches = ['approved', 'pending', 'revoked'] as const;
+
+// Findings by tone, the worst first
+const tones: readonly Finding['tone'][] = ['error', 'warning', 'info'];
+
 /**
- * Builds the graph of an environment: owners → apps → keys → products →
- * proxies → shared flows. Proxies run the shared flows that their deployed
- * revision calls and those of the environment's flow hooks.
+ * Builds the graph of an environment: owners → apps → products → proxies →
+ * shared flows. Apps reach products through their API keys; proxies run the
+ * shared flows that their deployed revision calls and those of the
+ * environment's flow hooks.
  */
 export function buildGraph(
   data: Relationships,
@@ -112,45 +137,49 @@ export function buildGraph(
 
   for (const app of data.apps ?? []) {
     const id = `apps:${app.id}`;
-    const revoked = app.status === 'revoked';
+    const keys = app.keys.map((key, index) => keyState(key, index, now));
+    // A product counts as approved through a working key approved for it,
+    // else as waiting, else as revoked
+    const reach = new Map<string, (typeof reaches)[number]>();
+    app.keys.forEach((key, index) => {
+      for (const product of key.products) {
+        const status = !keys[index].usable
+          ? 'revoked'
+          : product.status === 'pending' || product.status === 'revoked'
+            ? product.status
+            : 'approved';
+        const before = reach.get(product.name);
+        if (!before || reaches.indexOf(status) < reaches.indexOf(before)) {
+          reach.set(product.name, status);
+        }
+      }
+    });
+    // A revoked or expired key only needs cleaning up once working keys are
+    // approved for all of its products
+    const working = keys.some(key => key.usable);
+    const replaced = app.keys.map(
+      (key, index) =>
+        !keys[index].usable &&
+        working &&
+        key.products.every(product => reach.get(product.name) === 'approved'),
+    );
     add({
       id,
       column: 'apps',
       name: app.name,
-      terms: terms(app.name, undefined, app.attributes),
-      sign: revoked ? 'error' : app.status ? 'good' : 'unknown',
-      label: revoked ? 'Revoked' : app.status ? 'Approved' : 'Status unknown',
-      findings: [
-        ...(revoked ? [{ tone: 'error' as const, text: 'App revoked' }] : []),
-        ...(app.keys.length
-          ? []
-          : [{ tone: 'info' as const, text: 'Has no API keys' }]),
+      // The last characters of a key find its app
+      terms: [
+        ...terms(app.name, undefined, app.attributes),
+        ...app.keys.flatMap(key => (key.hint ? [key.hint.toLowerCase()] : [])),
       ],
+      ...appState(app, keys, replaced),
       app,
+      keys,
     });
     if (app.owner) link(`owners:${app.owner}`, id);
-    app.keys.forEach((key, index) => {
-      const keyId = `keys:${app.id}/${index}`;
-      add({
-        id: keyId,
-        column: 'keys',
-        name: key.hint ? `…${key.hint}` : `Key ${index + 1}`,
-        terms: key.hint ? [key.hint.toLowerCase()] : [],
-        ...keyState(key, now),
-        app,
-        key: { value: key, index },
-      });
-      link(id, keyId);
-      for (const product of key.products) {
-        link(
-          keyId,
-          `products:${product.name}`,
-          product.status === 'pending' || product.status === 'revoked'
-            ? product.status
-            : undefined,
-        );
-      }
-    });
+    for (const [name, status] of reach) {
+      link(id, `products:${name}`, status === 'approved' ? undefined : status);
+    }
   }
 
   for (const product of data.products ?? []) {
@@ -239,7 +268,7 @@ export function buildGraph(
   return { nodes, edges, outgoing, incoming };
 }
 
-/** Returns the nodes whose name, email, key hint, or attributes contain a text. */
+/** Returns the nodes whose name, email, attributes, or key hints contain a text. */
 export function search(graph: Graph, query: string): string[] {
   const text = query.trim().toLowerCase();
   if (!text) return [];
@@ -362,21 +391,19 @@ export function curve(from: number, to: number): string {
 }
 
 /** Returns the state of a key: revoked, expired, waiting, or expiring. */
-function keyState(
-  key: ApiKey,
-  now: number,
-): Pick<GraphNode, 'sign' | 'label' | 'findings'> {
+function keyState(key: ApiKey, index: number, now: number): KeyState {
   const names = (status: 'pending' | 'revoked') =>
     key.products
       .filter(product => product.status === status)
       .map(product => product.name)
       .join(', ');
   const findings: Finding[] = [];
+  const expired = Boolean(key.expiresAt && key.expiresAt <= now);
   if (key.status === 'revoked') {
-    findings.push({ tone: 'error', text: 'Key revoked' });
+    findings.push({ tone: 'error', text: 'Revoked' });
   }
-  if (key.expiresAt && key.expiresAt <= now) {
-    findings.push({ tone: 'error', text: `Expired on ${day(key.expiresAt)}` });
+  if (expired) {
+    findings.push({ tone: 'error', text: `Expired on ${day(key.expiresAt!)}` });
   } else if (key.expiresAt && key.expiresAt - now < expiringMs) {
     findings.push({
       tone: 'warning',
@@ -395,6 +422,7 @@ function keyState(
   const worst =
     findings.find(finding => finding.tone === 'error') ?? findings[0];
   return {
+    name: key.hint ? `…${key.hint}` : `Key ${index + 1}`,
     sign: worst
       ? worst.tone === 'error'
         ? 'error'
@@ -403,6 +431,47 @@ function keyState(
         ? 'good'
         : 'unknown',
     label: worst?.text ?? (key.status ? 'Approved' : 'Status unknown'),
+    usable: key.status !== 'revoked' && !expired,
+    findings,
+  };
+}
+
+/**
+ * Returns the state of an app with the findings of its keys, the worst
+ * first; those of a replaced key are only remarks.
+ */
+function appState(
+  app: App,
+  keys: readonly KeyState[],
+  replaced: readonly boolean[],
+): Pick<GraphNode, 'sign' | 'label' | 'findings'> {
+  const revoked = app.status === 'revoked';
+  const findings: Finding[] = [
+    ...(revoked ? [{ tone: 'error' as const, text: 'App revoked' }] : []),
+    ...(keys.length
+      ? []
+      : [{ tone: 'info' as const, text: 'Has no API keys' }]),
+    ...keys.flatMap((key, index) =>
+      key.findings.map((finding): Finding => ({
+        tone: replaced[index] ? 'info' : finding.tone,
+        // Keys without their last characters are named "Key 2" already
+        text: `${key.name.startsWith('…') ? 'Key ' : ''}${key.name}: ${finding.text}`,
+        key: index,
+      })),
+    ),
+  ].sort((a, b) => tones.indexOf(a.tone) - tones.indexOf(b.tone));
+  const worst = findings[0]?.tone === 'info' ? undefined : findings[0];
+  return {
+    sign: worst
+      ? worst.tone === 'error'
+        ? 'error'
+        : 'warning'
+      : app.status
+        ? 'good'
+        : 'unknown',
+    label: revoked
+      ? 'Revoked'
+      : (worst?.text ?? (app.status ? 'Approved' : 'Status unknown')),
     findings,
   };
 }

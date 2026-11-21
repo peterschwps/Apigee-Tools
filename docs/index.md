@@ -203,7 +203,7 @@ XML files of the bundle structure count as different only when their elements, a
 
 ### Relationships
 
-**Relationships** shows how the parts of an organization depend on each other, in six columns: developers (app groups among them), apps, API keys, API products, API proxies, and shared flows. It answers questions that the Apigee console spreads over many pages:
+**Relationships** shows how the parts of an organization depend on each other, in five columns: developers (app groups among them), apps, API products, API proxies, and shared flows. An app leads to the API products that its API keys are for. It answers questions that the Apigee console spreads over many pages:
 
 - Whom does a change to a proxy, shared flow, or API product affect?
 - Why does a call fail with 401 or 403: is the app revoked, the key expired or waiting for approval, the product not available in the environment, or the proxy not deployed?
@@ -212,11 +212,11 @@ XML files of the bundle structure count as different only when their elements, a
 
 The tab follows the environment chosen at the top. Proxies and shared flows show their deployment status there, and the shared flows a proxy calls are those of the revision deployed there. A plug icon marks the shared flows attached to a flow hook.
 
-Choose a node to see only its chain: everything it uses and everything that uses it. A panel shows its details, its neighbors, and what keeps the chain from working. **Show All**, or Escape in the graph, shows everything again; without a choice, the panel lists the findings of all columns. Each column is one Tab stop: the up and down arrows move within it, the left and right arrows to a connected node. In the details of a proxy or shared flow, **Show in Relationships** opens its chain.
+Choose a node to see only its chain: everything it uses and everything that uses it. A panel shows its details, its neighbors, and what keeps the chain from working; for an app, also its API keys. **Show All**, or Escape in the graph, shows everything again; without a choice, the panel lists the findings of all columns. Each column is one Tab stop: the up and down arrows move within it, the left and right arrows to a connected node. In the details of a proxy or shared flow, **Show in Relationships** opens its chain.
 
-Search by name, email, attribute as `name=value`, such as `tier=gold`, or the last characters of a key. If nothing matches, Enter looks up the text as a full API key and chooses its key. Keys show only their last four characters; **Copy API Key** copies the full key.
+Search by name, email, attribute as `name=value`, such as `tier=gold`, or the last characters of an API key, which finds its app. If nothing matches, Enter looks up the text as a full API key and chooses its app. The details of an app list its keys by their last four characters, each with its state and a button that copies the full key.
 
-A dashed line in the warning color is a key that waits for approval of an API product, a dotted line in the error color a key revoked for one. For a chosen chain or a search, plain dashed lines lead from its proxies to the shared flows of the environment's flow hooks.
+A dashed line in the warning color leads from an app to an API product that its keys wait for approval of, a dotted line in the error color to one that no working key of the app may use. For a chosen chain or a search, plain dashed lines lead from its proxies to the shared flows of the environment's flow hooks.
 
 - Each column shows at most 100 nodes, the chosen, found, and troubled ones first; search or choose a node to see others.
 - Shared flow calls come from the FlowCallout policies of the deployed revisions. Names set through variables are not resolved, and a FlowCallout counts even when no step runs it.

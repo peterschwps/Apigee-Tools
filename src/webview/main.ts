@@ -194,11 +194,10 @@ class ApigeeDashboard extends LitElement {
       if (message?.type === 'relationships') {
         this.relationships = message.relationships;
       } else if (message?.type === 'keyOwner') {
+        // The app with the key; its details list the key
         if (message.found) {
           this.query = '';
-          this.setView({
-            node: `keys:${message.found.app}/${message.found.key}`,
-          });
+          this.setView({ node: `apps:${message.found.app}` });
         } else {
           this.missingKey = true;
         }

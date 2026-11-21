@@ -148,8 +148,7 @@ test('edges follow keys, products, and the revision deployed here', () => {
   const evaluation = edgesOf(buildGraph(data, rows, 'eval', now));
   for (const edge of [
     'owners:developer/d2 → apps:a2',
-    'apps:a2 → keys:a2/0',
-    'keys:a2/0 → products:partner-gold (pending)',
+    'apps:a2 → products:partner-gold (pending)',
     'products:partner-gold → apis:partner-gateway',
     'apis:catalog-v2 → sharedflows:cors',
     'apis:orders-v1 → sharedflows:quota-per-app',
@@ -189,8 +188,6 @@ test('the lineage of a proxy holds its consumers and shared flows, not its sibli
     'apis:catalog-v1',
     'apps:a1',
     'apps:a3',
-    'keys:a1/0',
-    'keys:a3/0',
     'owners:developer/d1',
     'owners:developer/d3',
     'products:catalog-free',
@@ -203,23 +200,191 @@ test('the search finds names, emails, key hints, and attributes', () => {
   const graph = buildGraph(data, rows, 'eval', now);
   assert.deepEqual(search(graph, 'tier=gold'), ['apps:a2']);
   assert.deepEqual(search(graph, 'MOBILE@'), ['owners:developer/d3']);
-  assert.deepEqual(search(graph, '77qd'), ['keys:a3/0']);
+  assert.deepEqual(search(graph, '77qd'), ['apps:a3']);
   assert.deepEqual(search(graph, '  '), []);
 });
 
-test('keys show what keeps them from working', () => {
+test('keys show what keeps them from working, and so do their apps', () => {
   const nodes = buildGraph(data, rows, 'eval', now).nodes;
   assert.deepEqual(
-    ['keys:a1/0', 'keys:a2/0', 'keys:a3/0', 'keys:a3/1'].map(id => [
+    ['apps:a1', 'apps:a2', 'apps:a3'].flatMap(id =>
+      nodes.get(id)!.keys!.map(key => [key.name, key.sign, key.label]),
+    ),
+    [
+      ['…k3fz', 'good', 'Approved'],
+      ['…a91b', 'warning', 'Waiting for approval of partner-gold'],
+      ['…77qd', 'warning', 'Expires on 2026-11-25'],
+      ['…old1', 'error', 'Expired on 2026-11-19'],
+    ],
+  );
+  assert.deepEqual(
+    ['apps:a1', 'apps:a2', 'apps:a3'].map(id => [
       nodes.get(id)?.sign,
       nodes.get(id)?.label,
     ]),
     [
       ['good', 'Approved'],
-      ['warning', 'Waiting for approval of partner-gold'],
-      ['warning', 'Expires on 2026-11-25'],
-      ['error', 'Expired on 2026-11-19'],
+      ['warning', 'Key …a91b: Waiting for approval of partner-gold'],
+      ['error', 'Revoked'],
     ],
+  );
+});
+
+test('an app reaches an API product through its best key', () => {
+  const graph = buildGraph(
+    {
+      organization: 'acme',
+      owners: [],
+      apps: [
+        {
+          id: 'rotated',
+          name: 'rotated',
+          owner: '',
+          status: 'approved',
+          attributes: [],
+          keys: [
+            {
+              hint: 'old1',
+              status: 'revoked',
+              products: [{ name: 'p', status: 'approved' }],
+            },
+            {
+              hint: 'new1',
+              status: 'approved',
+              products: [
+                { name: 'p', status: 'approved' },
+                { name: 'q', status: 'pending' },
+              ],
+            },
+          ],
+        },
+        {
+          id: 'stuck',
+          name: 'stuck',
+          owner: '',
+          status: 'approved',
+          attributes: [],
+          keys: [
+            {
+              hint: 'gone',
+              status: 'approved',
+              expiresAt: now - day,
+              products: [{ name: 'p', status: 'approved' }],
+            },
+          ],
+        },
+        // Revoked before it expires, with a new key for the same product
+        {
+          id: 'renewed',
+          name: 'renewed',
+          owner: '',
+          status: 'approved',
+          attributes: [],
+          keys: [
+            {
+              hint: 'old2',
+              status: 'revoked',
+              expiresAt: now + 10 * day,
+              products: [{ name: 'p', status: 'approved' }],
+            },
+            {
+              hint: 'new2',
+              status: 'approved',
+              products: [{ name: 'p', status: 'approved' }],
+            },
+          ],
+        },
+        // The working key is for another product
+        {
+          id: 'lost',
+          name: 'lost',
+          owner: '',
+          status: 'approved',
+          attributes: [],
+          keys: [
+            {
+              hint: 'exp3',
+              status: 'approved',
+              expiresAt: now - day,
+              products: [{ name: 'p', status: 'approved' }],
+            },
+            {
+              hint: 'liv3',
+              status: 'approved',
+              products: [{ name: 'q', status: 'approved' }],
+            },
+          ],
+        },
+        {
+          id: 'nameless',
+          name: 'nameless',
+          owner: '',
+          status: 'approved',
+          attributes: [],
+          keys: [{ hint: '', status: 'revoked', products: [] }],
+        },
+      ],
+      products: [
+        { name: 'p', environments: [], proxies: [], attributes: [] },
+        { name: 'q', environments: [], proxies: [], attributes: [] },
+      ],
+      calls: {},
+      hooks: {},
+      notes: [],
+    },
+    [],
+    'eval',
+    now,
+  );
+  assert.deepEqual(edgesOf(graph), [
+    'apps:rotated → products:p',
+    'apps:rotated → products:q (pending)',
+    'apps:stuck → products:p (revoked)',
+    'apps:renewed → products:p',
+    'apps:lost → products:p (revoked)',
+    'apps:lost → products:q',
+  ]);
+  const state = (id: string) => {
+    const node = graph.nodes.get(id)!;
+    return [
+      node.sign,
+      node.label,
+      node.findings.map(finding => `${finding.tone}: ${finding.text}`),
+    ];
+  };
+  // A dead key only needs cleaning up once working keys cover its products;
+  // the worst finding comes first
+  assert.deepEqual(state('apps:rotated'), [
+    'warning',
+    'Key …new1: Waiting for approval of q',
+    [
+      'warning: Key …new1: Waiting for approval of q',
+      'info: Key …old1: Revoked',
+    ],
+  ]);
+  assert.deepEqual(state('apps:stuck'), [
+    'error',
+    'Key …gone: Expired on 2026-11-19',
+    ['error: Key …gone: Expired on 2026-11-19'],
+  ]);
+  assert.deepEqual(state('apps:renewed'), [
+    'good',
+    'Approved',
+    ['info: Key …old2: Revoked', 'info: Key …old2: Expires on 2026-11-30'],
+  ]);
+  assert.deepEqual(state('apps:lost'), [
+    'error',
+    'Key …exp3: Expired on 2026-11-19',
+    ['error: Key …exp3: Expired on 2026-11-19'],
+  ]);
+  assert.deepEqual(state('apps:nameless'), [
+    'error',
+    'Key 1: Revoked',
+    ['error: Key 1: Revoked'],
+  ]);
+  assert.deepEqual(
+    graph.nodes.get('apps:rotated')?.keys?.map(key => key.usable),
+    [false, true],
   );
 });
 
@@ -237,7 +402,11 @@ test('findings mark what nothing uses, what is missing, and what is off', () => 
   assert.deepEqual(findings('apis:admin'), ['info: In no API product']);
   assert.deepEqual(findings('apis:partner-gateway'), ['warning: Not found']);
   assert.deepEqual(findings('owners:developer/d3'), ['error: Inactive']);
-  assert.deepEqual(findings('apps:a3'), ['error: App revoked']);
+  assert.deepEqual(findings('apps:a3'), [
+    'error: App revoked',
+    'warning: Key …77qd: Expires on 2026-11-25',
+    'info: Key …old1: Expired on 2026-11-19',
+  ]);
 });
 
 test('the layout untangles crossing edges and is deterministic', () => {
@@ -290,14 +459,14 @@ test('the layout caps each column, keeping chosen and troubled nodes', () => {
     layout(graph, shown, { limit: 100, hooks: false }).columns.map(
       column => column.ids,
     ),
-    [[], [], [], ['products:unused'], [], []],
+    [[], [], ['products:unused'], [], []],
   );
 });
 
 test('hook edges are drawn only when asked for', () => {
   const graph = buildGraph(data, rows, 'eval', now);
   const kinds = (hooks: boolean) =>
-    layout(graph, undefined, { limit: 100, hooks }).gutters[4].map(
+    layout(graph, undefined, { limit: 100, hooks }).gutters[3].map(
       edge => edge.kind ?? 'call',
     );
   assert.ok(!kinds(false).includes('hook'));
