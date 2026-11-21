@@ -997,8 +997,43 @@ export const styles = css`
     grid-row: 5;
   }
 
+  .r6 {
+    grid-row: 6;
+  }
+
+  .r7 {
+    grid-row: 7;
+  }
+
+  .r8 {
+    grid-row: 8;
+  }
+
   .c1 {
     grid-column: 1;
+  }
+
+  /* The client: a dot that the request leaves and the response reaches */
+  .dot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .dot::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--at-text-muted);
+  }
+
+  /* Where the request starts: hollow; where the response ends: filled */
+  .dot.start::before {
+    box-sizing: border-box;
+    border: 1.5px solid var(--at-text-muted);
+    background: none;
   }
 
   .c2 {

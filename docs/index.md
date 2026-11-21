@@ -262,7 +262,7 @@ The stations of each section, such as a flow hook, an endpoint, and the route ru
 
 ### The map
 
-Above the list, a map shows the way through the proxy endpoint at a glance, and stays at the top while you scroll: the request from the client to the right, the response below it back to the client, and the backend on the right where the request turns. An arrow on each connection points the way. A route rule without a target endpoint turns at **No Target** instead. On Error, Per Event, and After the Response get a row of their own when the proxy has them. A station with a dashed border runs no steps, and a sign on a station says that something in it differs from the workspace or needs attention. The map marks the station whose part of the list is at the top; choose a station to show it in the list, opened. A shared flow has no map, since it has only its steps.
+Above the list, a map shows the way through the proxy endpoint at a glance, and stays at the top while you scroll: the request from the client, a hollow dot, to the right, the response below it back to the client, a filled dot, and the backend on the right where the request turns. An arrow on each connection points the way. A route rule without a target endpoint turns at **No Target** instead. On Error, Per Event, and After the Response get a row of their own when the proxy has them. A station with a dashed border runs no steps, and a sign on a station says that something in it differs from the workspace or needs attention. The map marks the station whose part of the list is at the top; choose a station to show it in the list, opened. A shared flow has no map, since it has only its steps.
 
 ### Keyboard
 

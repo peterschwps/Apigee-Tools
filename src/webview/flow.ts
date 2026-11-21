@@ -196,7 +196,6 @@ function chipOf(map: FlowMap, band: FlowBand, item: FlowItem): Chip {
 
 /** The columns of the map, so that the response sits under the request. */
 const columns: readonly ((item: FlowItem) => boolean)[] = [
-  item => item.kind === 'client',
   item =>
     item.kind === 'hook' &&
     (item.point === 'PreProxyFlowHook' || item.point === 'PostProxyFlowHook'),
@@ -249,7 +248,9 @@ function overview(
 
   const group = `${map.key}#map`;
   const chips = rows.flatMap(band =>
-    band.items.map(item => chipOf(map, band, item)),
+    band.items
+      .filter(item => item.kind !== 'client')
+      .map(item => chipOf(map, band, item)),
   );
   if (turn) chips.push(turn);
   const entry = chips.some(chip => chip.key === state.roving[group])
@@ -285,6 +286,33 @@ function overview(
   const turnRows = rows.filter(
     band => band.kind === 'request' || band.kind === 'response',
   ).length;
+  // The request leaves the client's dot, hollow, the response reaches it
+  const cells = rows.map((band, index) => {
+    const row = index + 1;
+    return html`
+      ${
+        band.kind === 'request' || band.kind === 'response'
+          ? html`<span
+              class="dot r${row} c1 ${band.kind === 'request' ? 'start' : ''}"
+              data-dot=${band.kind}
+            ></span>`
+          : html`<span
+              class="row-mark r${row} c1"
+              data-tooltip=${bandTitles[band.kind]}
+              ><vscode-icon name=${bandIcons[band.kind]}></vscode-icon
+              ><span class="sr-only">${bandTitles[band.kind]}</span></span
+            >`
+      }
+      ${used.map((column, position) => {
+        const item = band.items.find(columns[column]);
+        return item
+          ? html`<span class="slot r${row} c${position + 2}"
+              >${chip(chipOf(map, band, item), band.kind, index, position)}</span
+            >`
+          : nothing;
+      })}
+    `;
+  });
   return html`<nav class="overview" aria-label="Overview of ${map.title}">
     <div
       class="stations"
@@ -297,24 +325,7 @@ function overview(
       }}
     >
       <svg class="links" aria-hidden="true"></svg>
-      ${rows.map(
-        (band, row) => html`
-          <span
-            class="row-mark r${row + 1} c1"
-            data-tooltip=${bandTitles[band.kind]}
-            ><vscode-icon name=${bandIcons[band.kind]}></vscode-icon
-            ><span class="sr-only">${bandTitles[band.kind]}</span></span
-          >
-          ${used.map((index, column) => {
-            const item = band.items.find(columns[index]);
-            return item
-              ? html`<span class="slot r${row + 1} c${column + 2}"
-                  >${chip(chipOf(map, band, item), band.kind, row, column)}</span
-                >`
-              : nothing;
-          })}
-        `,
-      )}
+      ${cells}
       ${
         turn
           ? html`<span class="turn c${used.length + 2} span${turnRows}"
@@ -339,6 +350,24 @@ export function drawLinks(root: ParentNode): void {
     const origin = svg.getBoundingClientRect();
     const turn = bar.querySelector<HTMLElement>('[data-band="turn"]');
     const paths: string[] = [];
+    const arrow = (from: number, to: number, y: number, way: number) => {
+      if (Math.abs(to - from) < 14) return;
+      const mid = (from + to) / 2;
+      const tail = mid - 3 * way;
+      const tip = mid + 3 * way;
+      paths.push(
+        `<path class="arrow" d="M${tail.toFixed(1)} ${(y - 4).toFixed(1)}L${tip.toFixed(1)} ${y.toFixed(1)}L${tail.toFixed(1)} ${(y + 4).toFixed(1)}Z"/>`,
+      );
+    };
+    // A dot counts as a box as wide as its circle
+    const edges = (element: HTMLElement) => {
+      const box = element.getBoundingClientRect();
+      if (!element.dataset.dot) {
+        return { left: box.left - origin.left, right: box.right - origin.left };
+      }
+      const center = box.left + box.width / 2 - origin.left;
+      return { left: center - 4, right: center + 4 };
+    };
     for (const [kind, way] of [
       ['request', 1],
       ['response', -1],
@@ -349,23 +378,20 @@ export function drawLinks(root: ParentNode): void {
       if (!stations.length) continue;
       const first = stations[0].getBoundingClientRect();
       const y = first.top + first.height / 2 - origin.top;
-      const boxes = [...stations, ...(turn ? [turn] : [])].map(element =>
-        element.getBoundingClientRect(),
-      );
+      const own = bar.querySelector<HTMLElement>(`[data-dot="${kind}"]`);
+      const boxes = [
+        ...(own ? [own] : []),
+        ...stations,
+        ...(turn ? [turn] : []),
+      ].map(edges);
       boxes.slice(1).forEach((next, index) => {
-        const from = boxes[index].right - origin.left;
-        const to = next.left - origin.left;
+        const from = boxes[index].right;
+        const to = next.left;
         if (to - from < 4) return;
         paths.push(
           `<path class="link" d="M${from.toFixed(1)} ${y.toFixed(1)}H${to.toFixed(1)}"/>`,
         );
-        if (to - from < 14) return;
-        const mid = (from + to) / 2;
-        const tail = mid - 3 * way;
-        const tip = mid + 3 * way;
-        paths.push(
-          `<path class="arrow" d="M${tail.toFixed(1)} ${(y - 4).toFixed(1)}L${tip.toFixed(1)} ${y.toFixed(1)}L${tail.toFixed(1)} ${(y + 4).toFixed(1)}Z"/>`,
-        );
+        arrow(from, to, y, way);
       });
     }
     svg.innerHTML = paths.join('');
