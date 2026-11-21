@@ -478,19 +478,6 @@ class ApigeeDashboard extends LitElement {
         </div>
       `;
     }
-    if (!snapshot.requested) {
-      return html`
-        <div class="messages">
-          ${notice(
-            'info',
-            'info',
-            'Not loaded yet',
-            'The dashboard reads from the Apigee API only when you ask for it.',
-            button('Load data', { type: 'refresh' }),
-          )}
-        </div>
-      `;
-    }
     const { overview: organization, rows } = snapshot;
     // The notes of the Relationships tab show while it is open
     const relationshipNotes =

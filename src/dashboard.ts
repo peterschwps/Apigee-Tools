@@ -181,10 +181,14 @@ export function registerDashboard(
     statusItem,
     vscode.commands.registerCommand('apigeeTools.openDashboard', open),
     vscode.window.registerWebviewPanelSerializer(viewType, {
-      // A restored panel waits for the user, so starting up stays offline
+      // A restored panel loads once its script is ready, as an opened one
       deserializeWebviewPanel: async restored => {
-        if (panel) restored.dispose();
-        else attach(restored);
+        if (panel) {
+          restored.dispose();
+          return;
+        }
+        attach(restored);
+        snapshot = { ...snapshot, requested: true };
       },
     }),
     revisionChanged,
