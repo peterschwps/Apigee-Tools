@@ -119,8 +119,10 @@ export async function readBundle(
   const files: BundleFiles = new Map();
 
   // Links count like what they point to; a set of visited directories ends
-  // link cycles, and hidden files such as .DS_Store are never bundle files
+  // link cycles, and hidden files such as .DS_Store are never bundle files.
+  // A link to a large directory stops at the size of a revision's content.
   const visited = new Set<string>();
+  let total = 0;
   const walk = async (current: string, relative: string): Promise<void> => {
     const real = await realpath(current);
     if (visited.has(real)) return;
@@ -132,6 +134,10 @@ export async function readBundle(
       const info = await stat(file).catch(() => undefined);
       if (info?.isDirectory()) await walk(file, key);
       else if (info?.isFile()) {
+        total += info.size;
+        if (total > maxContentBytes) {
+          throw new Error('The bundle holds more than 64 MiB.');
+        }
         files.set(`${bundleDirectory(kind)}/${key}`, await readFile(file));
       }
     }

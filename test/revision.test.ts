@@ -7,6 +7,7 @@ import {
   rename,
   rm,
   symlink,
+  truncate,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -80,6 +81,16 @@ test('a local bundle is read with the keys of the archive', async () => {
     [...local.keys()].sort(),
     [...(await revision()).keys()].sort(),
   );
+});
+
+test('a local bundle past 64 MiB is not read', async () => {
+  const directory = await editedCopy('large', async copy => {
+    // A sparse file, which takes no room on disk
+    const large = path.join(copy, 'resources', 'oas', 'large.yaml');
+    await writeFile(large, '');
+    await truncate(large, 65 * 1024 * 1024);
+  });
+  await assert.rejects(readBundle(directory, 'apis'), /more than 64 MiB/);
 });
 
 test('the deployed revision of an unchanged bundle does not differ', async () => {
