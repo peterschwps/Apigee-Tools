@@ -5,6 +5,7 @@ import { html, nothing, type TemplateResult } from 'lit';
 import type {
   FlowBand,
   FlowCase,
+  FlowHookPoint,
   FlowItem,
   FlowMap,
   FlowSegment,
@@ -17,8 +18,10 @@ import { hookNames } from './relationships';
 
 /** How the flow view reports what the user does. */
 export type FlowActions = {
-  /** Opens a place of the model in the editor. */
-  open(at: number): void;
+  /** Opens a place of the model, or of a flow hook's shared flow, beside. */
+  open(at: number, hook?: FlowHookPoint): void;
+  /** Collapses or expands a part of the flow. */
+  toggle(key: string): void;
   /** Follows another route rule of a proxy endpoint. */
   route(endpoint: number, route: number): void;
   /** Shows the flow of a flow hook's shared flow in the same environment. */
@@ -53,50 +56,123 @@ export function flowSubtitle(view: FlowView): TemplateResult {
 export function flowMaps(
   view: FlowView,
   roving: Readonly<Record<string, string>>,
+  collapsed: ReadonlySet<string>,
   actions: FlowActions,
 ): TemplateResult {
+  const parts = { entry: undefined, collapsed, actions };
   return html`<div class="flow-maps">
     ${view.maps.map(
       map => html`
         <section class="flow-map">
           <h2>${map.title}</h2>
-          ${map.bands.map(band => bandView(map, band, roving, actions))}
+          ${map.bands.map(band => bandView(map, band, roving, parts))}
         </section>
       `,
     )}
   </div>`;
 }
 
+/**
+ * What the parts of a band share: its tab stop, the collapsed parts, all
+ * expanded at first, and the actions.
+ */
+type Parts = {
+  entry: string | undefined;
+  collapsed: ReadonlySet<string>;
+  actions: FlowActions;
+};
+
 function bandView(
   map: FlowMap,
   band: FlowBand,
   roving: Readonly<Record<string, string>>,
-  actions: FlowActions,
+  shared: Parts,
 ): TemplateResult {
   const key = `${map.key}/${band.kind}`;
+  const title = bandTitles[band.kind];
+  // A shared flow's card has its band's key, so the band's toggle has its own
+  const fold = `${key}#band`;
+  const open = !shared.collapsed.has(fold);
   // One tab stop per band: the item focused last, or else the first
-  const keys = band.items.flatMap(keysOf);
-  const entry = keys.includes(roving[key]) ? roving[key] : keys[0];
-  const item = (stage: FlowItem) => itemView(stage, entry, actions);
+  const keys = band.items.flatMap(item => keysOf(item, shared.collapsed));
+  const parts = {
+    ...shared,
+    entry: keys.includes(roving[key]) ? roving[key] : keys[0],
+  };
+  const { actions } = parts;
   return html`
     <section class="band ${band.kind}">
-      <h3>${bandTitles[band.kind]}</h3>
-      ${band.facts.map(fact => html`<p class="band-fact">${fact}</p>`)}
-      <ol
-        class="stages"
-        aria-label=${bandTitles[band.kind]}
-        @keydown=${moveInBand}
-        @focusin=${(event: FocusEvent) => {
-          const focused = (event.target as HTMLElement).dataset.key;
-          if (focused) actions.rove(key, focused);
-        }}
-      >
-        ${band.items.map(
-          stage => html`<li class=${stageClass(stage)}>${item(stage)}</li>`,
-        )}
-      </ol>
+      <h3>
+        <button
+          class="icon-button labeled"
+          data-key=${fold}
+          aria-expanded=${String(open)}
+          @click=${() => actions.toggle(fold)}
+        >
+          ${chevron(open)}${title}
+        </button>
+      </h3>
+      ${
+        open
+          ? html`${band.facts.map(fact => html`<p class="band-fact">${fact}</p>`)}
+            ${stagesView(key, title, band.items, parts)}`
+          : nothing
+      }
     </section>
   `;
+}
+
+function stagesView(
+  key: string,
+  title: string,
+  items: readonly FlowItem[],
+  parts: Parts,
+): TemplateResult {
+  const { actions } = parts;
+  return html`<ol
+    class="stages"
+    aria-label=${title}
+    @keydown=${moveInBand}
+    @focusin=${(event: FocusEvent) => {
+      const focused = (event.target as HTMLElement).dataset.key;
+      if (focused) actions.rove(key, focused);
+    }}
+  >
+    ${items.map(
+      stage =>
+        html`<li class=${stageClass(stage)}>${itemView(stage, parts)}</li>`,
+    )}
+  </ol>`;
+}
+
+function chevron(open: boolean): TemplateResult {
+  return html`<vscode-icon
+    name=${open ? 'chevron-down' : 'chevron-right'}
+  ></vscode-icon>`;
+}
+
+/**
+ * A button in a band that collapses or expands a part, such as the steps of
+ * an endpoint. Without text, it is an icon whose label names the part.
+ */
+function toggleView(
+  key: string,
+  label: string,
+  parts: Parts,
+  text?: string,
+): TemplateResult {
+  const open = !parts.collapsed.has(key);
+  const toggle = `${key}#toggle`;
+  return html`<button
+    class="icon-button ${text ? 'labeled segment-label' : 'toggle'}"
+    data-key=${toggle}
+    tabindex=${toggle === parts.entry ? 0 : -1}
+    aria-expanded=${String(open)}
+    aria-label=${text ? nothing : label}
+    @click=${() => parts.actions.toggle(key)}
+  >
+    ${chevron(open)}${text ?? nothing}
+  </button>`;
 }
 
 /** Classes that place a stage in its column of the wide layout. */
@@ -111,34 +187,45 @@ function stageClass(item: FlowItem): string {
 }
 
 /** The keys of the focusable parts of an item, in DOM order. */
-function keysOf(item: FlowItem): string[] {
+function keysOf(item: FlowItem, collapsed: ReadonlySet<string>): string[] {
+  // A part with a toggle: its toggle, its head, and its content while open
+  const part = (key: string, head: string[], content: () => string[]) => [
+    `${key}#toggle`,
+    ...head,
+    ...(collapsed.has(key) ? [] : content()),
+  ];
   const steps = (list: readonly FlowStep[]) => list.map(step => step.key);
   const cases = (list: readonly FlowCase[]) =>
-    list.flatMap(item => [item.key, ...steps(item.steps)]);
+    list.flatMap(item =>
+      item.steps.length
+        ? part(item.key, [item.key], () => steps(item.steps))
+        : [item.key],
+    );
   switch (item.kind) {
     case 'endpoint':
-      return [
-        item.key,
-        ...item.segments.flatMap(segment =>
-          'cases' in segment ? cases(segment.cases) : steps(segment.steps),
+      if (!item.segments.length) return [item.key];
+      return part(item.key, [item.key], () =>
+        item.segments.flatMap((segment, index) =>
+          part(`${item.key}/${index}`, [], () =>
+            'cases' in segment ? cases(segment.cases) : steps(segment.steps),
+          ),
         ),
-      ];
+      );
     case 'routes':
       return cases(item.cases);
     case 'backend':
       return item.at === undefined ? [] : [item.key];
     case 'hook':
-      return [item.key];
+      return item.steps?.length
+        ? part(item.key, [item.key], () => steps(item.steps!))
+        : [item.key];
     case 'client':
       return [];
   }
 }
 
-function itemView(
-  item: FlowItem,
-  entry: string | undefined,
-  actions: FlowActions,
-): TemplateResult {
+function itemView(item: FlowItem, parts: Parts): TemplateResult {
+  const { entry, actions } = parts;
   switch (item.kind) {
     case 'client':
       return html`<div class="terminal">
@@ -173,48 +260,63 @@ function itemView(
     case 'routes':
       return html`<div class="routes-group">
         <span class="segment-label">Route Rules</span>
-        ${casesView(item.cases, 'Route Rules', entry, actions, item.endpoint)}
+        ${casesView(item.cases, 'Route Rules', parts, item.endpoint)}
       </div>`;
     case 'hook': {
       const label = `${hookNames[item.point]} Flow Hook`;
+      const steps = item.steps?.length ? item.steps : undefined;
+      const open = !parts.collapsed.has(item.key);
       return html`<div class="terminal">
-        <span class="terminal-name" aria-hidden="true"
-          ><vscode-icon name="plug" class="hook-mark"></vscode-icon
-          >${hookNames[item.point]}</span
-        >
-        <button
-          class="link"
-          data-key=${item.key}
-          tabindex=${item.key === entry ? 0 : -1}
-          data-tooltip=${[label, item.sharedFlow, ...item.facts].join('\n')}
-          @click=${() => actions.hook(item.sharedFlow)}
-        >
-          ${item.sharedFlow}<span class="sr-only"
-            >.
-            ${[label, item.revision && `Revision ${item.revision}`, ...item.facts].filter(Boolean).join('. ')}</span
-          >
-        </button>
-        ${signView(item.sign)}
-        ${
-          item.revision
-            ? html`<span class="muted" aria-hidden="true"
-                >Revision ${item.revision}</span
-              >`
-            : nothing
-        }
-      </div>`;
-    }
-    case 'endpoint':
-      return html`<div class="card endpoint-card">
-        <h4>
+          <span class="terminal-head">
+            ${steps ? toggleView(item.key, `Steps of ${item.sharedFlow}`, parts) : nothing}
+            <span class="terminal-name" aria-hidden="true"
+              ><vscode-icon name="plug" class="hook-mark"></vscode-icon
+              >${hookNames[item.point]}</span
+            >
+          </span>
           <button
             class="link"
             data-key=${item.key}
             tabindex=${item.key === entry ? 0 : -1}
-            data-tooltip=${[`${roleTitles[item.role]} ${item.name}`, ...item.facts].join('\n')}
+            data-tooltip=${[label, item.sharedFlow, ...item.facts].join('\n')}
+            @click=${() => actions.hook(item.sharedFlow)}
+          >
+            ${item.sharedFlow}<span class="sr-only"
+              >.
+              ${[label, item.revision && `Revision ${item.revision}`, ...item.facts].filter(Boolean).join('. ')}</span
+            >
+          </button>
+          ${signView(item.sign)}
+          ${
+            item.revision
+              ? html`<span class="muted" aria-hidden="true"
+                  >Revision ${item.revision}</span
+                >`
+              : nothing
+          }
+        </div>
+        ${
+          steps && open
+            ? html`<div class="hook-steps">
+                ${stepsView(steps, parts, item.point)}
+              </div>`
+            : nothing
+        }`;
+    }
+    case 'endpoint': {
+      const open = !parts.collapsed.has(item.key);
+      const name = `${roleTitles[item.role]} ${item.name}`;
+      return html`<div class="card endpoint-card">
+        <h4>
+          ${item.segments.length ? toggleView(item.key, `Steps of ${name}`, parts) : nothing}
+          <button
+            class="link"
+            data-key=${item.key}
+            tabindex=${item.key === entry ? 0 : -1}
+            data-tooltip=${[name, ...item.facts].join('\n')}
             @click=${() => actions.open(item.at)}
           >
-            ${`${roleTitles[item.role]} ${item.name}`}${
+            ${name}${
               item.facts.length
                 ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
                 : nothing
@@ -223,30 +325,38 @@ function itemView(
           ${signView(item.sign)}
         </h4>
         ${
-          item.segments.length
-            ? html`<div class="segments">
-                ${item.segments.map(segment =>
-                  segmentView(segment, entry, actions),
-                )}
-              </div>`
-            : html`<p class="no-steps">${none()}</p>`
+          !item.segments.length
+            ? html`<p class="no-steps">${none()}</p>`
+            : open
+              ? html`<div class="segments">
+                  ${item.segments.map((segment, index) =>
+                    segmentView(segment, `${item.key}/${index}`, parts),
+                  )}
+                </div>`
+              : nothing
         }
       </div>`;
+    }
   }
 }
 
 function segmentView(
   segment: FlowSegment,
-  entry: string | undefined,
-  actions: FlowActions,
+  key: string,
+  parts: Parts,
 ): TemplateResult {
+  const open = !parts.collapsed.has(key);
   return html`<div class="segment">
-    <span class="segment-label">${segment.label}</span>
-    ${segment.facts.map(fact => html`<p class="segment-fact">${fact}</p>`)}
+    ${toggleView(key, segment.label, parts, segment.label)}
     ${
-      'cases' in segment
-        ? casesView(segment.cases, segment.label, entry, actions)
-        : stepsView(segment.steps, entry, actions)
+      open
+        ? html`${segment.facts.map(fact => html`<p class="segment-fact">${fact}</p>`)}
+          ${
+            'cases' in segment
+              ? casesView(segment.cases, segment.label, parts)
+              : stepsView(segment.steps, parts)
+          }`
+        : nothing
     }
   </div>`;
 }
@@ -258,45 +368,59 @@ function segmentView(
 function casesView(
   cases: readonly FlowCase[],
   label: string,
-  entry: string | undefined,
-  actions: FlowActions,
+  parts: Parts,
   endpoint?: number,
 ): TemplateResult {
+  const { entry, actions } = parts;
+  // The order matters only when there is more than one case to try
+  const numbered = cases.filter(item => item.number !== undefined).length > 1;
+  // Heads line up when only some cases have steps to collapse
+  const foldable = cases.some(item => item.steps.length);
   return html`<ol class="cases" aria-label="${label}, the first match runs">
     ${cases.map((item, position) => {
       const route = endpoint !== undefined && item.number !== undefined;
+      const open = !parts.collapsed.has(item.key);
       return html`<li class="case">
-        <button
-          class="case-head ${item.muted ? 'muted' : ''}"
-          data-key=${item.key}
-          tabindex=${item.key === entry ? 0 : -1}
-          aria-pressed=${item.followed === undefined ? nothing : String(item.followed)}
-          aria-disabled=${route || item.at !== undefined ? nothing : 'true'}
-          data-tooltip=${[item.name, item.condition, ...item.facts].filter(Boolean).join('\n')}
-          @click=${() => {
-            if (route) {
-              actions.route(endpoint, position);
-            } else if (item.at !== undefined) {
-              actions.open(item.at);
-            }
-          }}
-        >
-          ${signView(item.sign)}
-          ${item.number === undefined ? nothing : html`<span class="number">${item.number}</span>`}
-          <span class="case-name">${item.name}</span>
-          ${item.summary ? html`<span class="summary">${item.summary}</span>` : nothing}
-          ${item.destination ? html`<span class="destination">→ ${item.destination}</span>` : nothing}
+        <div class="case-line">
           ${
-            item.facts.length ||
-            (item.condition && item.condition !== item.summary)
-              ? html`<span class="sr-only"
-                  >.
-                  ${[item.condition && item.condition !== item.summary ? `If ${item.condition}` : '', ...item.facts].filter(Boolean).join('. ')}</span
-                >`
-              : nothing
+            item.steps.length
+              ? toggleView(item.key, `Steps of ${item.name}`, parts)
+              : foldable
+                ? html`<span class="toggle-space"></span>`
+                : nothing
           }
-        </button>
-        ${item.steps.length ? stepsView(item.steps, entry, actions) : nothing}
+          <button
+            class="case-head ${item.muted ? 'muted' : ''}"
+            data-key=${item.key}
+            tabindex=${item.key === entry ? 0 : -1}
+            aria-pressed=${item.followed === undefined ? nothing : String(item.followed)}
+            aria-disabled=${route || item.at !== undefined ? nothing : 'true'}
+            data-tooltip=${[item.name, item.condition, ...item.facts].filter(Boolean).join('\n')}
+            @click=${() => {
+              if (route) {
+                actions.route(endpoint, position);
+              } else if (item.at !== undefined) {
+                actions.open(item.at);
+              }
+            }}
+          >
+            ${signView(item.sign)}
+            ${numbered && item.number !== undefined ? html`<span class="number">${item.number}</span>` : nothing}
+            <span class="case-name">${item.name}</span>
+            ${item.summary ? html`<span class="summary">${item.summary}</span>` : nothing}
+            ${item.destination ? html`<span class="destination">→ ${item.destination}</span>` : nothing}
+            ${
+              item.facts.length ||
+              (item.condition && item.condition !== item.summary)
+                ? html`<span class="sr-only"
+                    >.
+                    ${[item.condition && item.condition !== item.summary ? `If ${item.condition}` : '', ...item.facts].filter(Boolean).join('. ')}</span
+                  >`
+                : nothing
+            }
+          </button>
+        </div>
+        ${item.steps.length && open ? stepsView(item.steps, parts) : nothing}
       </li>`;
     })}
   </ol>`;
@@ -304,9 +428,10 @@ function casesView(
 
 function stepsView(
   steps: readonly FlowStep[],
-  entry: string | undefined,
-  actions: FlowActions,
+  parts: Parts,
+  hook?: FlowHookPoint,
 ): TemplateResult {
+  const { entry, actions } = parts;
   return html`<ol class="steps">
     ${steps.map(
       step =>
@@ -316,7 +441,7 @@ function stepsView(
             data-key=${step.key}
             tabindex=${step.key === entry ? 0 : -1}
             data-tooltip=${[step.name, step.type, step.condition && `If ${step.condition}`, ...step.facts].filter(Boolean).join('\n')}
-            @click=${() => actions.open(step.at)}
+            @click=${() => actions.open(step.at, hook)}
           >
             ${signView(step.sign)}
             <span class="node-name">${step.name}</span>

@@ -999,6 +999,23 @@ export const styles = css`
     font-weight: 600;
   }
 
+  .terminal-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  /* The steps of a flow hook's shared flow, below its name */
+  .hook-steps {
+    margin: 4px 0 0 24px;
+  }
+
+  /* Room for a toggle, so that heads line up */
+  .toggle-space {
+    flex: none;
+    width: 22px;
+  }
+
   .endpoint-card {
     display: grid;
     gap: 8px;
@@ -1020,18 +1037,23 @@ export const styles = css`
     gap: 8px;
   }
 
-  /* A label, then a chain of steps or the cases of a first-match group */
+  /* A label, then the steps or cases below one another, indented */
   .segment,
   .routes-group {
     display: grid;
-    grid-template-columns: 84px minmax(0, 1fr);
-    align-items: start;
-    gap: 4px 8px;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .segment > :not(.segment-label),
+  .routes-group > :not(.segment-label) {
+    margin-left: 24px;
   }
 
   .segment-label {
+    justify-self: start;
     color: var(--at-text-muted);
-    line-height: 24px;
+    line-height: 22px;
     overflow-wrap: anywhere;
   }
 
@@ -1039,11 +1061,6 @@ export const styles = css`
   .segment-fact {
     color: var(--at-text-muted);
     line-height: 24px;
-  }
-
-  .segment-fact,
-  .segment-fact ~ * {
-    grid-column: 2;
   }
 
   .steps,
@@ -1054,24 +1071,17 @@ export const styles = css`
     list-style: none;
   }
 
+  /* The steps of a part below one another, in run order */
   .steps {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 0;
+    display: grid;
+    justify-items: start;
+    gap: 4px;
   }
 
   .step {
-    display: flex;
-    align-items: center;
+    display: grid;
     min-width: 0;
-  }
-
-  /* Arrows between the steps of a chain */
-  .step + .step::before {
-    content: '›' / '';
-    padding: 0 6px;
-    color: var(--at-text-muted);
+    max-width: 100%;
   }
 
   .steps .node {
@@ -1106,7 +1116,11 @@ export const styles = css`
   }
 
   .step-condition {
-    display: none;
+    padding-left: 7px;
+    color: var(--at-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .cases {
@@ -1120,8 +1134,14 @@ export const styles = css`
     min-width: 0;
   }
 
+  .case-line {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+
   .case-head {
-    justify-self: start;
     max-width: 100%;
     display: flex;
     align-items: center;
@@ -1241,6 +1261,11 @@ export const styles = css`
       gap: 2px;
     }
 
+    /* Below a toggle, the lines start where its name does */
+    .terminal:has(> .terminal-head .toggle) > :not(.terminal-head) {
+      margin-left: 24px;
+    }
+
     /* Cards as wide as their steps; the response arrives from the right */
     .endpoint-card {
       width: fit-content;
@@ -1307,54 +1332,7 @@ export const styles = css`
     /* Long names and conditions shorten, so all columns stay in view */
     .routes-group,
     .segment {
-      grid-template-columns: minmax(0, 1fr);
       max-width: 360px;
-    }
-
-    .segment-fact,
-    .segment-fact ~ * {
-      grid-column: auto;
-    }
-
-    /* Side by side while there is room; below one another otherwise */
-    .segments {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: start;
-      gap: 12px 20px;
-    }
-
-    .segments > .segment {
-      flex: 0 1 auto;
-      min-width: 180px;
-    }
-
-    .band.response .segments {
-      flex-direction: row-reverse;
-    }
-
-    .steps {
-      flex-direction: column;
-      flex-wrap: nowrap;
-      align-items: stretch;
-      gap: 4px;
-    }
-
-    .step {
-      display: grid;
-    }
-
-    .step + .step::before {
-      display: none;
-    }
-
-    .step-condition {
-      display: block;
-      padding-left: 7px;
-      color: var(--at-text-muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
   }
 `;

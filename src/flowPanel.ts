@@ -1,5 +1,5 @@
-// The flow view: a panel beside the editor that shows how Apigee runs the
-// flows of a bundle. It reads the local copy from the workspace, so it works
+// The flow view: a tab in the editor that shows how Apigee runs the flows of
+// a bundle. It reads the local copy from the workspace, so it works
 // offline, signed out, and in Restricted Mode; with the dashboard's
 // organization, it also shows what each environment runs.
 import path from 'node:path';
@@ -10,6 +10,7 @@ import type { WorkspaceBundle } from './dashboard';
 import { flowModel, flowView, type FlowModel, type ViewContext } from './flow';
 import type {
   Cell,
+  FlowHookPoint,
   FlowSource,
   FlowView,
   HostMessage,
@@ -107,6 +108,10 @@ type Built = {
   context: ViewContext;
   /** The deployment of an environment, whose files open in the editor. */
   shown?: Deployment & { files: BundleFiles; changes?: BundleChanges };
+  /** The deployed shared flows of its flow hooks, whose steps open too. */
+  hookFlows?: Partial<
+    Record<FlowHookPoint, Deployment & { files: BundleFiles; model: FlowModel }>
+  >;
 };
 
 /** Registers the Show Flow command and its panel. */
@@ -142,8 +147,6 @@ export function registerFlowPanel(
   let routes: number[] = [];
   let watcher: vscode.FileSystemWatcher | undefined;
   let rebuild: ReturnType<typeof setTimeout> | undefined;
-  // The editor group that Show Flow came from, where files open
-  let origin: vscode.ViewColumn | undefined;
   let posted = '';
   // Deployed revisions never change; flow hooks are read once per load
   const models = new Map<string, FlowModel>();
@@ -175,7 +178,7 @@ export function registerFlowPanel(
     const directory = uri?.scheme === 'file' && findBundleRoot(uri.fsPath);
     const bundles = await host.scanWorkspace();
     if (directory) {
-      await open(subjectOf(directory, bundles), '', false);
+      await open(subjectOf(directory, bundles), '');
       return;
     }
     if (!bundles.length) {
@@ -192,8 +195,7 @@ export function registerFlowPanel(
       })),
       { placeHolder: 'Choose the bundle whose flow to show' },
     );
-    if (picked)
-      await open(subjectOf(picked.bundle.directory, bundles), '', true);
+    if (picked) await open(subjectOf(picked.bundle.directory, bundles), '');
   }
 
   /**
@@ -222,7 +224,6 @@ export function registerFlowPanel(
     await open(
       { kind: target.kind, name: target.name, directory },
       deployed ?? (directory ? '' : (first ?? '')),
-      true,
       copies.length > 1
         ? {
             tone: 'info',
@@ -249,26 +250,20 @@ export function registerFlowPanel(
   }
 
   /**
-   * Opens the panel beside the editor, or switches it to another bundle, and
-   * resolves once its first build is done.
+   * Opens the panel as a tab of the active editor group, or switches it to
+   * another bundle there, and resolves once its first build is done. Files
+   * open beside it.
    */
-  function open(
-    next: Subject,
-    from: string,
-    focus: boolean,
-    remark?: Note,
-  ): Promise<void> {
+  function open(next: Subject, from: string, remark?: Note): Promise<void> {
     const title = `Flow · ${next.name}`;
-    const active = vscode.window.tabGroups.activeTabGroup.viewColumn;
-    if (active !== panel?.viewColumn) origin = active;
     if (panel) {
       panel.title = title;
-      panel.reveal(undefined, !focus);
+      panel.reveal(vscode.ViewColumn.Active);
     } else {
       panel = vscode.window.createWebviewPanel(
         viewType,
         title,
-        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: !focus },
+        vscode.ViewColumn.Active,
         { enableScripts: true, localResourceRoots: [webviewRoot] },
       );
       panel.iconPath = vscode.Uri.joinPath(
@@ -395,15 +390,21 @@ export function registerFlowPanel(
     const client = await host.client();
 
     // An aborted dashboard load may have shared the download; fetch it again
-    const download = () =>
-      host.revisionFiles(client, scope.organization, row, cell.revision);
-    const files = await download().catch(error => {
-      if ((error as Error)?.name !== 'AbortError') throw error;
-      return download();
-    });
-    const key = `${scope.organization}/${row.kind}/${row.name}/${cell.revision}`;
-    const parsed = models.get(key) ?? flowModel(files, row.kind);
-    models.set(key, parsed);
+    const download = (item: Row, revision: string) =>
+      host
+        .revisionFiles(client, scope.organization, item, revision)
+        .catch(error => {
+          if ((error as Error)?.name !== 'AbortError') throw error;
+          return host.revisionFiles(client, scope.organization, item, revision);
+        });
+    const modelOf = (item: Row, revision: string, files: BundleFiles) => {
+      const key = `${scope.organization}/${item.kind}/${item.name}/${revision}`;
+      const parsed = models.get(key) ?? flowModel(files, item.kind);
+      models.set(key, parsed);
+      return parsed;
+    };
+    const files = await download(row, cell.revision);
+    const parsed = modelOf(row, cell.revision, files);
 
     const notes: string[] = [];
     const attached = await hooksOf(
@@ -416,6 +417,35 @@ export function registerFlowPanel(
       );
       return undefined;
     });
+    // The steps of the hooks' shared flows, from their deployed revisions
+    const hookFlows: NonNullable<Built['hookFlows']> = {};
+    await Promise.all(
+      flowHookPoints.map(async point => {
+        const hook = attached?.[point];
+        const flow =
+          hook &&
+          scope.rows.find(
+            item =>
+              item.kind === 'sharedflows' && item.name === hook.sharedFlow,
+          );
+        const deployed = flow && cellOf(flow, environment);
+        if (!hook || !flow || !deployed) return;
+        try {
+          const shared = await download(flow, deployed.revision);
+          hookFlows[point] = {
+            organization: scope.organization,
+            row: flow,
+            cell: deployed,
+            files: shared,
+            model: modelOf(flow, deployed.revision, shared),
+          };
+        } catch (error) {
+          notes.push(
+            `The steps of ${hook.sharedFlow} could not be read: ${messageOf(error)}`,
+          );
+        }
+      }),
+    );
     const local = current.directory
       ? await readBundle(current.directory, current.kind).catch(error => {
           notes.push(
@@ -439,9 +469,16 @@ export function registerFlowPanel(
           files,
           changes,
         },
+        hookFlows,
         context: {
           environment,
           hooks: attached,
+          hookFlows: Object.fromEntries(
+            Object.entries(hookFlows).map(([point, flow]) => [
+              point,
+              flow.model,
+            ]),
+          ),
           changes,
           // The newest deployments of the organization, after each load
           sharedFlow: name => {
@@ -635,7 +672,9 @@ export function registerFlowPanel(
         update();
         break;
       case 'flowOpen':
-        if (message.version === version) await openPlace(message.at);
+        if (message.version === version) {
+          await openPlace(message.at, message.hook);
+        }
         break;
       case 'flowRoute': {
         const { endpoint, route } = message;
@@ -721,13 +760,29 @@ export function registerFlowPanel(
     }
   }
 
-  /** Opens a place of the model on show in the group Show Flow came from. */
-  async function openPlace(at: number): Promise<void> {
+  /**
+   * Opens a place of the model on show, or of a flow hook's shared flow,
+   * beside the panel.
+   */
+  async function openPlace(at: number, hook: unknown): Promise<void> {
     const view = built;
-    const place = Number.isInteger(at) ? view?.model?.places[at] : undefined;
+    const flow = flowHookPoints.includes(hook as FlowHookPoint)
+      ? view?.hookFlows?.[hook as FlowHookPoint]
+      : undefined;
+    if (hook !== undefined && !flow) return;
+    const model = flow ? flow.model : view?.model;
+    const place = Number.isInteger(at) ? model?.places[at] : undefined;
     if (!view || !place) return;
     let uri: vscode.Uri | undefined;
-    if (view.source && view.shown) {
+    if (flow) {
+      uri = host.revisionDocument(
+        flow.organization,
+        flow.row,
+        flow.cell.revision,
+        flow.files,
+        place.file,
+      );
+    } else if (view.source && view.shown) {
       uri = host.revisionDocument(
         view.shown.organization,
         view.shown.row,
@@ -748,11 +803,8 @@ export function registerFlowPanel(
       const document = await vscode.workspace.openTextDocument(uri);
       const position = document.positionAt(place.offset);
       await vscode.window.showTextDocument(document, {
-        // Never over the panel itself
-        viewColumn:
-          origin && origin !== panel?.viewColumn
-            ? origin
-            : vscode.ViewColumn.Beside,
+        // A split view to the right of the flow
+        viewColumn: vscode.ViewColumn.Beside,
         selection: new vscode.Range(position, position),
       });
     } catch (error) {

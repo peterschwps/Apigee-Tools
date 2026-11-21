@@ -66,7 +66,7 @@ The Relationships tab should show:
 
 The flow view should show:
 
-- `orders-v1`: in eval, revision 2 is the same as the workspace, between the Pre-Proxy flow hook `security-baseline` and the Post-Proxy flow hook `logging`. In test, revision 1 runs `AM-LegacyOrderHeader` instead of `JS-ValidateOrder`; the proxy endpoint, that step, and `security-baseline` at revision 1 are marked, and 3 files differ.
+- `orders-v1`: in eval, revision 2 is the same as the workspace, between the Pre-Proxy flow hook `security-baseline` and the Post-Proxy flow hook `logging`, each with the steps of its deployed revision. In test, revision 1 runs `AM-LegacyOrderHeader` instead of `JS-ValidateOrder`; the proxy endpoint, that step, and `security-baseline` at revision 1 are marked, and 3 files differ.
 - `catalog-v2` in test: revision 2 marks `AM-CatalogVersion`, and `JS-PageLinks` through `page-links.js`; 2 files differ.
 - `shipping`: the route rule `ratesFromCarrier` is a null route; following it ends the request at the route rules.
 - `LegacyStorefront`: the PreFlow of the target endpoint, its fault rule under On Error, and the load balancer with its fallback server.

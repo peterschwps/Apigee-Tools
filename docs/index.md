@@ -245,7 +245,7 @@ In Restricted Mode, linting and the flow of local bundles keep working, and the 
 
 ## Flow
 
-**Show Flow** draws how Apigee runs the flows of an API proxy or shared flow, in a panel beside the editor. Open it with the button in the title bar of an XML file of a bundle, with **Apigee Tools: Show Flow** from the Command Palette, or with **Show Flow** in the details of a proxy or shared flow in the dashboard. The panel shows the bundle of the file it was opened from, and draws it again when you save one of its files.
+**Show Flow** draws how Apigee runs the flows of an API proxy or shared flow, in a tab of its own. Open it with the button in the title bar of an XML file of a bundle, with **Apigee Tools: Show Flow** from the Command Palette, or with **Show Flow** in the details of a proxy or shared flow in the dashboard. The tab shows the bundle of the file it was opened from, and draws it again when you save one of its files.
 
 ### Reading the flow
 
@@ -255,15 +255,17 @@ Each proxy endpoint gets a map of the stages in the order Apigee runs them:
 - **Response:** the flows of the target endpoint, then those of the proxy endpoint, back to the client.
 - **Per Event**, **On Error**, and **After the Response** show the EventFlow for server-sent events, the fault handling of each endpoint, and the PostClientFlow, when the bundle has them.
 
-Conditional flows, route rules, and fault rules are numbered in the order Apigee checks them, and the first match runs: fault rules from the bottom up in a proxy endpoint and from the top down in a target endpoint, followed by the DefaultFaultRule. A case without a condition matches everything, so the cases after it are marked as never running. Route rules are buttons: choose one to draw the target it leads to, or none for a null route. A step with a condition has a dashed border, and a disabled policy is muted. A step opens its policy, and the title of an endpoint opens its file; hovering over an item names its policy type, its condition, and what else matters.
+Conditional flows, route rules, and fault rules are numbered in the order Apigee checks them when there are several, and the first match runs: fault rules from the bottom up in a proxy endpoint and from the top down in a target endpoint, followed by the DefaultFaultRule. A case without a condition matches everything, so the cases after it are marked as never running. A route rule shows its name and where it sends the request: **default → Target Endpoint default** is the route rule named default, which sends the request to the target endpoint named default. Route rules are buttons: choose one to draw the target it leads to, or none for a null route.
 
-In narrow panels the stages run from top to bottom. From 1,000 pixels, the request runs from left to right with the response below it from right to left, as in the Apigee console. Keyboard focus moves into each band with Tab and follows the run order with the arrow keys.
+The steps of each part stand below one another in the order they run. A step with a condition has a dashed border with the condition below it, and a disabled policy is muted. Every part starts expanded; the arrow before a band, an endpoint, a part such as the PreFlow, a conditional flow, or a flow hook collapses it. A step opens its policy, and the title of an endpoint opens its file, in a split view to the right of the flow; hovering over an item names its policy type, its condition, and what else matters.
+
+In narrow tabs the stages run from top to bottom. From 1,000 pixels, the request runs from left to right with the response below it from right to left, as in the Apigee console. Keyboard focus moves into each band with Tab and follows the run order with the arrow keys.
 
 ### Workspace and environments
 
 **Source** switches between the local copy, **Workspace**, and each environment where the proxy or shared flow is deployed, such as **eval · Revision 2**. The environments come from the organization of the dashboard; until it has loaded, **Load Environments** loads it. An environment shows the flow of its deployed revision with:
 
-- the shared flows of the environment's flow hooks, where they run, with their revisions;
+- the shared flows of the environment's flow hooks, where they run, with their revisions and the steps of those revisions;
 - the revision of each shared flow that a FlowCallout calls, or an error sign where it is not deployed, since the call then fails;
 - the status of the deployment and a mark on each policy, resource, or endpoint file that differs from the local copy. The button beside **Source** opens the differing files in VS Code's diff editor, or the sign says that they are the same.
 
@@ -281,7 +283,7 @@ Google's documentation leaves some behavior open, so the flow view assumes:
 
 ### Data
 
-The flow of the local copy reads only files of the workspace: it needs no sign-in, works in Restricted Mode, and sends nothing over the network. An environment reads its deployed revision once per session, shared with the comparisons of the dashboard, and its four flow hooks once until you refresh.
+The flow of the local copy reads only files of the workspace: it needs no sign-in, works in Restricted Mode, and sends nothing over the network. An environment reads its deployed revision once per session, shared with the comparisons of the dashboard, its four flow hooks once until you refresh, and the deployed revision of each shared flow attached to them once per session.
 
 ## Scope and limitations
 

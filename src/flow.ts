@@ -140,6 +140,8 @@ export type ViewContext = {
   ): { revision: string; differs?: boolean } | undefined;
   /** The files of the revision that differ from the local copy. */
   changes?: BundleChanges;
+  /** The deployed shared flows of the flow hooks, whose steps show inline. */
+  hookFlows?: Partial<Record<FlowHookPoint, FlowModel>>;
 };
 
 /** The model and what the view needs besides it. */
@@ -779,10 +781,11 @@ function describeRoute(
   to: Destination,
 ): { destination: string; sign?: FlowCase['sign']; facts: string[] } {
   if ('target' in to) {
+    const destination = `Target Endpoint ${to.target}`;
     return targetNamed(model, to.target)
-      ? { destination: to.target, facts: [] }
+      ? { destination, facts: [] }
       : {
-          destination: to.target,
+          destination,
           sign: 'error',
           facts: [`This bundle has no target endpoint named ${to.target}`],
         };
@@ -1144,6 +1147,22 @@ function hookItem(
     signs.push('unknown');
   }
   const sign = strongest(signs);
+  // The steps of its deployed revision, which open from that revision
+  const flow = deployed && context.hookFlows?.[point];
+  const steps = flow?.sharedFlow
+    ? stepsView(
+        {
+          model: flow,
+          context: {
+            environment: context.environment,
+            sharedFlow: context.sharedFlow,
+          },
+        },
+        flow.sharedFlow.steps,
+        `${key}/steps`,
+        point.startsWith('Pre') ? 'request' : 'response',
+      )
+    : undefined;
   return {
     kind: 'hook',
     key,
@@ -1152,6 +1171,7 @@ function hookItem(
     ...(deployed && { revision: deployed.revision }),
     ...(sign && { sign }),
     facts,
+    ...(steps && { steps }),
   };
 }
 

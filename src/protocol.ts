@@ -226,6 +226,8 @@ export type FlowItem =
       revision?: string;
       sign?: FlowSign;
       facts: string[];
+      /** The steps of that revision; absent when it could not be read. */
+      steps?: FlowStep[];
     }
   | {
       kind: 'endpoint';
@@ -318,8 +320,9 @@ export type WebviewMessage =
   | { type: 'findKey'; key: string }
   | { type: 'copyKey'; app: string; key: number }
   | { type: 'openBundle'; path: string }
-  // The flow view: open a place of a model, or follow another route rule
-  | { type: 'flowOpen'; version: number; at: number }
+  // The flow view: open a place of a model, or of the shared flow of a flow
+  // hook, or follow another route rule
+  | { type: 'flowOpen'; version: number; at: number; hook?: FlowHookPoint }
   | { type: 'flowRoute'; version: number; endpoint: number; route: number }
   | { type: 'flowSource'; source: string }
   // Shows the flow of a proxy or shared flow, in an environment if given

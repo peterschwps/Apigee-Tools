@@ -9,6 +9,10 @@ const bundlePath =
   '/v1/organizations/acme/apis/hello/revisions/1?format=bundle';
 const statusPath =
   '/v1/organizations/acme/environments/dev/apis/hello/revisions/1/deployments';
+// The shared flow attached to the Pre-Proxy flow hook of dev
+const sharedFlowZip = revisionZip.replace(/revision\.zip$/, 'sharedflow.zip');
+const sharedFlowPath =
+  '/v1/organizations/acme/sharedflows/traffic-shared/revisions/1?format=bundle';
 
 // Responses of a small fake organization, by path and query
 const apigee: Record<string, unknown> = {
@@ -27,7 +31,9 @@ const apigee: Record<string, unknown> = {
     environmentGroupAttachments: [{ environment: 'dev' }],
   },
   '/v1/organizations/acme/apis': { proxies: [{ name: 'hello' }] },
-  '/v1/organizations/acme/sharedflows': { sharedFlows: [] },
+  '/v1/organizations/acme/sharedflows': {
+    sharedFlows: [{ name: 'traffic-shared' }],
+  },
   '/v1/organizations/acme/deployments?sharedFlows=false': {
     deployments: [
       {
@@ -38,9 +44,20 @@ const apigee: Record<string, unknown> = {
       },
     ],
   },
-  '/v1/organizations/acme/deployments?sharedFlows=true': { deployments: [] },
+  '/v1/organizations/acme/deployments?sharedFlows=true': {
+    deployments: [
+      {
+        environment: 'dev',
+        apiProxy: 'traffic-shared',
+        revision: '1',
+        deployStartTime: '1700000000000',
+      },
+    ],
+  },
   [statusPath]: { state: 'READY' },
-  // No shared flow is attached to the flow hooks of dev
+  '/v1/organizations/acme/environments/dev/sharedflows/traffic-shared/revisions/1/deployments':
+    { state: 'READY' },
+  // Only the Pre-Proxy flow hook of dev has a shared flow attached
   ...Object.fromEntries(
     [
       'PreProxyFlowHook',
@@ -49,7 +66,7 @@ const apigee: Record<string, unknown> = {
       'PostProxyFlowHook',
     ].map(point => [
       `/v1/organizations/acme/environments/dev/flowhooks/${point}`,
-      {},
+      point === 'PreProxyFlowHook' ? { sharedFlow: 'traffic-shared' } : {},
     ]),
   ),
 };
@@ -209,7 +226,7 @@ const tests: [string, () => Promise<void>][] = [
     },
   ],
   [
-    'Show Flow opens the flow beside the editor without gcloud or the network',
+    'Show Flow opens the flow as a tab of the editor group without gcloud or the network',
     async () => {
       // Before the dashboard ran, so no session exists that it could reuse
       const requests: string[] = [];
@@ -225,6 +242,7 @@ const tests: [string, () => Promise<void>][] = [
           'proxies',
           'default.xml',
         );
+        const column = vscode.window.activeTextEditor?.viewColumn;
         await vscode.commands.executeCommand(
           'apigeeTools.showFlow',
           document.uri,
@@ -239,10 +257,9 @@ const tests: [string, () => Promise<void>][] = [
             ),
         );
         assert.equal(tab.label, 'Flow · hello');
-        // Beside the editor, which keeps the focus
-        const editor = vscode.window.activeTextEditor;
-        assert.equal(editor?.document.uri.toString(), document.uri.toString());
-        assert.notEqual(tab.group.viewColumn, editor?.viewColumn);
+        // In the editor's group, in front, so that files open beside it
+        assert.equal(tab.group.viewColumn, column);
+        assert.ok(tab.isActive);
         assert.deepEqual(gcloudCalls(), []);
         assert.deepEqual(requests, []);
       } finally {
@@ -315,7 +332,7 @@ const tests: [string, () => Promise<void>][] = [
     },
   ],
   [
-    'the flow of an environment reads only its flow hooks',
+    'the flow of an environment reads its flow hooks and their shared flows',
     async () => {
       // The dashboard test before loaded the organization through the fake gcloud
       if (process.platform === 'win32') {
@@ -329,6 +346,9 @@ const tests: [string, () => Promise<void>][] = [
         const url = new URL(String(input));
         const path = `${url.pathname}${url.search}`;
         requests.push(path);
+        if (path === sharedFlowPath) {
+          return new Response(readFileSync(sharedFlowZip));
+        }
         const body = apigee[path];
         return new Response(JSON.stringify(body ?? {}), {
           status: body ? 200 : 404,
@@ -344,11 +364,14 @@ const tests: [string, () => Promise<void>][] = [
         const hooks = Object.keys(apigee).filter(path =>
           path.includes('/flowhooks/'),
         );
-        await waitFor('the flow hooks', () =>
-          hooks.every(path => requests.includes(path)),
+        await waitFor('the flow hooks and the shared flow', () =>
+          [...hooks, sharedFlowPath].every(path => requests.includes(path)),
         );
-        // The revision is still in memory from the dashboard's comparison
-        assert.deepEqual([...requests].sort(), hooks.sort());
+        // The proxy's revision is still in memory from the dashboard's comparison
+        assert.deepEqual(
+          [...requests].sort(),
+          [...hooks, sharedFlowPath].sort(),
+        );
         assert.equal(gcloudCalls().length, calls);
       } finally {
         globalThis.fetch = original;

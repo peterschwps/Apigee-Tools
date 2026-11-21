@@ -583,11 +583,12 @@ class ApigeeDashboard extends LitElement {
   }
 }
 
-/** The flow view of one bundle, in a panel beside the editor. */
+/** The flow view of one bundle, in a tab of the editor. */
 class ApigeeFlow extends LitElement {
   static override properties = {
     flow: { state: true },
     roving: { state: true },
+    collapsed: { state: true },
     announcement: { state: true },
   };
 
@@ -596,6 +597,8 @@ class ApigeeFlow extends LitElement {
   declare flow: FlowView | undefined;
   /** The focused item of each band, its one tab stop. */
   declare roving: Record<string, string>;
+  /** The parts that the user collapsed; everything else shows expanded. */
+  declare collapsed: ReadonlySet<string>;
   /** What screen readers hear when the source changes. */
   declare announcement: string;
 
@@ -609,8 +612,15 @@ class ApigeeFlow extends LitElement {
   private loaded = false;
 
   private readonly actions: FlowActions = {
-    open: at => {
-      if (this.flow) send({ type: 'flowOpen', version: this.flow.version, at });
+    open: (at, hook) => {
+      if (this.flow) {
+        send({ type: 'flowOpen', version: this.flow.version, at, hook });
+      }
+    },
+    toggle: key => {
+      const next = new Set(this.collapsed);
+      if (!next.delete(key)) next.add(key);
+      this.collapsed = next;
     },
     route: (endpoint, route) => {
       if (this.flow) {
@@ -643,6 +653,7 @@ class ApigeeFlow extends LitElement {
     super();
     this.flow = undefined;
     this.roving = {};
+    this.collapsed = new Set();
     this.announcement = '';
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       if (event.data?.type !== 'flow') return;
@@ -667,6 +678,10 @@ class ApigeeFlow extends LitElement {
         ]
           .filter(Boolean)
           .join(' ');
+      }
+      // Another bundle starts expanded; another source keeps what is collapsed
+      if (before && (before.kind !== flow.kind || before.name !== flow.name)) {
+        this.collapsed = new Set();
       }
       this.loaded ||= ['ready', 'undeployed', 'problem'].includes(
         flow.environments,
@@ -757,7 +772,7 @@ class ApigeeFlow extends LitElement {
           : nothing
       }
       <div class="sr-only" role="status">${this.announcement}</div>
-      ${flowMaps(flow, this.roving, this.actions)}
+      ${flowMaps(flow, this.roving, this.collapsed, this.actions)}
       <div class="tooltip" aria-hidden="true" hidden></div>
     `;
   }

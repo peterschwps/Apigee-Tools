@@ -145,7 +145,7 @@ test('a proxy runs its flows in the order Apigee runs them', async () => {
       'request',
       'Client /orders/v1',
       'proxy default [PreFlow: OA-VerifyAccessToken:OAuthV2, FC-QuotaPerApp:FlowCallout] [Flows: 1 createOrder (POST /orders) {KVM-GetMaxItems:KeyValueMapOperations, JS-ValidateOrder:Javascript, RF-InvalidOrder:RaiseFault if order.valid = "false"}; 2 getOrder (GET /orders/*) {EV-OrderId:ExtractVariables}; 3 cancelOrder (DELETE /orders/*) {EV-OrderId:ExtractVariables}; No Match !none]',
-      'Routes [1 default → default *]',
+      'Routes [1 default → Target Endpoint default *]',
       'target default –',
       'Backend orders-backend · /v1',
     ],
@@ -213,7 +213,7 @@ test('route rules are a first-match group, and the followed one draws the target
   const [map] = flowView(model).maps;
   assert.equal(
     itemText(find(map, 'p0/routes')),
-    'Routes [1 ratesFromCarrier (/rates) → No Target !none; 2 default → default *]',
+    'Routes [1 ratesFromCarrier (/rates) → No Target !none; 2 default → Target Endpoint default *]',
   );
   // Following the null route leaves out the target endpoint and the backend
   const [nullRoute] = flowView(model, { routes: [0] }).maps;
@@ -286,7 +286,7 @@ test('a route to a target endpoint that does not exist is an error', async () =>
   assert.deepEqual(
     [orders.destination, orders.sign, orders.followed, orders.facts],
     [
-      'orders',
+      'Target Endpoint orders',
       'error',
       false,
       ['This bundle has no target endpoint named orders'],
@@ -506,7 +506,7 @@ test('routes without a target endpoint lead to their destination', () => {
   // Only conditional routes: a request that matches none fails
   assert.equal(
     routesOf(direct),
-    'Routes [1 direct (a = 1) → https://example.com *; 2 integration (a = 2) → Integration Endpoint default; 3 dynamic (a = 3) → {target.name} !error; No Match !error]',
+    'Routes [1 direct (a = 1) → https://example.com *; 2 integration (a = 2) → Integration Endpoint default; 3 dynamic (a = 3) → Target Endpoint {target.name} !error; No Match !error]',
   );
   assert.deepEqual(ends(direct), [
     routesOf(direct),
@@ -836,6 +836,44 @@ test('an environment draws the shared flows of its flow hooks where they run', a
     environment: undefined,
   }).maps;
   assert.doesNotMatch(JSON.stringify(local), /"hook"/);
+});
+
+test('the steps of a flow hook show inline, from its deployed revision', async () => {
+  const baseline = await shopModel('security-baseline', 'sharedflows');
+  const [map] = flowView(await shopModel('orders-v1'), {
+    environment: 'eval',
+    hooks: {
+      PreProxyFlowHook: { sharedFlow: 'security-baseline' },
+      PostProxyFlowHook: { sharedFlow: 'logging' },
+    },
+    // Only security-baseline is deployed, so logging shows no steps
+    sharedFlow: name =>
+      name === 'security-baseline' ? { revision: '2' } : undefined,
+    hookFlows: { PreProxyFlowHook: baseline, PostProxyFlowHook: baseline },
+  }).maps;
+  const pre = find<FlowItem & { kind: 'hook' }>(
+    map,
+    'p0/request/PreProxyFlowHook',
+  );
+  assert.deepEqual(pre.steps?.map(stepText), [
+    'VAK-ApiKey:VerifyAPIKey',
+    'SA-PerApp:SpikeArrest',
+    'JTP-Request:JSONThreatProtection if request.header.content-type =| "application/json"',
+  ]);
+  // Its steps open from the shared flow's own places
+  assert.deepEqual(
+    pre.steps?.map(step => baseline.places[step.at].file),
+    [
+      'sharedflowbundle/policies/VAK-ApiKey.xml',
+      'sharedflowbundle/policies/SA-PerApp.xml',
+      'sharedflowbundle/policies/JTP-Request.xml',
+    ],
+  );
+  const post = find<FlowItem & { kind: 'hook' }>(
+    map,
+    'p0/response/PostProxyFlowHook',
+  );
+  assert.equal(post.steps, undefined);
 });
 
 test('policies list the resources they name, outside comments and templates', () => {
