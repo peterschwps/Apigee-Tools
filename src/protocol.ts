@@ -257,7 +257,8 @@ export type FlowItem =
 
 /** The stages of one way through an endpoint, such as the request. */
 export type FlowBand = {
-  kind: 'request' | 'response' | 'event' | 'error' | 'after' | 'steps';
+  kind:
+    'request' | 'backend' | 'response' | 'event' | 'error' | 'after' | 'steps';
   /** Remarks under the band's heading. */
   facts: string[];
   items: FlowItem[];
@@ -279,6 +280,9 @@ export type FlowView = {
   version: number;
   kind: Kind;
   name: string;
+  /** The bundles that Back and Forward lead to, by name. */
+  back?: string;
+  forward?: string;
   /** Workspace-relative path of the local copy; absent without one. */
   path?: string;
   /** The source shown, by its id. */
@@ -325,6 +329,8 @@ export type WebviewMessage =
   | { type: 'flowOpen'; version: number; at: number; hook?: FlowHookPoint }
   | { type: 'flowRoute'; version: number; endpoint: number; route: number }
   | { type: 'flowSource'; source: string }
+  | { type: 'flowBack' }
+  | { type: 'flowForward' }
   // Shows the flow of a proxy or shared flow, in an environment if given
   | { type: 'showFlow'; kind: Kind; name: string; environment?: string }
   | { type: 'signIn' }

@@ -570,6 +570,28 @@ class ApigeeDashboard extends LitElement {
   }
 }
 
+/**
+ * Back or Forward in the flow view: to the bundle shown before or after,
+ * disabled where there is none.
+ */
+function travelButton(
+  way: 'back' | 'forward',
+  icon: string,
+  label: string,
+  to: string | undefined,
+) {
+  const name = to ? `${label} to ${to}` : label;
+  return html`<button
+    class="icon-button"
+    data-tooltip=${name}
+    aria-label=${name}
+    ?disabled=${!to}
+    @click=${() => send({ type: way === 'back' ? 'flowBack' : 'flowForward' })}
+  >
+    <vscode-icon name=${icon}></vscode-icon>
+  </button>`;
+}
+
 /** The flow view of one bundle, in a tab of the editor. */
 class ApigeeFlow extends LitElement {
   static override properties = {
@@ -597,6 +619,9 @@ class ApigeeFlow extends LitElement {
 
   /** Whether environments have loaded once; Refresh shows from then on. */
   private loaded = false;
+
+  /** What is collapsed in the bundles shown before, by kind and name. */
+  private readonly folds = new Map<string, ReadonlySet<string>>();
 
   private readonly actions: FlowActions = {
     open: (at, hook) => {
@@ -666,9 +691,11 @@ class ApigeeFlow extends LitElement {
           .filter(Boolean)
           .join(' ');
       }
-      // Another bundle starts expanded; another source keeps what is collapsed
+      // Each bundle keeps what is collapsed, also when Back returns to it
       if (before && (before.kind !== flow.kind || before.name !== flow.name)) {
-        this.collapsed = new Set();
+        this.folds.set(`${before.kind}/${before.name}`, this.collapsed);
+        this.collapsed =
+          this.folds.get(`${flow.kind}/${flow.name}`) ?? new Set();
       }
       this.loaded ||= ['ready', 'undeployed', 'problem'].includes(
         flow.environments,
@@ -721,6 +748,10 @@ class ApigeeFlow extends LitElement {
     return html`
       <header class="topbar">
         <div class="brand flow-brand">
+          <div class="history">
+            ${travelButton('back', 'arrow-left', 'Back', flow.back)}
+            ${travelButton('forward', 'arrow-right', 'Forward', flow.forward)}
+          </div>
           <h1>${flow.name}</h1>
           ${flowSubtitle(flow)}
         </div>

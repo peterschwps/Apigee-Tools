@@ -116,7 +116,7 @@
         "command": "apigeeTools.showFlow",
         "title": "Show Flow",
         "category": "Apigee Tools",
-        "icon": "$(open-preview)"
+        "icon": "$(arrow-swap)"
       }
     ],
     "menus": {

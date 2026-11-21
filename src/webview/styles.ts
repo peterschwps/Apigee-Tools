@@ -881,6 +881,20 @@ export const styles = css`
     min-width: 0;
   }
 
+  /* Back and Forward in the corner; the icons line up with the title */
+  .history {
+    display: flex;
+    gap: 2px;
+    margin-left: -3px;
+  }
+
+  .icon-button:disabled {
+    background: none;
+    border-color: transparent;
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .flow-brand h1 {
     white-space: normal;
     overflow-wrap: anywhere;
@@ -1115,8 +1129,9 @@ export const styles = css`
     color: var(--at-text-muted);
   }
 
+  /* The condition belongs to its step, apart from the case that follows */
   .step-condition {
-    padding-left: 7px;
+    padding: 0 0 4px 7px;
     color: var(--at-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1125,7 +1140,7 @@ export const styles = css`
 
   .cases {
     display: grid;
-    gap: 6px;
+    gap: 10px;
   }
 
   .case {
@@ -1207,12 +1222,6 @@ export const styles = css`
 
   .case .steps {
     padding-left: 24px;
-  }
-
-  @container (max-width: 699px) {
-    .node .type {
-      display: none;
-    }
   }
 
   /* Wide panels: seven columns that every band shares */

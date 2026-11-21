@@ -90,6 +90,14 @@ export type FlowPanel = {
 /** The bundle the panel shows, with the directory of its local copy. */
 type Subject = { kind: Kind; name: string; directory?: string };
 
+/** A bundle shown before or after the one on show, for Back and Forward. */
+type Visit = {
+  subject: Subject;
+  source: string;
+  routes: number[];
+  notice?: Note;
+};
+
 /** The organization and deployments that environments come from. */
 type Known = {
   organization: string;
@@ -147,6 +155,9 @@ export function registerFlowPanel(
   let routes: number[] = [];
   let watcher: vscode.FileSystemWatcher | undefined;
   let rebuild: ReturnType<typeof setTimeout> | undefined;
+  // The bundles to go back and forward to, the nearest last
+  let back: Visit[] = [];
+  let forward: Visit[] = [];
   let posted = '';
   // Deployed revisions never change; flow hooks are read once per load
   const models = new Map<string, FlowModel>();
@@ -252,9 +263,15 @@ export function registerFlowPanel(
   /**
    * Opens the panel as a tab of the active editor group, or switches it to
    * another bundle there, and resolves once its first build is done. Files
-   * open beside it.
+   * open beside it. Another bundle can be gone back to, unless the switch
+   * goes back or forward itself, which brings the routes it followed.
    */
-  function open(next: Subject, from: string, remark?: Note): Promise<void> {
+  function open(
+    next: Subject,
+    from: string,
+    remark?: Note,
+    travelled?: number[],
+  ): Promise<void> {
     const title = `Flow · ${next.name}`;
     if (panel) {
       panel.title = title;
@@ -284,16 +301,24 @@ export function registerFlowPanel(
         built = undefined;
         target = '';
         ready = false;
+        back = [];
+        forward = [];
         // A build still running belongs to the closed panel
         builds++;
       });
     }
     if (
       !subject ||
+      subject.kind !== next.kind ||
       subject.directory !== next.directory ||
       subject.name !== next.name
     ) {
-      routes = [];
+      // A new way forward replaces the old one, as in a browser
+      if (subject && !travelled) {
+        back.push({ subject, source, routes, notice });
+        forward = [];
+      }
+      routes = travelled ?? [];
       watcher?.dispose();
       watcher = next.directory ? watch(next.directory) : undefined;
     }
@@ -301,6 +326,15 @@ export function registerFlowPanel(
     source = from;
     notice = remark;
     return build();
+  }
+
+  /** Shows the bundle before or after the one on show. */
+  async function travel(way: 'back' | 'forward'): Promise<void> {
+    const [behind, ahead] = way === 'back' ? [back, forward] : [forward, back];
+    const visit = behind.pop();
+    if (!visit || !subject) return;
+    ahead.push({ subject, source, routes, notice });
+    await open(visit.subject, visit.source, visit.notice, visit.routes);
   }
 
   /** Rebuilds the view shortly after a file of the local copy changed. */
@@ -628,6 +662,10 @@ export function registerFlowPanel(
       version,
       kind: subject.kind,
       name: subject.name,
+      ...(back.length && { back: back[back.length - 1].subject.name }),
+      ...(forward.length && {
+        forward: forward[forward.length - 1].subject.name,
+      }),
       ...(subject.directory && {
         path: vscode.workspace.asRelativePath(subject.directory),
       }),
@@ -690,6 +728,12 @@ export function registerFlowPanel(
         }
         break;
       }
+      case 'flowBack':
+        await travel('back');
+        break;
+      case 'flowForward':
+        await travel('forward');
+        break;
       case 'flowSource':
         if (
           typeof message.source === 'string' &&

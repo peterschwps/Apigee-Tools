@@ -37,6 +37,7 @@ const bandTitles: Readonly<Record<FlowBand['kind'], string>> = {
   error: 'On Error',
   after: 'After the Response',
   steps: 'Steps',
+  backend: 'Backend',
 };
 
 const roleTitles = {
@@ -233,29 +234,28 @@ function itemView(item: FlowItem, parts: Parts): TemplateResult {
         ${item.basePath ? html`<span class="muted">${item.basePath}</span>` : nothing}
       </div>`;
     case 'backend':
+      // Its band is called Backend, so the item names only where it calls
       return html`<div class="terminal">
         ${
           item.at === undefined
-            ? html`<span class="terminal-name">Backend</span>`
+            ? html`<span>${item.text}</span>`
             : html`<button
-                class="link terminal-name"
+                class="link"
                 data-key=${item.key}
                 tabindex=${item.key === entry ? 0 : -1}
                 data-tooltip=${['Backend', item.text, ...item.facts].filter(Boolean).join('\n')}
                 @click=${() => actions.open(item.at!)}
               >
-                Backend<span class="sr-only"
-                  >.
-                  ${[item.text, ...item.facts].filter(Boolean).join('. ')}</span
-                >
+                ${item.text}${
+                  item.facts.length
+                    ? html`<span class="sr-only"
+                        >. ${item.facts.join('. ')}</span
+                      >`
+                    : nothing
+                }
               </button>`
         }
         ${signView(item.sign)}
-        <span
-          class="muted"
-          aria-hidden=${item.at === undefined ? nothing : 'true'}
-          >${item.text}</span
-        >
       </div>`;
     case 'routes':
       return html`<div class="routes-group">

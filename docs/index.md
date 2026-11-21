@@ -245,13 +245,14 @@ In Restricted Mode, linting and the flow of local bundles keep working, and the 
 
 ## Flow
 
-**Show Flow** draws how Apigee runs the flows of an API proxy or shared flow, in a tab of its own. Open it with the button in the title bar of an XML file of a bundle, with **Apigee Tools: Show Flow** from the Command Palette, or with **Show Flow** in the details of a proxy or shared flow in the dashboard. The tab shows the bundle of the file it was opened from, and draws it again when you save one of its files.
+**Show Flow** draws how Apigee runs the flows of an API proxy or shared flow, in a tab of its own. Open it with the button in the title bar of an XML file of a bundle, with **Apigee Tools: Show Flow** from the Command Palette, or with **Show Flow** in the details of a proxy or shared flow in the dashboard. The tab shows the bundle of the file it was opened from, and draws it again when you save one of its files. **Back** and **Forward** in its top-left corner return to the bundles shown before, for example to the proxy after following a flow hook to its shared flow.
 
 ### Reading the flow
 
 Each proxy endpoint gets a map of the stages in the order Apigee runs them:
 
-- **Request:** the client with the base path, the PreFlow, conditional Flows, and PostFlow of the proxy endpoint, the route rules, the flows of the target endpoint, and the backend.
+- **Request:** the client with the base path, the PreFlow, conditional Flows, and PostFlow of the proxy endpoint, the route rules, and the flows of the target endpoint.
+- **Backend:** where the target endpoint sends the request, such as a URL, the servers of a load balancer, or another proxy.
 - **Response:** the flows of the target endpoint, then those of the proxy endpoint, back to the client.
 - **Per Event**, **On Error**, and **After the Response** show the EventFlow for server-sent events, the fault handling of each endpoint, and the PostClientFlow, when the bundle has them.
 

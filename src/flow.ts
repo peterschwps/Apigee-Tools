@@ -462,9 +462,12 @@ function proxyMap(
             'request',
             `${key}/request/target`,
           ),
-        backend,
       ),
     },
+    // Between the request and the response: where the target endpoint calls
+    ...(backend
+      ? [{ kind: 'backend' as const, facts: [], items: [backend] }]
+      : []),
     {
       kind: 'response',
       facts: [],

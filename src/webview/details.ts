@@ -65,7 +65,7 @@ export function details(snapshot: Loaded, row: Row, actions: Actions) {
               aria-label="Show Flow"
               @click=${() => actions.openFlow(row)}
             >
-              <vscode-icon name="open-preview"></vscode-icon>
+              <vscode-icon name="arrow-swap"></vscode-icon>
             </button>
             <button
               class="icon-button"

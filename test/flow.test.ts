@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { history } from '../scripts/test-org';
 import { conditionSummary, flowModel, flowView } from '../src/flow';
 import type {
+  FlowBand,
   FlowCase,
   FlowItem,
   FlowMap,
@@ -108,6 +109,9 @@ const itemText = (item: FlowItem): string => {
 };
 const bands = (map: FlowMap) =>
   map.bands.map(band => [band.kind, ...band.items.map(itemText)]);
+/** One band of a map, by its kind. */
+const band = (map: FlowMap, kind: FlowBand['kind']) =>
+  bands(map).find(([found]) => found === kind);
 
 /** Finds an item of a view by its key. */
 function find<T>(value: unknown, key: string): T {
@@ -147,8 +151,8 @@ test('a proxy runs its flows in the order Apigee runs them', async () => {
       'proxy default [PreFlow: OA-VerifyAccessToken:OAuthV2, FC-QuotaPerApp:FlowCallout] [Flows: 1 createOrder (POST /orders) {KVM-GetMaxItems:KeyValueMapOperations, JS-ValidateOrder:Javascript, RF-InvalidOrder:RaiseFault if order.valid = "false"}; 2 getOrder (GET /orders/*) {EV-OrderId:ExtractVariables}; 3 cancelOrder (DELETE /orders/*) {EV-OrderId:ExtractVariables}; No Match !none]',
       'Routes [1 default → Target Endpoint default *]',
       'target default –',
-      'Backend orders-backend · /v1',
     ],
+    ['backend', 'Backend orders-backend · /v1'],
     ['response', 'target default –', 'proxy default –', 'Client'],
   ]);
   assert.deepEqual(find<FlowStep>(map, 'p0/request/proxy/pre/1').facts, [
@@ -231,7 +235,7 @@ test('route rules are a first-match group, and the followed one draws the target
   }
   // The response repeats every case, since getRates has response steps
   assert.equal(
-    bands(map)[1][2],
+    band(map, 'response')?.[2],
     'proxy default [Flows: 1 getRates (GET /rates) {AM-RatesResponse:AssignMessage if (responsecache.RC-ShippingRates.cachehit = false), RC-ShippingRates:ResponseCache}; 2 createShipment (POST /shipments); 3 trackShipment (GET /shipments/*/tracking); 4 unknownResource (Every other request)]',
   );
   assert.deepEqual(find<FlowStep>(map, 'p0/request/proxy/flows/0/1').facts, [
@@ -248,7 +252,8 @@ test('a null route without target endpoints ends the request at the route rules'
   assert.deepEqual(bands(map)[0].slice(-1), [
     'Routes [1 noTarget → No Target * !none]',
   ]);
-  assert.deepEqual(bands(map)[1], [
+  assert.equal(band(map, 'backend'), undefined);
+  assert.deepEqual(band(map, 'response'), [
     'response',
     'proxy default [Flows: 1 getHealth (GET /health) {AM-HealthResponse:AssignMessage}; 2 unknownResource (Every other request)]',
     'Client',
@@ -257,7 +262,7 @@ test('a null route without target endpoints ends the request at the route rules'
 
 test('fault rules of the sample shop show with the endpoint that has them', async () => {
   const [legacy] = flowView(await shopModel('LegacyStorefront')).maps;
-  assert.deepEqual(bands(legacy)[2], [
+  assert.deepEqual(band(legacy, 'error'), [
     'error',
     'target default [FaultRules: 1 backendUnavailable ((fault.name = "ServiceUnavailable") or (fault.name = "NoActiveTargets") or (fault.name = "GatewayTimeout")) {AM-BackendUnavailable:AssignMessage}]',
   ]);
@@ -274,7 +279,7 @@ test('fault rules of the sample shop show with the endpoint that has them', asyn
   );
 
   const [customers] = flowView(await shopModel('customers')).maps;
-  assert.deepEqual(bands(customers)[2], [
+  assert.deepEqual(band(customers, 'error'), [
     'error',
     'proxy default [FaultRules: 1 insufficientScope ((fault.name = "InsufficientScope")) {AM-InsufficientScope:AssignMessage}]',
   ]);
@@ -364,7 +369,7 @@ test('fault rules count in evaluation order, and DefaultFaultRule follows them',
       target(`${rules}${fallback(true)}`),
     ),
   ).maps;
-  assert.deepEqual(bands(map)[2], [
+  assert.deepEqual(band(map, 'error'), [
     'error',
     'proxy default [FaultRules: 1 last (fault.name = "Two") {A:AssignMessage}; 2 catchAll (Every fault) {A:AssignMessage}; 3 first (fault.name = "One") !warning {A:AssignMessage}; DefaultFaultRule (Otherwise) !warning {A:AssignMessage}]',
     'target default [FaultRules: 1 first (fault.name = "One") {A:AssignMessage}; 2 catchAll (Every fault) {A:AssignMessage}; 3 last (fault.name = "Two") !warning {A:AssignMessage}] [DefaultFaultRule: A:AssignMessage]',
@@ -399,7 +404,7 @@ test('fault rules count in evaluation order, and DefaultFaultRule follows them',
   const [plain] = flowView(
     proxy(`${fallback(false)}${defaultRoute}`, policy('AssignMessage', 'A')),
   ).maps;
-  assert.deepEqual(bands(plain)[2], [
+  assert.deepEqual(band(plain, 'error'), [
     'error',
     'proxy default [DefaultFaultRule: A:AssignMessage]',
   ]);
@@ -418,10 +423,13 @@ test('PostClientFlow and EventFlow get bands of their own', () => {
     ),
   );
   const [map] = flowView(model).maps;
-  assert.deepEqual(bands(map).slice(2), [
-    ['event', 'target default [EventFlow: JS2:Javascript]'],
-    ['after', 'proxy default [PostClientFlow: ML:MessageLogging]'],
-  ]);
+  assert.deepEqual(
+    [band(map, 'event'), band(map, 'after')],
+    [
+      ['event', 'target default [EventFlow: JS2:Javascript]'],
+      ['after', 'proxy default [PostClientFlow: ML:MessageLogging]'],
+    ],
+  );
 
   // When both endpoints have one, the target endpoint's runs, even empty
   const [both] = flowView(
@@ -435,7 +443,7 @@ test('PostClientFlow and EventFlow get bands of their own', () => {
   ).maps;
   assert.deepEqual(
     both.bands.map(band => band.kind),
-    ['request', 'response'],
+    ['request', 'backend', 'response'],
   );
 });
 
@@ -501,7 +509,11 @@ test('routes without a target endpoint lead to their destination', () => {
     <RouteRule name="dynamic"><Condition>a = 3</Condition><TargetEndpoint>{target.name}</TargetEndpoint></RouteRule>`;
   const model = proxy(routes, target(''));
   const routesOf = (map: FlowMap) => itemText(find(map, 'p0/routes'));
-  const ends = (map: FlowMap) => bands(map)[0].slice(-2);
+  // The last stage of the request, and the backend it calls
+  const ends = (map: FlowMap) => [
+    bands(map)[0].at(-1),
+    ...(band(map, 'backend')?.slice(1) ?? []),
+  ];
   const [direct] = flowView(model).maps;
   // Only conditional routes: a request that matches none fails
   assert.equal(
@@ -590,10 +602,10 @@ test('each proxy endpoint gets a map, and a route may name a target by its file'
     maps.map(map => map.title),
     ['Proxy Endpoint a', 'Proxy Endpoint b'],
   );
-  assert.deepEqual(bands(maps[0])[0].slice(-2), [
-    'target renamed –',
-    'Backend https://example.com',
-  ]);
+  assert.deepEqual(
+    [bands(maps[0])[0].at(-1), band(maps[0], 'backend')],
+    ['target renamed –', ['backend', 'Backend https://example.com']],
+  );
 });
 
 test('a file named after its policy wins over a copy', () => {
@@ -779,7 +791,8 @@ test('an environment draws the shared flows of its flow hooks where they run', a
   assert.deepEqual(
     map.bands.map(band => band.items.map(item => item.kind)),
     [
-      ['client', 'hook', 'endpoint', 'routes', 'endpoint', 'backend'],
+      ['client', 'hook', 'endpoint', 'routes', 'endpoint'],
+      ['backend'],
       ['endpoint', 'endpoint', 'hook', 'client'],
     ],
   );
