@@ -13,6 +13,7 @@ import '@vscode-elements/elements/dist/vscode-tabs/index.js';
 import '@vscode-elements/elements/dist/vscode-textfield/index.js';
 import type { VscodeSingleSelect } from '@vscode-elements/elements/dist/vscode-single-select/index.js';
 import { html, LitElement, nothing, type TemplateResult } from 'lit';
+import { keyed } from 'lit/directives/keyed.js';
 import type {
   FlowView,
   HostMessage,
@@ -81,6 +82,26 @@ const selectWithSpace = (event: KeyboardEvent) => {
   event.preventDefault();
   header.click();
 };
+
+/** A held-down key repeats clicks on buttons; one refresh is enough. */
+function ignoreRepeats(element: HTMLElement): void {
+  element.addEventListener(
+    'keydown',
+    event => {
+      const target = event.composedPath()[0] as Element;
+      if (
+        event.repeat &&
+        (target.localName === 'vscode-button' ||
+          target.classList.contains('refresh') ||
+          target.classList.contains('load'))
+      ) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+    },
+    true,
+  );
+}
 
 /** vscode-button clicks on Space but leaves the page to scroll as well. */
 const keepScroll = (event: KeyboardEvent) => {
@@ -251,22 +272,7 @@ class ApigeeDashboard extends LitElement {
         this.snapshot = snapshot;
       }
     });
-    // A held-down key repeats clicks on buttons; one refresh is enough
-    this.addEventListener(
-      'keydown',
-      event => {
-        const target = event.composedPath()[0] as Element;
-        if (
-          event.repeat &&
-          (target.localName === 'vscode-button' ||
-            target.classList.contains('refresh'))
-        ) {
-          event.stopPropagation();
-          event.preventDefault();
-        }
-      },
-      true,
-    );
+    ignoreRepeats(this);
     send({ type: 'ready' });
   }
 
@@ -599,6 +605,9 @@ class ApigeeFlow extends LitElement {
   /** The item to focus again when a rebuild replaced the focused one. */
   private focusKey?: string;
 
+  /** Whether environments have loaded once; Refresh shows from then on. */
+  private loaded = false;
+
   private readonly actions: FlowActions = {
     open: at => {
       if (this.flow) send({ type: 'flowOpen', version: this.flow.version, at });
@@ -652,12 +661,19 @@ class ApigeeFlow extends LitElement {
           flow.changes
             ? `${flow.changes} ${flow.changes === 1 ? 'file differs' : 'files differ'} from the workspace.`
             : '',
+          ...flow.notes
+            .filter(note => note.tone === 'warning')
+            .map(note => note.text),
         ]
           .filter(Boolean)
           .join(' ');
       }
+      this.loaded ||= ['ready', 'undeployed', 'problem'].includes(
+        flow.environments,
+      );
       this.flow = flow;
     });
+    ignoreRepeats(this);
     send({ type: 'ready' });
   }
 
@@ -667,15 +683,30 @@ class ApigeeFlow extends LitElement {
     );
   }
 
-  /** Keeps the focus on the same item when a rebuild replaced it. */
+  /**
+   * Keeps the focus on the same item when a rebuild replaced it, or else on
+   * an item of the flow; a button that started loading hands it on.
+   */
   protected override updated(): void {
     this.syncTooltip();
     const key = this.focusKey;
     this.focusKey = undefined;
     if (key && !this.shadowRoot?.activeElement) {
-      this.renderRoot
-        .querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)
-        ?.focus();
+      (
+        this.renderRoot.querySelector<HTMLElement>(
+          `[data-key="${CSS.escape(key)}"]`,
+        ) ??
+        this.renderRoot.querySelector<HTMLElement>('[data-key][tabindex="0"]')
+      )?.focus();
+    }
+    if (refocus && !this.shadowRoot?.activeElement) {
+      const next =
+        this.renderRoot.querySelector<HTMLElement>('.refresh') ??
+        this.renderRoot.querySelector<HTMLElement>('#source');
+      if (next) {
+        refocus = false;
+        next.focus();
+      }
     }
   }
 
@@ -685,9 +716,6 @@ class ApigeeFlow extends LitElement {
       return html`${progress('Reading the bundle…')}
         <div class="tooltip" aria-hidden="true" hidden></div>`;
     }
-    const loaded = ['ready', 'undeployed', 'problem'].includes(
-      flow.environments,
-    );
     return html`
       <header class="topbar">
         <div class="brand flow-brand">
@@ -696,14 +724,17 @@ class ApigeeFlow extends LitElement {
         </div>
         <div class="session">
           ${
-            loaded
+            this.loaded
               ? html`<button
                   class="icon-button refresh"
-                  data-tooltip="Refresh"
-                  aria-label="Refresh"
+                  data-tooltip=${flow.loading ? 'Refreshing…' : 'Refresh'}
+                  aria-label=${flow.loading ? 'Refreshing…' : 'Refresh'}
                   @click=${() => send({ type: 'refresh' })}
                 >
-                  <vscode-icon name="refresh"></vscode-icon>
+                  <vscode-icon
+                    name="refresh"
+                    ?spin=${flow.loading && !reducedMotion()}
+                  ></vscode-icon>
                 </button>`
               : nothing
           }
@@ -750,25 +781,29 @@ class ApigeeFlow extends LitElement {
                 <span class="field-label">Source</span>
               </vscode-label>
               <div class="source">
-                <vscode-single-select
-                  id="source"
-                  @change=${(event: Event) => {
-                    const index = Number(
-                      (event.target as VscodeSingleSelect).value,
-                    );
-                    const chosen = flow.sources[index];
-                    if (chosen) send({ type: 'flowSource', source: chosen.id });
-                  }}
-                >
-                  ${flow.sources.map(
-                    (item, index) =>
-                      html`<vscode-option
-                        value=${String(index)}
-                        ?selected=${item.id === flow.source}
-                        >${item.label}</vscode-option
-                      >`,
-                  )}
-                </vscode-single-select>
+                ${keyed(
+                  flow.sources.map(item => item.label).join('\n'),
+                  html`<vscode-single-select
+                    id="source"
+                    @change=${(event: Event) => {
+                      const index = Number(
+                        (event.target as VscodeSingleSelect).value,
+                      );
+                      const chosen = flow.sources[index];
+                      if (chosen)
+                        send({ type: 'flowSource', source: chosen.id });
+                    }}
+                  >
+                    ${flow.sources.map(
+                      (item, index) =>
+                        html`<vscode-option
+                          value=${String(index)}
+                          ?selected=${item.id === flow.source}
+                          >${item.label}</vscode-option
+                        >`,
+                    )}
+                  </vscode-single-select>`,
+                )}
                 ${
                   deployment
                     ? html`<span class="sign" data-tooltip=${deployment.label}
@@ -814,8 +849,11 @@ class ApigeeFlow extends LitElement {
           ready: nothing,
           problem: nothing,
           unloaded: html`<button
-            class="link"
-            @click=${() => send({ type: 'refresh' })}
+            class="link load"
+            @click=${() => {
+              refocus = true;
+              send({ type: 'refresh' });
+            }}
           >
             Load Environments
           </button>`,

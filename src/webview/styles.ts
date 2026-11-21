@@ -881,6 +881,11 @@ export const styles = css`
     min-width: 0;
   }
 
+  .flow-brand h1 {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .flow-path {
     overflow-wrap: anywhere;
   }
@@ -1030,6 +1035,17 @@ export const styles = css`
     overflow-wrap: anywhere;
   }
 
+  /* Facts such as the order of fault rules, with the cases below them */
+  .segment-fact {
+    color: var(--at-text-muted);
+    line-height: 24px;
+  }
+
+  .segment-fact,
+  .segment-fact ~ * {
+    grid-column: 2;
+  }
+
   .steps,
   .cases {
     min-width: 0;
@@ -1122,8 +1138,12 @@ export const styles = css`
     cursor: pointer;
   }
 
-  .case-head:hover {
+  .case-head:hover:not([aria-disabled='true']) {
     background: var(--vscode-list-hoverBackground);
+  }
+
+  .case-head[aria-disabled='true'] {
+    cursor: default;
   }
 
   .case-head:focus-visible {
@@ -1289,6 +1309,11 @@ export const styles = css`
     .segment {
       grid-template-columns: minmax(0, 1fr);
       max-width: 360px;
+    }
+
+    .segment-fact,
+    .segment-fact ~ * {
+      grid-column: auto;
     }
 
     /* Side by side while there is room; below one another otherwise */

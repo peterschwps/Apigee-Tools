@@ -84,6 +84,7 @@ function bandView(
       ${band.facts.map(fact => html`<p class="band-fact">${fact}</p>`)}
       <ol
         class="stages"
+        aria-label=${bandTitles[band.kind]}
         @keydown=${moveInBand}
         @focusin=${(event: FocusEvent) => {
           const focused = (event.target as HTMLElement).dataset.key;
@@ -153,14 +154,21 @@ function itemView(
                 class="link terminal-name"
                 data-key=${item.key}
                 tabindex=${item.key === entry ? 0 : -1}
-                data-tooltip=${['Backend', ...item.facts].join('\n')}
+                data-tooltip=${['Backend', item.text, ...item.facts].filter(Boolean).join('\n')}
                 @click=${() => actions.open(item.at!)}
               >
-                Backend<span class="sr-only">. ${item.facts.join('. ')}</span>
+                Backend<span class="sr-only"
+                  >.
+                  ${[item.text, ...item.facts].filter(Boolean).join('. ')}</span
+                >
               </button>`
         }
         ${signView(item.sign)}
-        <span class="muted">${item.text}</span>
+        <span
+          class="muted"
+          aria-hidden=${item.at === undefined ? nothing : 'true'}
+          >${item.text}</span
+        >
       </div>`;
     case 'routes':
       return html`<div class="routes-group">
@@ -170,7 +178,7 @@ function itemView(
     case 'hook': {
       const label = `${hookNames[item.point]} Flow Hook`;
       return html`<div class="terminal">
-        <span class="terminal-name"
+        <span class="terminal-name" aria-hidden="true"
           ><vscode-icon name="plug" class="hook-mark"></vscode-icon
           >${hookNames[item.point]}</span
         >
@@ -182,13 +190,16 @@ function itemView(
           @click=${() => actions.hook(item.sharedFlow)}
         >
           ${item.sharedFlow}<span class="sr-only"
-            >. ${label}. ${item.facts.join('. ')}</span
+            >.
+            ${[label, item.revision && `Revision ${item.revision}`, ...item.facts].filter(Boolean).join('. ')}</span
           >
         </button>
         ${signView(item.sign)}
         ${
           item.revision
-            ? html`<span class="muted">Revision ${item.revision}</span>`
+            ? html`<span class="muted" aria-hidden="true"
+                >Revision ${item.revision}</span
+              >`
             : nothing
         }
       </div>`;
@@ -203,8 +214,7 @@ function itemView(
             data-tooltip=${[`${roleTitles[item.role]} ${item.name}`, ...item.facts].join('\n')}
             @click=${() => actions.open(item.at)}
           >
-            ${roleTitles[item.role]}
-            ${item.name}${
+            ${`${roleTitles[item.role]} ${item.name}`}${
               item.facts.length
                 ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
                 : nothing
@@ -231,15 +241,8 @@ function segmentView(
   actions: FlowActions,
 ): TemplateResult {
   return html`<div class="segment">
-    <span
-      class="segment-label"
-      data-tooltip=${segment.facts.length ? segment.facts.join('\n') : nothing}
-      >${segment.label}${
-        segment.facts.length
-          ? html`<span class="sr-only">. ${segment.facts.join('. ')}</span>`
-          : nothing
-      }</span
-    >
+    <span class="segment-label">${segment.label}</span>
+    ${segment.facts.map(fact => html`<p class="segment-fact">${fact}</p>`)}
     ${
       'cases' in segment
         ? casesView(segment.cases, segment.label, entry, actions)
@@ -260,41 +263,42 @@ function casesView(
   endpoint?: number,
 ): TemplateResult {
   return html`<ol class="cases" aria-label="${label}, the first match runs">
-    ${cases.map(
-      (item, position) =>
-        html`<li class="case">
-          <button
-            class="case-head ${item.muted ? 'muted' : ''}"
-            data-key=${item.key}
-            tabindex=${item.key === entry ? 0 : -1}
-            aria-pressed=${item.followed === undefined ? nothing : String(item.followed)}
-            data-tooltip=${[item.name, item.condition, ...item.facts].filter(Boolean).join('\n')}
-            @click=${() => {
-              if (endpoint !== undefined && item.number !== undefined) {
-                actions.route(endpoint, position);
-              } else if (item.at !== undefined) {
-                actions.open(item.at);
-              }
-            }}
-          >
-            ${signView(item.sign)}
-            ${item.number === undefined ? nothing : html`<span class="number">${item.number}</span>`}
-            <span class="case-name">${item.name}</span>
-            ${item.summary ? html`<span class="summary">${item.summary}</span>` : nothing}
-            ${item.destination ? html`<span class="destination">→ ${item.destination}</span>` : nothing}
-            ${
-              item.facts.length ||
-              (item.condition && item.condition !== item.summary)
-                ? html`<span class="sr-only"
-                    >.
-                    ${[item.condition && item.condition !== item.summary ? `If ${item.condition}` : '', ...item.facts].filter(Boolean).join('. ')}</span
-                  >`
-                : nothing
+    ${cases.map((item, position) => {
+      const route = endpoint !== undefined && item.number !== undefined;
+      return html`<li class="case">
+        <button
+          class="case-head ${item.muted ? 'muted' : ''}"
+          data-key=${item.key}
+          tabindex=${item.key === entry ? 0 : -1}
+          aria-pressed=${item.followed === undefined ? nothing : String(item.followed)}
+          aria-disabled=${route || item.at !== undefined ? nothing : 'true'}
+          data-tooltip=${[item.name, item.condition, ...item.facts].filter(Boolean).join('\n')}
+          @click=${() => {
+            if (route) {
+              actions.route(endpoint, position);
+            } else if (item.at !== undefined) {
+              actions.open(item.at);
             }
-          </button>
-          ${item.steps.length ? stepsView(item.steps, entry, actions) : nothing}
-        </li>`,
-    )}
+          }}
+        >
+          ${signView(item.sign)}
+          ${item.number === undefined ? nothing : html`<span class="number">${item.number}</span>`}
+          <span class="case-name">${item.name}</span>
+          ${item.summary ? html`<span class="summary">${item.summary}</span>` : nothing}
+          ${item.destination ? html`<span class="destination">→ ${item.destination}</span>` : nothing}
+          ${
+            item.facts.length ||
+            (item.condition && item.condition !== item.summary)
+              ? html`<span class="sr-only"
+                  >.
+                  ${[item.condition && item.condition !== item.summary ? `If ${item.condition}` : '', ...item.facts].filter(Boolean).join('. ')}</span
+                >`
+              : nothing
+          }
+        </button>
+        ${item.steps.length ? stepsView(item.steps, entry, actions) : nothing}
+      </li>`;
+    })}
   </ol>`;
 }
 
@@ -316,7 +320,12 @@ function stepsView(
           >
             ${signView(step.sign)}
             <span class="node-name">${step.name}</span>
-            ${step.type ? html`<span class="type"><span class="sr-only">, </span>${step.type}</span>` : nothing}
+            ${
+              step.type
+                ? html`<span class="sr-only">, ${step.type}</span
+                    ><span class="type" aria-hidden="true">${step.type}</span>`
+                : nothing
+            }
             ${
               step.condition || step.facts.length
                 ? html`<span class="sr-only"
