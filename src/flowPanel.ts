@@ -748,26 +748,6 @@ export function registerFlowPanel(
           await build();
         }
         break;
-      case 'showFlow': {
-        // Only the shared flow of a flow hook on show, in the same environment
-        const view = built;
-        const hook = Object.values(view?.context.hooks ?? {}).find(
-          item => item.sharedFlow === message.name,
-        );
-        if (
-          view &&
-          hook &&
-          message.kind === 'sharedflows' &&
-          message.environment === view.source
-        ) {
-          await show({
-            kind: 'sharedflows',
-            name: hook.sharedFlow,
-            environment: view.source,
-          });
-        }
-        break;
-      }
       case 'compare': {
         const view = built;
         const current = subject;
@@ -852,8 +832,10 @@ export function registerFlowPanel(
       const document = await vscode.workspace.openTextDocument(uri);
       const position = document.positionAt(place.offset);
       await vscode.window.showTextDocument(document, {
-        // A split view to the right of the flow
-        viewColumn: vscode.ViewColumn.Beside,
+        // Always the group right of the flow, so that splits do not pile up
+        viewColumn: panel?.viewColumn
+          ? panel.viewColumn + 1
+          : vscode.ViewColumn.Beside,
         selection: new vscode.Range(position, position),
       });
     } catch (error) {

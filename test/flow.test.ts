@@ -102,7 +102,7 @@ const itemText = (item: FlowItem): string => {
         item.segments.map(segmentText).join(' ') || '–'
       }`;
     case 'routes':
-      return `Routes [${item.cases.map(caseText).join('; ')}]`;
+      return `Routes [${item.cases.map(caseText).join('; ')}]${sign(item.sign)}`;
     case 'backend':
       return `Backend ${item.text}${sign(item.sign)}`;
   }
@@ -143,13 +143,14 @@ function stepNames(map: FlowMap, kind: string): string[] {
 
 test('a proxy runs its flows in the order Apigee runs them', async () => {
   const [map] = flowView(await shopModel('orders-v1')).maps;
-  assert.equal(map.title, 'Proxy Endpoint default · /orders/v1');
+  // An endpoint named default goes by its kind alone
+  assert.equal(map.title, 'Proxy Endpoint · /orders/v1');
   assert.deepEqual(bands(map), [
     [
       'request',
       'Client /orders/v1',
-      'proxy default [PreFlow: OA-VerifyAccessToken:OAuthV2, FC-QuotaPerApp:FlowCallout] [Flows: 1 createOrder (POST /orders) {KVM-GetMaxItems:KeyValueMapOperations, JS-ValidateOrder:Javascript, RF-InvalidOrder:RaiseFault if order.valid = "false"}; 2 getOrder (GET /orders/*) {EV-OrderId:ExtractVariables}; 3 cancelOrder (DELETE /orders/*) {EV-OrderId:ExtractVariables}; No Match !none]',
-      'Routes [1 default → Target Endpoint default *]',
+      'proxy default [PreFlow: OA-VerifyAccessToken:OAuthV2, FC-QuotaPerApp:FlowCallout] [Flows: 1 createOrder (POST /orders) {KVM-GetMaxItems:KeyValueMapOperations, JS-ValidateOrder:Javascript, RF-InvalidOrder:RaiseFault if order.valid = "false"}; 2 getOrder (GET /orders/*) {EV-OrderId:ExtractVariables}; 3 cancelOrder (DELETE /orders/*) {EV-OrderId:ExtractVariables}]',
+      'Routes [1 default → Target Endpoint *]',
       'target default –',
     ],
     ['backend', 'Backend orders-backend · /v1'],
@@ -217,7 +218,7 @@ test('route rules are a first-match group, and the followed one draws the target
   const [map] = flowView(model).maps;
   assert.equal(
     itemText(find(map, 'p0/routes')),
-    'Routes [1 ratesFromCarrier (/rates) → No Target !none; 2 default → Target Endpoint default *]',
+    'Routes [1 ratesFromCarrier (/rates) → No Target !none; 2 default → Target Endpoint *]',
   );
   // Following the null route leaves out the target endpoint and the backend
   const [nullRoute] = flowView(model, { routes: [0] }).maps;
@@ -345,7 +346,7 @@ test('flows after a flow without a condition never run', () => {
     [late.sign, late.muted, late.facts],
     ['warning', true, ['Never runs: other has no condition and matches first']],
   );
-  // The flow without a condition catches the rest, so there is no No Match
+  // The flow without a condition catches the rest
   assert.equal(
     bands(map)[0][2],
     'proxy default [Flows: 1 a (request.verb = "GET") {A:AssignMessage}; 2 other (Every other request) {A:AssignMessage}; 3 late (request.verb = "PUT") !warning {A:AssignMessage}]',
@@ -518,7 +519,7 @@ test('routes without a target endpoint lead to their destination', () => {
   // Only conditional routes: a request that matches none fails
   assert.equal(
     routesOf(direct),
-    'Routes [1 direct (a = 1) → https://example.com *; 2 integration (a = 2) → Integration Endpoint default; 3 dynamic (a = 3) → Target Endpoint {target.name} !error; No Match !error]',
+    'Routes [1 direct (a = 1) → https://example.com *; 2 integration (a = 2) → Integration Endpoint; 3 dynamic (a = 3) → Target Endpoint {target.name} !error] !error',
   );
   assert.deepEqual(ends(direct), [
     routesOf(direct),
@@ -526,14 +527,20 @@ test('routes without a target endpoint lead to their destination', () => {
   ]);
   const [integration] = flowView(model, { routes: [1] }).maps;
   assert.deepEqual(ends(integration).slice(-1), [
-    'Backend Integration Endpoint default',
+    'Backend Integration Endpoint',
   ]);
   const [dynamic] = flowView(model, { routes: [2] }).maps;
   assert.equal(bands(dynamic)[0].at(-1), routesOf(dynamic));
 
   // Without route rules, every request fails as with no match
   const [none] = flowView(proxy('')).maps;
-  assert.equal(routesOf(none), 'Routes [No Match !error]');
+  assert.equal(routesOf(none), 'Routes [] !error');
+  assert.deepEqual(
+    find<FlowItem & { kind: 'routes' }>(none, 'p0/routes').facts,
+    [
+      'A request that matches no route rule fails with messaging.runtime.RouteFailed (500)',
+    ],
+  );
 });
 
 test('backends show where requests go and which statuses count as success', () => {

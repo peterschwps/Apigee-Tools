@@ -964,11 +964,87 @@ export const styles = css`
     background: var(--vscode-editor-background);
   }
 
+  /* Classes place the cells: the page allows no inline styles */
   .stations {
+    position: relative;
     display: grid;
+    grid-template-columns: 24px;
+    grid-auto-columns: minmax(0, auto);
     grid-auto-rows: 26px;
     row-gap: 6px;
     align-items: center;
+  }
+
+  .r1 {
+    grid-row: 1;
+  }
+
+  .r2 {
+    grid-row: 2;
+  }
+
+  .r3 {
+    grid-row: 3;
+  }
+
+  .r4 {
+    grid-row: 4;
+  }
+
+  .r5 {
+    grid-row: 5;
+  }
+
+  .c1 {
+    grid-column: 1;
+  }
+
+  .c2 {
+    grid-column: 2;
+  }
+
+  .c3 {
+    grid-column: 3;
+  }
+
+  .c4 {
+    grid-column: 4;
+  }
+
+  .c5 {
+    grid-column: 5;
+  }
+
+  .c6 {
+    grid-column: 6;
+  }
+
+  .c7 {
+    grid-column: 7;
+  }
+
+  .c8 {
+    grid-column: 8;
+  }
+
+  /* The connections, drawn after layout, with an arrow halfway */
+  .links {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .links .link {
+    fill: none;
+    stroke: var(--at-text-muted);
+    stroke-opacity: 0.5;
+  }
+
+  .links .arrow {
+    fill: var(--at-text-muted);
   }
 
   .row-mark {
@@ -980,7 +1056,6 @@ export const styles = css`
     color: var(--at-text-muted);
   }
 
-  /* A line runs through the stations of the request and the response */
   .slot {
     display: flex;
     align-items: center;
@@ -989,26 +1064,17 @@ export const styles = css`
     height: 100%;
   }
 
-  .slot.through {
-    background: linear-gradient(var(--at-border), var(--at-border)) center /
-      100% 1px no-repeat;
-  }
-
-  .slot.from {
-    background: linear-gradient(var(--at-border), var(--at-border)) right
-      center / 50% 1px no-repeat;
-  }
-
-  .slot.to {
-    background: linear-gradient(var(--at-border), var(--at-border)) left
-      center / 50% 1px no-repeat;
-  }
-
   /* Where the request turns: the backend, or a route without a target */
   .turn {
+    grid-row: 1;
     display: flex;
     align-self: stretch;
-    min-width: 0;
+    min-width: 64px;
+    padding-left: 14px;
+  }
+
+  .turn.span2 {
+    grid-row: 1 / span 2;
   }
 
   /* Stations look like the nodes of the Relationships graph */
@@ -1104,20 +1170,101 @@ export const styles = css`
     padding-top: 10px;
   }
 
+  .row {
+    padding-left: var(--indent, 0);
+  }
+
   .level-2 {
-    padding-left: 22px;
+    --indent: 22px;
   }
 
   .level-3 {
-    padding-left: 42px;
+    --indent: 42px;
   }
 
   .level-4 {
-    padding-left: 62px;
+    --indent: 62px;
   }
 
   .level-5 {
-    padding-left: 82px;
+    --indent: 82px;
+  }
+
+  .level-6 {
+    --indent: 102px;
+  }
+
+  /*
+   * The cases of a first-match group branch off a decision, a diamond: one
+   * line down the group, a short one to each case. Steps sit inside.
+   */
+  .row.in-branch {
+    padding-left: calc(var(--indent) + 18px);
+  }
+
+  .branch {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--indent) + 7px);
+    width: 12px;
+  }
+
+  .branch.through,
+  .branch.end {
+    left: calc(var(--indent) - 13px);
+  }
+
+  .branch::before,
+  .branch::after {
+    content: '';
+    position: absolute;
+    left: 0;
+  }
+
+  /* As strong as the map's connections: the alternatives must stand out */
+  .branch::before {
+    border-left: 1px solid
+      color-mix(in srgb, var(--at-text-muted) 60%, transparent);
+  }
+
+  .branch.first::before {
+    top: 14px;
+    bottom: 0;
+  }
+
+  .branch.middle::before,
+  .branch.through::before {
+    top: 0;
+    bottom: 0;
+  }
+
+  .branch.last::before {
+    top: 0;
+    height: 14px;
+  }
+
+  .branch.first::after,
+  .branch.middle::after,
+  .branch.last::after,
+  .branch.only::after {
+    top: 14px;
+    width: 12px;
+    border-top: 1px solid
+      color-mix(in srgb, var(--at-text-muted) 60%, transparent);
+  }
+
+  .fork {
+    position: absolute;
+    top: 10px;
+    left: -4px;
+    z-index: 1;
+    width: 9px;
+    height: 9px;
+    box-sizing: border-box;
+    border: 1px solid var(--at-text-muted);
+    background: var(--vscode-editor-background);
+    transform: rotate(45deg);
   }
 
   .twisty {

@@ -245,6 +245,9 @@ export type FlowItem =
       /** The proxy endpoint whose route rules these are, by position. */
       endpoint: number;
       cases: FlowCase[];
+      /** Set when a request can match no route rule. */
+      sign?: FlowSign;
+      facts: string[];
     }
   | {
       kind: 'backend';
@@ -336,3 +339,11 @@ export type WebviewMessage =
   | { type: 'signIn' }
   | { type: 'settings' }
   | { type: 'trust' };
+
+/**
+ * Names an endpoint by its kind and its name; an endpoint named default, as
+ * most are, goes by its kind alone.
+ */
+export function named(kind: string, name: string): string {
+  return name === 'default' ? kind : `${kind} ${name}`;
+}

@@ -16,6 +16,7 @@ import type {
   Kind,
   Note,
 } from './protocol';
+import { named } from './protocol';
 import type { BundleChanges, BundleFiles } from './revision';
 import { parseXml, type XmlNode } from './xml';
 
@@ -552,7 +553,7 @@ function proxyMap(
 
   return {
     key,
-    title: [`Proxy Endpoint ${proxy.name}`, proxy.basePath]
+    title: [named('Proxy Endpoint', proxy.name), proxy.basePath]
       .filter(Boolean)
       .join(' · '),
     bands,
@@ -569,7 +570,7 @@ function sharedFlowMap(
   const changed = difference(scope.context, flow.file);
   return {
     key: 's',
-    title: `Shared Flow ${flow.name}`,
+    title: named('Shared Flow', flow.name),
     bands: [
       {
         kind: 'steps',
@@ -711,15 +712,6 @@ function flowCases(
       steps: stepsView(scope, flow[direction], `${key}/${index}`, direction),
     };
   });
-  if (match.open < 0) {
-    cases.push({
-      key: `${key}/none`,
-      name: 'No Match',
-      sign: 'none',
-      facts: ['A request that matches no condition runs no conditional flow'],
-      steps: [],
-    });
-  }
   return cases;
 }
 
@@ -761,19 +753,18 @@ function routeItem(
       steps: [],
     };
   });
-  if (match.open < 0) {
-    cases.push({
-      key: `${key}/none`,
-      name: 'No Match',
-      sign: 'error',
-      facts: [
-        'A request that matches no route rule fails with messaging.runtime.RouteFailed (500)',
-      ],
-      steps: [],
-    });
-  }
+  // Without a route for every other request, the rest fails
+  const unmatched =
+    match.open < 0
+      ? {
+          sign: 'error' as const,
+          facts: [
+            'A request that matches no route rule fails with messaging.runtime.RouteFailed (500)',
+          ],
+        }
+      : { facts: [] };
   return {
-    item: { kind: 'routes', key, endpoint: index, cases },
+    item: { kind: 'routes', key, endpoint: index, cases, ...unmatched },
     route: routes[followed],
   };
 }
@@ -784,7 +775,7 @@ function describeRoute(
   to: Destination,
 ): { destination: string; sign?: FlowCase['sign']; facts: string[] } {
   if ('target' in to) {
-    const destination = `Target Endpoint ${to.target}`;
+    const destination = named('Target Endpoint', to.target);
     return targetNamed(model, to.target)
       ? { destination, facts: [] }
       : {
@@ -801,7 +792,7 @@ function describeRoute(
   }
   if ('integration' in to) {
     return {
-      destination: `Integration Endpoint ${to.integration}`,
+      destination: named('Integration Endpoint', to.integration),
       facts: [
         'Runs the integration that a SetIntegrationRequest policy names, so no TargetEndpoint flows run',
       ],
@@ -850,7 +841,7 @@ function backendItem(
       kind: 'backend',
       key,
       at: route.at,
-      text: `Integration Endpoint ${route.to.integration}`,
+      text: named('Integration Endpoint', route.to.integration),
       facts: [],
     };
   }

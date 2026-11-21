@@ -34,7 +34,13 @@ import {
   type Loaded,
 } from './deployments';
 import { details } from './details';
-import { flowMaps, flowSubtitle, stationKeys, type FlowActions } from './flow';
+import {
+  drawLinks,
+  flowMaps,
+  flowSubtitle,
+  stationKeys,
+  type FlowActions,
+} from './flow';
 import type { Column } from './graph';
 import { overview } from './overview';
 import { relationshipsTab, type RelationshipActions } from './relationships';
@@ -660,16 +666,6 @@ class ApigeeFlow extends LitElement {
         });
       }
     },
-    hook: sharedFlow => {
-      if (this.flow) {
-        send({
-          type: 'showFlow',
-          kind: 'sharedflows',
-          name: sharedFlow,
-          environment: this.flow.source,
-        });
-      }
-    },
     rove: (group, key) => {
       if (this.roving[group] !== key) {
         this.roving = { ...this.roving, [group]: key };
@@ -701,7 +697,14 @@ class ApigeeFlow extends LitElement {
     // The map marks the station whose part of the list is in sight
     const queue = () => this.queueSpy();
     window.addEventListener('scroll', queue, { passive: true });
-    window.addEventListener('resize', queue);
+    // The map's connections follow its layout, which changes with the width
+    // and once the icon font has loaded
+    const redraw = () => {
+      drawLinks(this.renderRoot);
+      queue();
+    };
+    window.addEventListener('resize', redraw);
+    void document.fonts?.ready.then(redraw);
     const release = () => {
       if (!this.spyHold) return;
       this.spyHold = undefined;
@@ -798,9 +801,11 @@ class ApigeeFlow extends LitElement {
         window.scrollY -
         (map?.offsetHeight ?? 0) -
         8;
-      window.scrollTo({ top, behavior: reducedMotion() ? 'auto' : 'smooth' });
+      // At once, as VS Code reveals: a smooth scroll can be cut short
+      window.scrollTo({ top, behavior: 'auto' });
       row.focus({ preventScroll: true });
     }
+    drawLinks(this.renderRoot);
     this.spy();
   }
 

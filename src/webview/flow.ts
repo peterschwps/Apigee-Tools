@@ -14,6 +14,7 @@ import type {
   FlowStep,
   FlowView,
 } from '../protocol';
+import { named } from '../protocol';
 import { kindLabels, signs, statusIcon } from './deployments';
 import { hookNames } from './relationships';
 
@@ -28,8 +29,6 @@ export type FlowActions = {
   toggle(key: string): void;
   /** Follows another route rule of a proxy endpoint. */
   route(endpoint: number, route: number): void;
-  /** Shows the flow of a flow hook's shared flow in the same environment. */
-  hook(sharedFlow: string): void;
   /** Remembers the focused row of a list or station of a map, its tab stop. */
   rove(group: string, key: string): void;
   /** Shows a station: opens it and its band, then scrolls and focuses it. */
@@ -166,15 +165,13 @@ function chipOf(map: FlowMap, band: FlowBand, item: FlowItem): Chip {
         tip: `${hookNames[item.point]} Flow Hook · ${item.sharedFlow}${item.steps?.length ? '' : '\nNo steps'}`,
         empty: !item.steps?.length,
       };
-    case 'endpoint': {
-      const short = item.role === 'proxy' ? 'Proxy' : 'Target';
+    case 'endpoint':
       return {
         ...base,
-        label: item.name === 'default' ? short : `${short} ${item.name}`,
-        tip: `${roleTitles[item.role]} ${item.name}${item.segments.length ? '' : '\nNo steps'}`,
+        label: named(item.role === 'proxy' ? 'Proxy' : 'Target', item.name),
+        tip: `${named(roleTitles[item.role], item.name)}${item.segments.length ? '' : '\nNo steps'}`,
         empty: !item.segments.length,
       };
-    }
     case 'routes': {
       const followed = item.cases.find(entry => entry.followed);
       return {
@@ -259,10 +256,11 @@ function overview(
     ? state.roving[group]
     : chips[0]?.key;
 
-  const chip = (value: Chip, row: number, column: number) =>
+  const chip = (value: Chip, band: string, row: number, column: number) =>
     html`<button
       class="chip ${value.empty ? 'empty' : ''}"
       data-go=${value.key}
+      data-band=${band}
       data-row=${row}
       data-column=${column}
       tabindex=${value.key === entry ? 0 : -1}
@@ -283,65 +281,95 @@ function overview(
       >
     </button>`;
 
-  // Request and response connect through their stations to the turn
-  const line = (band: FlowBand, row: number) => {
-    const found = used.map(index => band.items.find(columns[index]));
-    const first = found.findIndex(Boolean);
-    const linked = band.kind === 'request' || band.kind === 'response';
-    const last =
-      linked && turn
-        ? found.length
-        : found.length - 1 - [...found].reverse().findIndex(Boolean);
-    return found.map((item, column) => {
-      const through = linked && column > first && column < last;
-      const from = linked && column === first && column < last;
-      const to = linked && column === last && column > first;
-      return html`<span
-        class="slot ${through ? 'through' : from ? 'from' : to ? 'to' : ''}"
-        style="grid-area: ${row + 1} / ${column + 2}"
-        >${item ? chip(chipOf(map, band, item), row, column) : nothing}</span
-      >`;
-    });
-  };
+  // Classes place the cells, since the page allows no inline styles
   const turnRows = rows.filter(
     band => band.kind === 'request' || band.kind === 'response',
   ).length;
-
   return html`<nav class="overview" aria-label="Overview of ${map.title}">
     <div
       class="stations"
       role="toolbar"
       aria-label="Stations"
-      style="grid-template-columns: 24px repeat(${used.length}, minmax(0, auto))${turn ? ' minmax(64px, auto)' : ''}"
       @keydown=${moveInMap}
       @focusin=${(event: FocusEvent) => {
         const key = (event.target as HTMLElement).dataset.go;
         if (key) actions.rove(group, key);
       }}
     >
+      <svg class="links" aria-hidden="true"></svg>
       ${rows.map(
         (band, row) => html`
           <span
-            class="row-mark"
-            style="grid-area: ${row + 1} / 1"
+            class="row-mark r${row + 1} c1"
             data-tooltip=${bandTitles[band.kind]}
             ><vscode-icon name=${bandIcons[band.kind]}></vscode-icon
             ><span class="sr-only">${bandTitles[band.kind]}</span></span
           >
-          ${line(band, row)}
-          ${
-            turn && row === 0
-              ? html`<span
-                  class="turn"
-                  style="grid-row: 1 / span ${turnRows}; grid-column: ${used.length + 2}"
-                  >${chip(turn, 0, used.length)}</span
+          ${used.map((index, column) => {
+            const item = band.items.find(columns[index]);
+            return item
+              ? html`<span class="slot r${row + 1} c${column + 2}"
+                  >${chip(chipOf(map, band, item), band.kind, row, column)}</span
                 >`
-              : nothing
-          }
+              : nothing;
+          })}
         `,
       )}
+      ${
+        turn
+          ? html`<span class="turn c${used.length + 2} span${turnRows}"
+              >${chip(turn, 'turn', 0, used.length)}</span
+            >`
+          : nothing
+      }
     </div>
   </nav>`;
+}
+
+/**
+ * Draws the connections of each map between its stations, with an arrow
+ * halfway that points the way the message travels: to the right in the
+ * request, back to the left in the response. The map's layout places the
+ * stations, so the lines follow it after each render and resize.
+ */
+export function drawLinks(root: ParentNode): void {
+  for (const bar of root.querySelectorAll<HTMLElement>('.stations')) {
+    const svg = bar.querySelector('svg.links');
+    if (!svg) continue;
+    const origin = bar.getBoundingClientRect();
+    const turn = bar.querySelector<HTMLElement>('[data-band="turn"]');
+    const paths: string[] = [];
+    for (const [kind, way] of [
+      ['request', 1],
+      ['response', -1],
+    ] as const) {
+      const stations = [
+        ...bar.querySelectorAll<HTMLElement>(`[data-band="${kind}"]`),
+      ];
+      if (!stations.length) continue;
+      const first = stations[0].getBoundingClientRect();
+      const y = first.top + first.height / 2 - origin.top;
+      const boxes = [...stations, ...(turn ? [turn] : [])].map(element =>
+        element.getBoundingClientRect(),
+      );
+      boxes.slice(1).forEach((next, index) => {
+        const from = boxes[index].right - origin.left;
+        const to = next.left - origin.left;
+        if (to - from < 4) return;
+        paths.push(
+          `<path class="link" d="M${from.toFixed(1)} ${y.toFixed(1)}H${to.toFixed(1)}"/>`,
+        );
+        if (to - from < 14) return;
+        const mid = (from + to) / 2;
+        const tail = mid - 3 * way;
+        const tip = mid + 3 * way;
+        paths.push(
+          `<path class="arrow" d="M${tail.toFixed(1)} ${(y - 4).toFixed(1)}L${tip.toFixed(1)} ${y.toFixed(1)}L${tail.toFixed(1)} ${(y + 4).toFixed(1)}Z"/>`,
+        );
+      });
+    }
+    svg.innerHTML = paths.join('');
+  }
 }
 
 /**
@@ -411,8 +439,11 @@ type Row = {
   rail?: 'first' | 'middle' | 'last' | 'through';
   /** A route rule that the view follows. */
   current?: boolean;
-  /** The step of a flow hook's shared flow, which opens from that flow. */
-  hook?: FlowHookPoint;
+  /**
+   * Where a row sits in a first-match group, which draws its alternatives as
+   * branches of a decision: the head of each case, or a step under one.
+   */
+  branch?: 'first' | 'middle' | 'last' | 'only' | 'through' | 'end';
 };
 
 function tree(
@@ -456,6 +487,7 @@ function rowView(
     `level-${row.level}`,
     row.marker && `mark-${row.marker}`,
     row.rail && `rail-${row.rail}`,
+    row.branch && 'in-branch',
     row.activate && 'active',
   ]
     .filter(Boolean)
@@ -476,6 +508,17 @@ function rowView(
     data-tooltip=${row.tip ?? nothing}
     @click=${row.activate ?? nothing}
   >
+    ${
+      row.branch
+        ? html`<span class="branch ${row.branch}" aria-hidden="true"
+            >${
+              row.branch === 'first' || row.branch === 'only'
+                ? html`<span class="fork"></span>`
+                : nothing
+            }</span
+          >`
+        : nothing
+    }
     ${
       row.expanded === undefined
         ? html`<span class="twisty"></span>`
@@ -512,6 +555,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
     list: readonly FlowStep[],
     level: number,
     hook?: FlowHookPoint,
+    branch?: Row['branch'],
   ) => {
     for (const step of list) {
       const tip = [
@@ -527,7 +571,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
         level,
         kind: 'step',
         tip,
-        ...(hook && { hook }),
+        ...(branch && { branch }),
         activate: () => actions.open(step.at, hook, step.key),
         content: html`<span class="step-box"
           ><span
@@ -554,6 +598,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
     }
   };
 
+  // A first-match group: its cases branch off a decision, one runs
   const cases = (
     list: readonly FlowCase[],
     level: number,
@@ -562,6 +607,15 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
     // The order matters only when there is more than one case to try
     const numbered = list.filter(item => item.number !== undefined).length > 1;
     list.forEach((item, position) => {
+      const last = position === list.length - 1;
+      const branch =
+        list.length === 1
+          ? 'only'
+          : position === 0
+            ? 'first'
+            : last
+              ? 'last'
+              : 'middle';
       const follows = endpoint !== undefined && item.number !== undefined;
       const extra = [
         item.condition && item.condition !== item.summary
@@ -574,6 +628,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
         key: item.key,
         level,
         kind: 'part',
+        branch,
         ...(item.steps.length && { expanded: open(item.key) }),
         ...(follows && { current: Boolean(item.followed) }),
         tip: [item.name, item.condition, ...item.facts]
@@ -607,7 +662,9 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           }</span
         >`,
       });
-      if (item.steps.length && open(item.key)) steps(item.steps, level + 1);
+      if (item.steps.length && open(item.key)) {
+        steps(item.steps, level + 1, undefined, last ? 'end' : 'through');
+      }
     });
   };
 
@@ -648,10 +705,8 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           level: 3,
           kind: 'part',
           tip: [title, item.sharedFlow, ...item.facts].join('\n'),
-          activate: () => actions.hook(item.sharedFlow),
           content: html`<span class="label"
-            ><span class="link">${item.sharedFlow}</span
-            >${signView(item.sign)}${
+            ><span>${item.sharedFlow}</span>${signView(item.sign)}${
               item.revision
                 ? html`<span class="muted">· Revision ${item.revision}</span>`
                 : nothing
@@ -664,7 +719,7 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
         return;
       }
       case 'endpoint': {
-        const name = `${roleTitles[item.role]} ${item.name}`;
+        const name = named(roleTitles[item.role], item.name);
         const parts = item.segments.length > 0;
         rows.push({
           key: item.key,
@@ -697,6 +752,10 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
             activate: toggle(key),
             content: html`<span class="label segment-label"
               >${segment.label}${
+                'cases' in segment && segment.label === 'Flows'
+                  ? html`<span class="muted">· the first match runs</span>`
+                  : nothing
+              }${
                 segment.facts.length
                   ? html`<span class="sr-only"
                       >. ${segment.facts.join(' ')}</span
@@ -720,11 +779,21 @@ function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
           marker: 'diamond',
           expanded: open(item.key),
           activate: toggle(item.key),
+          tip: ['Route Rules', ...item.facts].join('\n'),
           content: html`<span class="label"
-            ><span class="station-name">Route Rules</span></span
+            ><span class="station-name">Route Rules</span
+            ><span class="muted">· the first match runs</span>${signView(
+              item.sign,
+            )}${
+              item.facts.length
+                ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
+                : nothing
+            }</span
           >`,
         });
-        if (open(item.key)) cases(item.cases, 3, item.endpoint);
+        if (!open(item.key)) return;
+        for (const fact of item.facts) note(fact, 3);
+        cases(item.cases, 3, item.endpoint);
         return;
       case 'backend':
         rows.push({
