@@ -34,7 +34,7 @@ import {
   type Loaded,
 } from './deployments';
 import { details } from './details';
-import { flowMaps, flowSubtitle, type FlowActions } from './flow';
+import { flowMaps, flowSubtitle, stationKeys, type FlowActions } from './flow';
 import type { Column } from './graph';
 import { overview } from './overview';
 import { relationshipsTab, type RelationshipActions } from './relationships';
@@ -598,16 +598,19 @@ class ApigeeFlow extends LitElement {
     flow: { state: true },
     roving: { state: true },
     collapsed: { state: true },
+    selected: { state: true },
     announcement: { state: true },
   };
 
   static override styles = styles;
 
   declare flow: FlowView | undefined;
-  /** The focused item of each band, its one tab stop. */
+  /** The focused row of each list and station of each map, its tab stop. */
   declare roving: Record<string, string>;
   /** The parts that the user collapsed; everything else shows expanded. */
   declare collapsed: ReadonlySet<string>;
+  /** The row whose file was opened last, which stays marked. */
+  declare selected: string;
   /** What screen readers hear when the source changes. */
   declare announcement: string;
 
@@ -623,9 +626,22 @@ class ApigeeFlow extends LitElement {
   /** What is collapsed in the bundles shown before, by kind and name. */
   private readonly folds = new Map<string, ReadonlySet<string>>();
 
+  /** The station that the map asked to show, once it is drawn. */
+  private goTo?: string;
+
+  /** Whether marking the station in sight waits for the next frame. */
+  private spyQueued = false;
+
+  /**
+   * The station chosen on the map, which stays marked until the user scrolls
+   * or types, also when the list ends before it reaches the top.
+   */
+  private spyHold?: string;
+
   private readonly actions: FlowActions = {
-    open: (at, hook) => {
+    open: (at, hook, row) => {
       if (this.flow) {
+        this.selected = row;
         send({ type: 'flowOpen', version: this.flow.version, at, hook });
       }
     },
@@ -654,10 +670,24 @@ class ApigeeFlow extends LitElement {
         });
       }
     },
-    rove: (band, key) => {
-      if (this.roving[band] !== key) {
-        this.roving = { ...this.roving, [band]: key };
+    rove: (group, key) => {
+      if (this.roving[group] !== key) {
+        this.roving = { ...this.roving, [group]: key };
       }
+    },
+    go: (station, band) => {
+      // The station opens with all its parts, and so does its band
+      this.collapsed = new Set(
+        [...this.collapsed].filter(
+          key =>
+            key !== band &&
+            key !== station &&
+            !key.startsWith(`${station}/`) &&
+            !key.startsWith(`${station}#`),
+        ),
+      );
+      this.goTo = station;
+      this.spyHold = station;
     },
   };
 
@@ -666,7 +696,20 @@ class ApigeeFlow extends LitElement {
     this.flow = undefined;
     this.roving = {};
     this.collapsed = new Set();
+    this.selected = '';
     this.announcement = '';
+    // The map marks the station whose part of the list is in sight
+    const queue = () => this.queueSpy();
+    window.addEventListener('scroll', queue, { passive: true });
+    window.addEventListener('resize', queue);
+    const release = () => {
+      if (!this.spyHold) return;
+      this.spyHold = undefined;
+      this.queueSpy();
+    };
+    for (const type of ['wheel', 'touchstart', 'mousedown', 'keydown']) {
+      window.addEventListener(type, release, { capture: true, passive: true });
+    }
     window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       if (event.data?.type !== 'flow') return;
       const flow = event.data.flow;
@@ -696,6 +739,7 @@ class ApigeeFlow extends LitElement {
         this.folds.set(`${before.kind}/${before.name}`, this.collapsed);
         this.collapsed =
           this.folds.get(`${flow.kind}/${flow.name}`) ?? new Set();
+        this.selected = '';
       }
       this.loaded ||= ['ready', 'undeployed', 'problem'].includes(
         flow.environments,
@@ -737,6 +781,83 @@ class ApigeeFlow extends LitElement {
         next.focus();
       }
     }
+    // A station chosen on the map comes into sight below the map, focused
+    const station = this.goTo;
+    this.goTo = undefined;
+    const row =
+      station &&
+      this.renderRoot.querySelector<HTMLElement>(
+        `[data-key="${CSS.escape(station)}"]`,
+      );
+    if (row) {
+      const map = row
+        .closest('.flow-map')
+        ?.querySelector<HTMLElement>('.overview');
+      const top =
+        row.getBoundingClientRect().top +
+        window.scrollY -
+        (map?.offsetHeight ?? 0) -
+        8;
+      window.scrollTo({ top, behavior: reducedMotion() ? 'auto' : 'smooth' });
+      row.focus({ preventScroll: true });
+    }
+    this.spy();
+  }
+
+  private queueSpy(): void {
+    if (this.spyQueued) return;
+    this.spyQueued = true;
+    requestAnimationFrame(() => {
+      this.spyQueued = false;
+      this.spy();
+    });
+  }
+
+  /** Marks on each map the station whose part of the list is at its top. */
+  private spy(): void {
+    for (const section of this.renderRoot.querySelectorAll<HTMLElement>(
+      '.flow-map',
+    )) {
+      const map = section.querySelector<HTMLElement>('.overview');
+      if (!map) continue;
+      const limit = map.getBoundingClientRect().bottom + 8;
+      const stations = [
+        ...section.querySelectorAll<HTMLElement>('[data-station]'),
+      ];
+      let current = stations.find(row => row.dataset.station === this.spyHold)
+        ?.dataset.station;
+      for (const row of current ? [] : stations) {
+        if (current && row.getBoundingClientRect().top > limit) break;
+        current = row.dataset.station;
+      }
+      for (const chip of map.querySelectorAll<HTMLElement>('[data-go]')) {
+        if (chip.dataset.go === current) {
+          chip.setAttribute('aria-current', 'location');
+        } else {
+          chip.removeAttribute('aria-current');
+        }
+      }
+    }
+  }
+
+  /** Collapse All folds the stations, so the list shows them; Expand All everything. */
+  private foldButton(flow: FlowView) {
+    const keys = stationKeys(flow);
+    if (!keys.length) return nothing;
+    const folded = keys.every(key => this.collapsed.has(key));
+    const label = folded ? 'Expand All' : 'Collapse All';
+    return html`<button
+      class="icon-button fold"
+      data-tooltip=${label}
+      aria-label=${label}
+      @click=${() => {
+        this.collapsed = folded
+          ? new Set()
+          : new Set([...this.collapsed, ...keys]);
+      }}
+    >
+      <vscode-icon name=${folded ? 'expand-all' : 'collapse-all'}></vscode-icon>
+    </button>`;
   }
 
   override render() {
@@ -756,6 +877,7 @@ class ApigeeFlow extends LitElement {
           ${flowSubtitle(flow)}
         </div>
         <div class="session">
+          ${this.foldButton(flow)}
           ${
             this.loaded
               ? html`<button
@@ -790,7 +912,15 @@ class ApigeeFlow extends LitElement {
           : nothing
       }
       <div class="sr-only" role="status">${this.announcement}</div>
-      ${flowMaps(flow, this.roving, this.collapsed, this.actions)}
+      ${flowMaps(
+        flow,
+        {
+          roving: this.roving,
+          collapsed: this.collapsed,
+          selected: this.selected,
+        },
+        this.actions,
+      )}
       <div class="tooltip" aria-hidden="true" hidden></div>
     `;
   }

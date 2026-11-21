@@ -281,7 +281,12 @@ export function registerFlowPanel(
         viewType,
         title,
         vscode.ViewColumn.Active,
-        { enableScripts: true, localResourceRoots: [webviewRoot] },
+        {
+          enableScripts: true,
+          // Cmd+F finds a policy by its name
+          enableFindWidget: true,
+          localResourceRoots: [webviewRoot],
+        },
       );
       panel.iconPath = vscode.Uri.joinPath(
         context.extensionUri,

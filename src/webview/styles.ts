@@ -924,270 +924,133 @@ export const styles = css`
     padding: 0;
   }
 
-  .hook-mark {
-    margin-right: 4px;
+  .session .fold {
     color: var(--at-text-muted);
-    vertical-align: text-bottom;
   }
 
+  .fold vscode-icon {
+    color: inherit;
+  }
+
+  .hook-mark {
+    margin-right: 2px;
+    color: var(--at-text-muted);
+  }
+
+  /* Map and list stay readable in wide tabs */
   .flow-maps {
-    container-type: inline-size;
+    box-sizing: border-box;
     display: grid;
     gap: 28px;
-    padding: 20px 20px 24px;
+    max-width: 960px;
+    padding: 16px 20px 28px;
   }
 
-  .flow-map,
-  .band {
+  .flow-map {
     display: grid;
-    gap: 12px;
+    align-content: start;
+    gap: 10px;
     min-width: 0;
   }
 
-  .band h3,
-  .endpoint-card h4 {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .band-fact {
-    color: var(--at-text-muted);
-  }
-
-  /* The rail, with a mark per kind of stage: shapes, never read aloud */
-  .stages {
-    position: relative;
-    display: grid;
-    gap: 14px;
-    margin: 0;
-    padding: 0 0 0 24px;
-    list-style: none;
-  }
-
-  .stages::before {
-    content: '';
-    position: absolute;
-    top: 12px;
-    bottom: 12px;
-    left: 7px;
-    border-left: 1px solid var(--at-border);
-  }
-
-  .stage {
-    position: relative;
-    min-width: 0;
-  }
-
-  .stage.client::before,
-  .stage.backend::before,
-  .stage.routes::before {
-    content: '';
-    position: absolute;
-    top: 7px;
-    left: -21px;
-    width: 9px;
-    height: 9px;
-    box-sizing: border-box;
-    border: 1px solid var(--at-text-muted);
+  /* The map stays at the top while the list of its endpoint scrolls by */
+  .overview {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0 -20px;
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--at-border);
     background: var(--vscode-editor-background);
   }
 
-  .stage.client::before {
-    border-radius: 50%;
-  }
-
-  .stage.routes::before {
-    transform: rotate(45deg);
-  }
-
-  .terminal {
-    display: flex;
-    flex-wrap: wrap;
+  .stations {
+    display: grid;
+    grid-auto-rows: 26px;
+    row-gap: 6px;
     align-items: center;
-    gap: 4px 8px;
-    min-height: 24px;
   }
 
-  .terminal-name {
-    font-weight: 600;
+  .row-mark {
+    display: flex;
+    align-items: center;
   }
 
-  .terminal-head {
+  .row-mark vscode-icon {
+    color: var(--at-text-muted);
+  }
+
+  /* A line runs through the stations of the request and the response */
+  .slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .slot.through {
+    background: linear-gradient(var(--at-border), var(--at-border)) center /
+      100% 1px no-repeat;
+  }
+
+  .slot.from {
+    background: linear-gradient(var(--at-border), var(--at-border)) right
+      center / 50% 1px no-repeat;
+  }
+
+  .slot.to {
+    background: linear-gradient(var(--at-border), var(--at-border)) left
+      center / 50% 1px no-repeat;
+  }
+
+  /* Where the request turns: the backend, or a route without a target */
+  .turn {
+    display: flex;
+    align-self: stretch;
+    min-width: 0;
+  }
+
+  /* Stations look like the nodes of the Relationships graph */
+  .chip {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-  }
-
-  /* The steps of a flow hook's shared flow, below its name */
-  .hook-steps {
-    margin: 4px 0 0 24px;
-  }
-
-  /* Room for a toggle, so that heads line up */
-  .toggle-space {
-    flex: none;
-    width: 22px;
-  }
-
-  .endpoint-card {
-    display: grid;
-    gap: 8px;
-    padding: 8px 12px;
-  }
-
-  .endpoint-card h4 {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .no-steps {
-    display: flex;
-  }
-
-  .segments {
-    display: grid;
-    gap: 8px;
-  }
-
-  /* A label, then the steps or cases below one another, indented */
-  .segment,
-  .routes-group {
-    display: grid;
     gap: 4px;
     min-width: 0;
-  }
-
-  .segment > :not(.segment-label),
-  .routes-group > :not(.segment-label) {
-    margin-left: 24px;
-  }
-
-  .segment-label {
-    justify-self: start;
-    color: var(--at-text-muted);
-    line-height: 22px;
-    overflow-wrap: anywhere;
-  }
-
-  /* Facts such as the order of fault rules, with the cases below them */
-  .segment-fact {
-    color: var(--at-text-muted);
-    line-height: 24px;
-  }
-
-  .steps,
-  .cases {
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  /* The steps of a part below one another, in run order */
-  .steps {
-    display: grid;
-    justify-items: start;
-    gap: 4px;
-  }
-
-  .step {
-    display: grid;
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .steps .node {
-    width: auto;
-    max-width: 100%;
-  }
-
-  /* Names keep their full width as long as they fit; other text gives way */
-  .steps .node-name,
-  .case-name {
-    flex: none;
-    max-width: 100%;
-  }
-
-  /* The type gives way first when a step runs out of room */
-  .node .type {
-    flex: 0 100 auto;
-    min-width: 0;
-    overflow: hidden;
-    color: var(--at-text-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* A step that runs only under a condition */
-  .node.conditional {
-    border-style: dashed;
-  }
-
-  .node.muted .node-name {
-    color: var(--at-text-muted);
-  }
-
-  /* The condition belongs to its step, apart from the case that follows */
-  .step-condition {
-    padding: 0 0 4px 7px;
-    color: var(--at-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .cases {
-    display: grid;
-    gap: 10px;
-  }
-
-  .case {
-    display: grid;
-    gap: 4px;
-    min-width: 0;
-  }
-
-  .case-line {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .case-head {
-    max-width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    min-height: 24px;
+    max-width: calc(100% - 8px);
+    height: 24px;
     padding: 0 6px;
-    border: 1px solid transparent;
+    border: 1px solid var(--at-border);
     border-radius: 4px;
-    background: none;
+    background: var(--vscode-editor-background);
     color: inherit;
     font: inherit;
-    text-align: left;
     cursor: pointer;
   }
 
-  .case-head:hover:not([aria-disabled='true']) {
+  .turn .chip {
+    flex: 1;
+    justify-content: center;
+    max-width: none;
+    height: 100%;
+  }
+
+  .chip:hover {
     background: var(--vscode-list-hoverBackground);
   }
 
-  .case-head[aria-disabled='true'] {
-    cursor: default;
-  }
-
-  .case-head:focus-visible {
+  .chip:focus-visible {
     outline: 1px solid var(--vscode-focusBorder);
     outline-offset: -1px;
   }
 
-  /* The route the view follows */
-  .case-head[aria-pressed='true'] {
+  .chip.empty {
+    border-style: dashed;
+    color: var(--at-text-muted);
+  }
+
+  /* The station whose part of the list is in sight */
+  .chip[aria-current] {
     border-color: var(--vscode-focusBorder);
     background: var(
       --vscode-list-inactiveSelectionBackground,
@@ -1195,153 +1058,278 @@ export const styles = css`
     );
   }
 
-  .case-head .number,
-  .case-head .summary,
-  .case-head .destination,
-  .case-head.muted .case-name {
+  .chip-icon {
+    flex: none;
     color: var(--at-text-muted);
   }
 
-  .case-head .number {
-    min-width: 1ch;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .case-name,
-  .case-head .summary {
+  .chip-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  /* The condition gives way before the name */
-  .case-head .summary {
+  /* The list: rows like the ones of VS Code's trees */
+  .tree {
+    display: grid;
+    min-width: 0;
+  }
+
+  .row {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    min-width: 0;
+    padding: 2px 0;
+  }
+
+  .row:focus {
+    outline: none;
+  }
+
+  .row.active {
+    cursor: pointer;
+  }
+
+  .row.band {
+    margin-top: 18px;
+  }
+
+  .row.band:first-child {
+    margin-top: 0;
+  }
+
+  .row.station {
+    padding-top: 10px;
+  }
+
+  .level-2 {
+    padding-left: 22px;
+  }
+
+  .level-3 {
+    padding-left: 42px;
+  }
+
+  .level-4 {
+    padding-left: 62px;
+  }
+
+  .level-5 {
+    padding-left: 82px;
+  }
+
+  .twisty {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 24px;
+  }
+
+  .twisty vscode-icon {
+    cursor: pointer;
+  }
+
+  /* What a row says; hover, focus, and the marks draw around it */
+  .label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 24px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+  }
+
+  .row.active:hover > .label,
+  .row.active:hover .pill {
+    background: var(--vscode-list-hoverBackground);
+  }
+
+  .row:focus-visible > .label,
+  .row:focus-visible .pill {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+  }
+
+  /* The row whose file was opened last, and the route the view follows */
+  .row[aria-selected='true'] > .label,
+  .row[aria-selected='true'] .pill,
+  .row[aria-current='true'] > .label {
+    border-color: var(--vscode-focusBorder);
+    background: var(
+      --vscode-list-inactiveSelectionBackground,
+      var(--vscode-list-hoverBackground)
+    );
+  }
+
+  .band-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .band-title vscode-icon {
+    color: var(--at-text-muted);
+  }
+
+  .station-name {
+    flex: none;
+    max-width: 100%;
+    overflow: hidden;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .segment-label {
+    color: var(--at-text-muted);
+  }
+
+  .fact {
+    margin-left: 26px;
+    color: var(--at-text-muted);
+  }
+
+  .label .number,
+  .label .summary,
+  .label .destination,
+  .label.muted .case-name {
+    color: var(--at-text-muted);
+  }
+
+  .label .number {
+    min-width: 1ch;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .case-name {
+    flex: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Conditions and destinations give way before the name */
+  .label .summary,
+  .label .destination {
     flex: 0 100 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .case .steps {
-    padding-left: 24px;
+  /* A step: its policy as a pill, with its condition below */
+  .step-box {
+    display: grid;
+    justify-items: start;
+    min-width: 0;
+    max-width: 100%;
   }
 
-  /* Wide panels: seven columns that every band shares */
-  @container (min-width: 1000px) {
-    .flow-map {
-      grid-template-columns:
-        [client] auto [proxy-hook] auto [proxy] auto [routes] auto
-        [target-hook] auto [target] auto [backend] auto;
-      justify-content: start;
-      column-gap: 0;
-      overflow-x: auto;
-    }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--at-border);
+    border-radius: 4px;
+    background: var(--vscode-editor-background);
+    white-space: nowrap;
+  }
 
-    .flow-map > h2,
-    .band,
-    .band > h3,
-    .band-fact,
-    .stages {
-      grid-column: 1 / -1;
-    }
+  .pill.conditional {
+    border-style: dashed;
+  }
 
-    .band,
-    .stages {
-      grid-template-columns: subgrid;
-    }
+  .pill.muted .pill-name {
+    color: var(--at-text-muted);
+  }
 
-    .stages {
-      gap: 0;
-      padding: 0;
-    }
+  .pill-name {
+    flex: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
-    .stages::before,
-    .stage::before {
-      display: none;
-    }
+  /* The name stands out under the pointer, as in the Relationships graph */
+  .row.step:hover .pill-name {
+    font-weight: 600;
+  }
 
-    /* One row: the columns, not the DOM order, place the stages */
-    .stage {
-      grid-row: 1;
-      padding: 0 12px;
-    }
+  /* The type gives way first when a step runs out of room */
+  .pill .type {
+    flex: 0 100 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--at-text-muted);
+    text-overflow: ellipsis;
+  }
 
-    .terminal {
-      flex-direction: column;
-      align-items: start;
-      gap: 2px;
-    }
+  .condition {
+    max-width: 100%;
+    padding: 0 0 4px 7px;
+    overflow: hidden;
+    color: var(--at-text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-    /* Below a toggle, the lines start where its name does */
-    .terminal:has(> .terminal-head .toggle) > :not(.terminal-head) {
-      margin-left: 24px;
-    }
+  /* The stations of a band hang on a line: shapes, never read aloud */
+  .rail-first::before,
+  .rail-middle::before,
+  .rail-last::before,
+  .rail-through::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    border-left: 1px solid var(--at-border);
+  }
 
-    /* Cards as wide as their steps; the response arrives from the right */
-    .endpoint-card {
-      width: fit-content;
-      max-width: 100%;
-    }
+  .rail-first::before {
+    top: 22px;
+    bottom: 0;
+  }
 
-    .band.response .endpoint-card {
-      margin-left: auto;
-    }
+  .rail-middle::before,
+  .rail-through::before {
+    top: 0;
+    bottom: 0;
+  }
 
-    .stage.client {
-      grid-column: client;
-      padding-left: 0;
-    }
+  .rail-last::before {
+    top: 0;
+    height: 22px;
+  }
 
-    .stage.proxy-hook {
-      grid-column: proxy-hook;
-    }
+  .mark-circle::after,
+  .mark-diamond::after,
+  .mark-square::after {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: 3px;
+    width: 9px;
+    height: 9px;
+    box-sizing: border-box;
+    border: 1px solid var(--at-text-muted);
+    background: var(--vscode-editor-background);
+  }
 
-    .stage.proxy,
-    .stage.shared {
-      grid-column: proxy;
-    }
+  .mark-circle::after {
+    border-radius: 50%;
+  }
 
-    .stage.routes {
-      grid-column: routes;
-    }
-
-    .stage.target-hook {
-      grid-column: target-hook;
-    }
-
-    .stage.target {
-      grid-column: target;
-    }
-
-    .stage.backend {
-      grid-column: backend;
-    }
-
-    /* Arrows in run order: to the right in the request, back to the left */
-    .band.request .stage:not(:last-child)::after,
-    .band.response .stage:not(:last-child)::after {
-      position: absolute;
-      top: 4px;
-      color: var(--at-text-muted);
-    }
-
-    .band.request .stage:not(:last-child)::after {
-      content: '›' / '';
-      right: -2px;
-    }
-
-    .band.response .stage:not(:last-child)::after {
-      content: '‹' / '';
-      left: -2px;
-    }
-
-    /* The keyboard follows the arrows */
-    .band.response .stages {
-      --mirrored: 1;
-    }
-
-    /* Long names and conditions shorten, so all columns stay in view */
-    .routes-group,
-    .segment {
-      max-width: 360px;
-    }
+  .mark-diamond::after {
+    transform: rotate(45deg);
   }
 `;

@@ -1,43 +1,69 @@
-// The flow view: one map per proxy endpoint, with bands of stages in the
-// order Apigee runs them. The DOM keeps that order for keyboards and screen
-// readers; only CSS lays it out as a rail or as Apigee's two bands.
+// The flow view: per proxy endpoint, a map of its stations above a list of
+// everything that runs, in the order Apigee runs it. The list is a tree for
+// keyboards and screen readers, with rows like VS Code's own trees; the map
+// jumps to a station, and the view marks the station in sight.
 import { html, nothing, type TemplateResult } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import type {
   FlowBand,
   FlowCase,
   FlowHookPoint,
   FlowItem,
   FlowMap,
-  FlowSegment,
   FlowSign,
   FlowStep,
   FlowView,
 } from '../protocol';
-import { kindLabels, none, signs, statusIcon } from './deployments';
+import { kindLabels, signs, statusIcon } from './deployments';
 import { hookNames } from './relationships';
 
 /** How the flow view reports what the user does. */
 export type FlowActions = {
-  /** Opens a place of the model, or of a flow hook's shared flow, beside. */
-  open(at: number, hook?: FlowHookPoint): void;
+  /**
+   * Opens a place of the model, or of a flow hook's shared flow, beside the
+   * view; the row that opened it stays marked.
+   */
+  open(at: number, hook: FlowHookPoint | undefined, row: string): void;
   /** Collapses or expands a part of the flow. */
   toggle(key: string): void;
   /** Follows another route rule of a proxy endpoint. */
   route(endpoint: number, route: number): void;
   /** Shows the flow of a flow hook's shared flow in the same environment. */
   hook(sharedFlow: string): void;
-  /** Remembers the focused item of a band, its tab stop. */
-  rove(band: string, key: string): void;
+  /** Remembers the focused row of a list or station of a map, its tab stop. */
+  rove(group: string, key: string): void;
+  /** Shows a station: opens it and its band, then scrolls and focuses it. */
+  go(station: string, band: string): void;
+};
+
+/** What the user changed in the view, kept across rebuilds. */
+export type FlowState = {
+  /** The focused row of each list and station of each map, by its group. */
+  roving: Readonly<Record<string, string>>;
+  /** The parts that the user collapsed; everything else shows expanded. */
+  collapsed: ReadonlySet<string>;
+  /** The row whose file was opened last. */
+  selected: string;
 };
 
 const bandTitles: Readonly<Record<FlowBand['kind'], string>> = {
   request: 'Request',
+  backend: 'Backend',
   response: 'Response',
   event: 'Per Event',
   error: 'On Error',
   after: 'After the Response',
   steps: 'Steps',
-  backend: 'Backend',
+};
+
+const bandIcons: Readonly<Record<FlowBand['kind'], string>> = {
+  request: 'arrow-right',
+  backend: 'server',
+  response: 'arrow-left',
+  event: 'pulse',
+  error: 'error',
+  after: 'history',
+  steps: 'list-flat',
 };
 
 const roleTitles = {
@@ -53,423 +79,721 @@ export function flowSubtitle(view: FlowView): TemplateResult {
   </p>`;
 }
 
-/** The maps of a bundle, each with its bands. */
+/** The key that folds a band. */
+const bandKey = (map: FlowMap, band: FlowBand) =>
+  `${map.key}/${band.kind}#band`;
+
+/**
+ * The stations that can collapse: what Collapse All folds, so that the list
+ * shows the stations of each band.
+ */
+export function stationKeys(view: FlowView): string[] {
+  return view.maps.flatMap(map =>
+    map.bands.flatMap(band =>
+      band.items.flatMap(item =>
+        item.kind === 'hook' ||
+        item.kind === 'routes' ||
+        (item.kind === 'endpoint' && item.segments.length)
+          ? [item.key]
+          : [],
+      ),
+    ),
+  );
+}
+
+/** The maps of a bundle: per proxy endpoint, a map and a list. */
 export function flowMaps(
   view: FlowView,
-  roving: Readonly<Record<string, string>>,
-  collapsed: ReadonlySet<string>,
+  state: FlowState,
   actions: FlowActions,
 ): TemplateResult {
-  const parts = { entry: undefined, collapsed, actions };
   return html`<div class="flow-maps">
     ${view.maps.map(
       map => html`
         <section class="flow-map">
           <h2>${map.title}</h2>
-          ${map.bands.map(band => bandView(map, band, roving, parts))}
+          ${overview(map, state, actions)} ${tree(map, state, actions)}
         </section>
       `,
     )}
   </div>`;
 }
 
-/**
- * What the parts of a band share: its tab stop, the collapsed parts, all
- * expanded at first, and the actions.
- */
-type Parts = {
-  entry: string | undefined;
-  collapsed: ReadonlySet<string>;
-  actions: FlowActions;
+/* The map: a row per band with content, stations in run order */
+
+type Chip = {
+  key: string;
+  band: string;
+  label: string;
+  tip: string;
+  icon?: string;
+  sign?: FlowSign;
+  empty?: boolean;
 };
 
-function bandView(
-  map: FlowMap,
-  band: FlowBand,
-  roving: Readonly<Record<string, string>>,
-  shared: Parts,
-): TemplateResult {
-  const key = `${map.key}/${band.kind}`;
-  const title = bandTitles[band.kind];
-  // A shared flow's card has its band's key, so the band's toggle has its own
-  const fold = `${key}#band`;
-  const open = !shared.collapsed.has(fold);
-  // One tab stop per band: the item focused last, or else the first
-  const keys = band.items.flatMap(item => keysOf(item, shared.collapsed));
-  const parts = {
-    ...shared,
-    entry: keys.includes(roving[key]) ? roving[key] : keys[0],
-  };
-  const { actions } = parts;
-  return html`
-    <section class="band ${band.kind}">
-      <h3>
-        <button
-          class="icon-button labeled"
-          data-key=${fold}
-          aria-expanded=${String(open)}
-          @click=${() => actions.toggle(fold)}
-        >
-          ${chevron(open)}${title}
-        </button>
-      </h3>
-      ${
-        open
-          ? html`${band.facts.map(fact => html`<p class="band-fact">${fact}</p>`)}
-            ${stagesView(key, title, band.items, parts)}`
-          : nothing
-      }
-    </section>
-  `;
+/** The strongest sign of an item and everything in it; disabled is no sign. */
+function worst(value: unknown): FlowSign | undefined {
+  const found = new Set<FlowSign>();
+  const stack = [value];
+  while (stack.length) {
+    const next = stack.pop();
+    if (Array.isArray(next)) stack.push(...next);
+    else if (next && typeof next === 'object') {
+      const sign = (next as { sign?: FlowSign }).sign;
+      if (sign) found.add(sign);
+      stack.push(...Object.values(next));
+    }
+  }
+  return (['error', 'differs', 'warning', 'unknown'] as const).find(sign =>
+    found.has(sign),
+  );
 }
 
-function stagesView(
-  key: string,
-  title: string,
-  items: readonly FlowItem[],
-  parts: Parts,
-): TemplateResult {
-  const { actions } = parts;
-  return html`<ol
-    class="stages"
-    aria-label=${title}
-    @keydown=${moveInBand}
-    @focusin=${(event: FocusEvent) => {
-      const focused = (event.target as HTMLElement).dataset.key;
-      if (focused) actions.rove(key, focused);
-    }}
-  >
-    ${items.map(
-      stage =>
-        html`<li class=${stageClass(stage)}>${itemView(stage, parts)}</li>`,
-    )}
-  </ol>`;
+function chipOf(map: FlowMap, band: FlowBand, item: FlowItem): Chip {
+  const base = { key: item.key, band: bandKey(map, band), sign: worst(item) };
+  switch (item.kind) {
+    case 'client':
+      return {
+        ...base,
+        label: 'Client',
+        tip: ['Client', item.basePath].filter(Boolean).join(' · '),
+      };
+    case 'hook':
+      return {
+        ...base,
+        label: hookNames[item.point],
+        icon: 'plug',
+        tip: `${hookNames[item.point]} Flow Hook · ${item.sharedFlow}${item.steps?.length ? '' : '\nNo steps'}`,
+        empty: !item.steps?.length,
+      };
+    case 'endpoint': {
+      const short = item.role === 'proxy' ? 'Proxy' : 'Target';
+      return {
+        ...base,
+        label: item.name === 'default' ? short : `${short} ${item.name}`,
+        tip: `${roleTitles[item.role]} ${item.name}${item.segments.length ? '' : '\nNo steps'}`,
+        empty: !item.segments.length,
+      };
+    }
+    case 'routes': {
+      const followed = item.cases.find(entry => entry.followed);
+      return {
+        ...base,
+        label: 'Routes',
+        tip: [
+          'Route Rules',
+          followed && `${followed.name} → ${followed.destination}`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      };
+    }
+    case 'backend':
+      return {
+        ...base,
+        label: 'Backend',
+        tip: ['Backend', item.text, ...item.facts].join('\n'),
+      };
+  }
 }
 
-function chevron(open: boolean): TemplateResult {
-  return html`<vscode-icon
-    name=${open ? 'chevron-down' : 'chevron-right'}
-  ></vscode-icon>`;
-}
+/** The columns of the map, so that the response sits under the request. */
+const columns: readonly ((item: FlowItem) => boolean)[] = [
+  item => item.kind === 'client',
+  item =>
+    item.kind === 'hook' &&
+    (item.point === 'PreProxyFlowHook' || item.point === 'PostProxyFlowHook'),
+  item => item.kind === 'endpoint' && item.role === 'proxy',
+  item => item.kind === 'routes',
+  item =>
+    item.kind === 'hook' &&
+    (item.point === 'PreTargetFlowHook' || item.point === 'PostTargetFlowHook'),
+  item => item.kind === 'endpoint' && item.role === 'target',
+];
 
 /**
- * A button in a band that collapses or expands a part, such as the steps of
- * an endpoint. Without text, it is an icon whose label names the part.
+ * The map of a proxy endpoint. A shared flow has none: its one station needs
+ * no overview.
  */
-function toggleView(
-  key: string,
-  label: string,
-  parts: Parts,
-  text?: string,
-): TemplateResult {
-  const open = !parts.collapsed.has(key);
-  const toggle = `${key}#toggle`;
-  return html`<button
-    class="icon-button ${text ? 'labeled segment-label' : 'toggle'}"
-    data-key=${toggle}
-    tabindex=${toggle === parts.entry ? 0 : -1}
-    aria-expanded=${String(open)}
-    aria-label=${text ? nothing : label}
-    @click=${() => parts.actions.toggle(key)}
-  >
-    ${chevron(open)}${text ?? nothing}
-  </button>`;
-}
+function overview(
+  map: FlowMap,
+  state: FlowState,
+  actions: FlowActions,
+): TemplateResult | typeof nothing {
+  const request = map.bands.find(band => band.kind === 'request');
+  if (!request) return nothing;
+  const backend = map.bands.find(band => band.kind === 'backend');
+  const rows = map.bands.filter(band => band.kind !== 'backend');
+  const used = columns
+    .map((_, index) => index)
+    .filter(index => rows.some(band => band.items.some(columns[index])));
 
-/** Classes that place a stage in its column of the wide layout. */
-function stageClass(item: FlowItem): string {
-  if (item.kind === 'endpoint') return `stage endpoint ${item.role}`;
-  if (item.kind === 'hook') {
-    const proxy =
-      item.point === 'PreProxyFlowHook' || item.point === 'PostProxyFlowHook';
-    return `stage hook ${proxy ? 'proxy-hook' : 'target-hook'}`;
-  }
-  return `stage ${item.kind}`;
-}
-
-/** The keys of the focusable parts of an item, in DOM order. */
-function keysOf(item: FlowItem, collapsed: ReadonlySet<string>): string[] {
-  // A part with a toggle: its toggle, its head, and its content while open
-  const part = (key: string, head: string[], content: () => string[]) => [
-    `${key}#toggle`,
-    ...head,
-    ...(collapsed.has(key) ? [] : content()),
-  ];
-  const steps = (list: readonly FlowStep[]) => list.map(step => step.key);
-  const cases = (list: readonly FlowCase[]) =>
-    list.flatMap(item =>
-      item.steps.length
-        ? part(item.key, [item.key], () => steps(item.steps))
-        : [item.key],
-    );
-  switch (item.kind) {
-    case 'endpoint':
-      if (!item.segments.length) return [item.key];
-      return part(item.key, [item.key], () =>
-        item.segments.flatMap((segment, index) =>
-          part(`${item.key}/${index}`, [], () =>
-            'cases' in segment ? cases(segment.cases) : steps(segment.steps),
-          ),
-        ),
-      );
-    case 'routes':
-      return cases(item.cases);
-    case 'backend':
-      return item.at === undefined ? [] : [item.key];
-    case 'hook':
-      return item.steps?.length
-        ? part(item.key, [item.key], () => steps(item.steps!))
-        : [item.key];
-    case 'client':
-      return [];
-  }
-}
-
-function itemView(item: FlowItem, parts: Parts): TemplateResult {
-  const { entry, actions } = parts;
-  switch (item.kind) {
-    case 'client':
-      return html`<div class="terminal">
-        <span class="terminal-name">Client</span>
-        ${item.basePath ? html`<span class="muted">${item.basePath}</span>` : nothing}
-      </div>`;
-    case 'backend':
-      // Its band is called Backend, so the item names only where it calls
-      return html`<div class="terminal">
-        ${
-          item.at === undefined
-            ? html`<span>${item.text}</span>`
-            : html`<button
-                class="link"
-                data-key=${item.key}
-                tabindex=${item.key === entry ? 0 : -1}
-                data-tooltip=${['Backend', item.text, ...item.facts].filter(Boolean).join('\n')}
-                @click=${() => actions.open(item.at!)}
-              >
-                ${item.text}${
-                  item.facts.length
-                    ? html`<span class="sr-only"
-                        >. ${item.facts.join('. ')}</span
-                      >`
-                    : nothing
-                }
-              </button>`
+  // Where the request turns: the backend, or a route without a target
+  const routes = request.items.find(item => item.kind === 'routes');
+  const followed =
+    routes?.kind === 'routes'
+      ? routes.cases.find(entry => entry.followed)
+      : undefined;
+  const turn: Chip | undefined = backend?.items[0]
+    ? chipOf(map, backend, backend.items[0])
+    : routes && followed
+      ? {
+          key: routes.key,
+          band: bandKey(map, request),
+          label: 'No Target',
+          tip: [
+            `${followed.name} → ${followed.destination}`,
+            ...followed.facts,
+          ].join('\n'),
+          empty: true,
+          ...(followed.sign === 'error' && { sign: 'error' as const }),
         }
-        ${signView(item.sign)}
-      </div>`;
-    case 'routes':
-      return html`<div class="routes-group">
-        <span class="segment-label">Route Rules</span>
-        ${casesView(item.cases, 'Route Rules', parts, item.endpoint)}
-      </div>`;
-    case 'hook': {
-      const label = `${hookNames[item.point]} Flow Hook`;
-      const steps = item.steps?.length ? item.steps : undefined;
-      const open = !parts.collapsed.has(item.key);
-      return html`<div class="terminal">
-          <span class="terminal-head">
-            ${steps ? toggleView(item.key, `Steps of ${item.sharedFlow}`, parts) : nothing}
-            <span class="terminal-name" aria-hidden="true"
-              ><vscode-icon name="plug" class="hook-mark"></vscode-icon
-              >${hookNames[item.point]}</span
-            >
-          </span>
-          <button
-            class="link"
-            data-key=${item.key}
-            tabindex=${item.key === entry ? 0 : -1}
-            data-tooltip=${[label, item.sharedFlow, ...item.facts].join('\n')}
-            @click=${() => actions.hook(item.sharedFlow)}
+      : undefined;
+
+  const group = `${map.key}#map`;
+  const chips = rows.flatMap(band =>
+    band.items.map(item => chipOf(map, band, item)),
+  );
+  if (turn) chips.push(turn);
+  const entry = chips.some(chip => chip.key === state.roving[group])
+    ? state.roving[group]
+    : chips[0]?.key;
+
+  const chip = (value: Chip, row: number, column: number) =>
+    html`<button
+      class="chip ${value.empty ? 'empty' : ''}"
+      data-go=${value.key}
+      data-row=${row}
+      data-column=${column}
+      tabindex=${value.key === entry ? 0 : -1}
+      data-tooltip=${value.tip}
+      @click=${() => actions.go(value.key, value.band)}
+    >
+      ${
+        value.icon
+          ? html`<vscode-icon
+              name=${value.icon}
+              class="chip-icon"
+            ></vscode-icon>`
+          : nothing
+      }
+      <span class="chip-name">${value.label}</span>${signView(value.sign)}<span
+        class="sr-only"
+        >. ${value.tip.replaceAll('\n', '. ')}</span
+      >
+    </button>`;
+
+  // Request and response connect through their stations to the turn
+  const line = (band: FlowBand, row: number) => {
+    const found = used.map(index => band.items.find(columns[index]));
+    const first = found.findIndex(Boolean);
+    const linked = band.kind === 'request' || band.kind === 'response';
+    const last =
+      linked && turn
+        ? found.length
+        : found.length - 1 - [...found].reverse().findIndex(Boolean);
+    return found.map((item, column) => {
+      const through = linked && column > first && column < last;
+      const from = linked && column === first && column < last;
+      const to = linked && column === last && column > first;
+      return html`<span
+        class="slot ${through ? 'through' : from ? 'from' : to ? 'to' : ''}"
+        style="grid-area: ${row + 1} / ${column + 2}"
+        >${item ? chip(chipOf(map, band, item), row, column) : nothing}</span
+      >`;
+    });
+  };
+  const turnRows = rows.filter(
+    band => band.kind === 'request' || band.kind === 'response',
+  ).length;
+
+  return html`<nav class="overview" aria-label="Overview of ${map.title}">
+    <div
+      class="stations"
+      role="toolbar"
+      aria-label="Stations"
+      style="grid-template-columns: 24px repeat(${used.length}, minmax(0, auto))${turn ? ' minmax(64px, auto)' : ''}"
+      @keydown=${moveInMap}
+      @focusin=${(event: FocusEvent) => {
+        const key = (event.target as HTMLElement).dataset.go;
+        if (key) actions.rove(group, key);
+      }}
+    >
+      ${rows.map(
+        (band, row) => html`
+          <span
+            class="row-mark"
+            style="grid-area: ${row + 1} / 1"
+            data-tooltip=${bandTitles[band.kind]}
+            ><vscode-icon name=${bandIcons[band.kind]}></vscode-icon
+            ><span class="sr-only">${bandTitles[band.kind]}</span></span
           >
-            ${item.sharedFlow}<span class="sr-only"
-              >.
-              ${[label, item.revision && `Revision ${item.revision}`, ...item.facts].filter(Boolean).join('. ')}</span
-            >
-          </button>
-          ${signView(item.sign)}
+          ${line(band, row)}
           ${
-            item.revision
-              ? html`<span class="muted" aria-hidden="true"
-                  >Revision ${item.revision}</span
+            turn && row === 0
+              ? html`<span
+                  class="turn"
+                  style="grid-row: 1 / span ${turnRows}; grid-column: ${used.length + 2}"
+                  >${chip(turn, 0, used.length)}</span
                 >`
               : nothing
           }
-        </div>
-        ${
-          steps && open
-            ? html`<div class="hook-steps">
-                ${stepsView(steps, parts, item.point)}
-              </div>`
-            : nothing
-        }`;
-    }
-    case 'endpoint': {
-      const open = !parts.collapsed.has(item.key);
-      const name = `${roleTitles[item.role]} ${item.name}`;
-      return html`<div class="card endpoint-card">
-        <h4>
-          ${item.segments.length ? toggleView(item.key, `Steps of ${name}`, parts) : nothing}
-          <button
-            class="link"
-            data-key=${item.key}
-            tabindex=${item.key === entry ? 0 : -1}
-            data-tooltip=${[name, ...item.facts].join('\n')}
-            @click=${() => actions.open(item.at)}
-          >
-            ${name}${
-              item.facts.length
-                ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
-                : nothing
-            }
-          </button>
-          ${signView(item.sign)}
-        </h4>
-        ${
-          !item.segments.length
-            ? html`<p class="no-steps">${none()}</p>`
-            : open
-              ? html`<div class="segments">
-                  ${item.segments.map((segment, index) =>
-                    segmentView(segment, `${item.key}/${index}`, parts),
-                  )}
-                </div>`
-              : nothing
-        }
-      </div>`;
-    }
-  }
+        `,
+      )}
+    </div>
+  </nav>`;
 }
 
-function segmentView(
-  segment: FlowSegment,
-  key: string,
-  parts: Parts,
+/**
+ * Moves the focus within the map: left and right along a row, up and down to
+ * the station of the next row nearest in its column, Home and End to the
+ * ends.
+ */
+function moveInMap(event: KeyboardEvent): void {
+  const bar = event.currentTarget as HTMLElement;
+  const chips = [...bar.querySelectorAll<HTMLElement>('[data-go]')];
+  const current = event.target as HTMLElement;
+  const index = chips.indexOf(current);
+  if (index < 0) return;
+  const row = Number(current.dataset.row);
+  const column = Number(current.dataset.column);
+  const inRow = (value: number) =>
+    chips.filter(chip => Number(chip.dataset.row) === value);
+  const nearest = (value: number) =>
+    inRow(value).sort(
+      (a, b) =>
+        Math.abs(Number(a.dataset.column) - column) -
+        Math.abs(Number(b.dataset.column) - column),
+    )[0];
+  const rows = [...new Set(chips.map(chip => Number(chip.dataset.row)))];
+  let next: HTMLElement | undefined;
+  switch (event.key) {
+    case 'ArrowRight':
+      next = inRow(row).find(chip => Number(chip.dataset.column) > column);
+      break;
+    case 'ArrowLeft':
+      next = inRow(row)
+        .reverse()
+        .find(chip => Number(chip.dataset.column) < column);
+      break;
+    case 'ArrowDown':
+      next = nearest(rows[rows.indexOf(row) + 1]);
+      break;
+    case 'ArrowUp':
+      next = nearest(rows[rows.indexOf(row) - 1]);
+      break;
+    case 'Home':
+      next = chips[0];
+      break;
+    case 'End':
+      next = chips.at(-1);
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+  next?.focus();
+}
+
+/* The list: one row per band, station, part, case, and step */
+
+type Row = {
+  key: string;
+  level: number;
+  kind: 'band' | 'station' | 'part' | 'step' | 'note';
+  /** Absent for rows that cannot collapse. */
+  expanded?: boolean;
+  content: TemplateResult;
+  tip?: string;
+  activate?: () => void;
+  /** The shape on the line: stations of a band hang on one line. */
+  marker?: 'circle' | 'diamond' | 'square';
+  rail?: 'first' | 'middle' | 'last' | 'through';
+  /** A route rule that the view follows. */
+  current?: boolean;
+  /** The step of a flow hook's shared flow, which opens from that flow. */
+  hook?: FlowHookPoint;
+};
+
+function tree(
+  map: FlowMap,
+  state: FlowState,
+  actions: FlowActions,
 ): TemplateResult {
-  const open = !parts.collapsed.has(key);
-  return html`<div class="segment">
-    ${toggleView(key, segment.label, parts, segment.label)}
-    ${
-      open
-        ? html`${segment.facts.map(fact => html`<p class="segment-fact">${fact}</p>`)}
-          ${
-            'cases' in segment
-              ? casesView(segment.cases, segment.label, parts)
-              : stepsView(segment.steps, parts)
-          }`
-        : nothing
-    }
+  const rows = rowsOf(map, state, actions);
+  const group = `${map.key}#list`;
+  const focusable = rows.filter(row => row.kind !== 'note');
+  const entry = focusable.some(row => row.key === state.roving[group])
+    ? state.roving[group]
+    : focusable[0]?.key;
+  return html`<div
+    class="tree"
+    role="tree"
+    aria-label=${map.title}
+    @keydown=${(event: KeyboardEvent) => moveInTree(event, actions)}
+    @focusin=${(event: FocusEvent) => {
+      const key = (event.target as HTMLElement).dataset.key;
+      if (key) actions.rove(group, key);
+    }}
+  >
+    ${repeat(
+      rows,
+      row => row.key,
+      row => rowView(row, entry, state, actions),
+    )}
   </div>`;
 }
 
-/**
- * A first-match group: numbered cases in evaluation order. Route rules are
- * toggle buttons that choose the route the view follows.
- */
-function casesView(
-  cases: readonly FlowCase[],
-  label: string,
-  parts: Parts,
-  endpoint?: number,
+function rowView(
+  row: Row,
+  entry: string | undefined,
+  state: FlowState,
+  actions: FlowActions,
 ): TemplateResult {
-  const { entry, actions } = parts;
-  // The order matters only when there is more than one case to try
-  const numbered = cases.filter(item => item.number !== undefined).length > 1;
-  // Heads line up when only some cases have steps to collapse
-  const foldable = cases.some(item => item.steps.length);
-  return html`<ol class="cases" aria-label="${label}, the first match runs">
-    ${cases.map((item, position) => {
-      const route = endpoint !== undefined && item.number !== undefined;
-      const open = !parts.collapsed.has(item.key);
-      return html`<li class="case">
-        <div class="case-line">
-          ${
-            item.steps.length
-              ? toggleView(item.key, `Steps of ${item.name}`, parts)
-              : foldable
-                ? html`<span class="toggle-space"></span>`
-                : nothing
-          }
-          <button
-            class="case-head ${item.muted ? 'muted' : ''}"
-            data-key=${item.key}
-            tabindex=${item.key === entry ? 0 : -1}
-            aria-pressed=${item.followed === undefined ? nothing : String(item.followed)}
-            aria-disabled=${route || item.at !== undefined ? nothing : 'true'}
-            data-tooltip=${[item.name, item.condition, ...item.facts].filter(Boolean).join('\n')}
-            @click=${() => {
-              if (route) {
-                actions.route(endpoint, position);
-              } else if (item.at !== undefined) {
-                actions.open(item.at);
-              }
+  const classes = [
+    'row',
+    row.kind,
+    `level-${row.level}`,
+    row.marker && `mark-${row.marker}`,
+    row.rail && `rail-${row.rail}`,
+    row.activate && 'active',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (row.kind === 'note') {
+    return html`<div class=${classes} role="none">${row.content}</div>`;
+  }
+  return html`<div
+    class=${classes}
+    role="treeitem"
+    data-key=${row.key}
+    data-station=${row.kind === 'station' ? row.key : nothing}
+    aria-level=${row.level}
+    aria-expanded=${row.expanded === undefined ? nothing : String(row.expanded)}
+    aria-selected=${row.key === state.selected ? 'true' : nothing}
+    aria-current=${row.current ? 'true' : nothing}
+    tabindex=${row.key === entry ? 0 : -1}
+    data-tooltip=${row.tip ?? nothing}
+    @click=${row.activate ?? nothing}
+  >
+    ${
+      row.expanded === undefined
+        ? html`<span class="twisty"></span>`
+        : html`<span
+            class="twisty"
+            aria-hidden="true"
+            @click=${(event: Event) => {
+              event.stopPropagation();
+              actions.toggle(row.key);
             }}
-          >
-            ${signView(item.sign)}
-            ${numbered && item.number !== undefined ? html`<span class="number">${item.number}</span>` : nothing}
-            <span class="case-name">${item.name}</span>
-            ${item.summary ? html`<span class="summary">${item.summary}</span>` : nothing}
-            ${item.destination ? html`<span class="destination">→ ${item.destination}</span>` : nothing}
-            ${
-              item.facts.length ||
-              (item.condition && item.condition !== item.summary)
-                ? html`<span class="sr-only"
-                    >.
-                    ${[item.condition && item.condition !== item.summary ? `If ${item.condition}` : '', ...item.facts].filter(Boolean).join('. ')}</span
-                  >`
-                : nothing
-            }
-          </button>
-        </div>
-        ${item.steps.length && open ? stepsView(item.steps, parts) : nothing}
-      </li>`;
-    })}
-  </ol>`;
+            ><vscode-icon
+              name=${row.expanded ? 'chevron-down' : 'chevron-right'}
+            ></vscode-icon
+          ></span>`
+    }
+    ${row.content}
+  </div>`;
 }
 
-function stepsView(
-  steps: readonly FlowStep[],
-  parts: Parts,
-  hook?: FlowHookPoint,
-): TemplateResult {
-  const { entry, actions } = parts;
-  return html`<ol class="steps">
-    ${steps.map(
-      step =>
-        html`<li class="step">
-          <button
-            class="node ${step.condition ? 'conditional' : ''} ${step.muted ? 'muted' : ''}"
-            data-key=${step.key}
-            tabindex=${step.key === entry ? 0 : -1}
-            data-tooltip=${[step.name, step.type, step.condition && `If ${step.condition}`, ...step.facts].filter(Boolean).join('\n')}
-            @click=${() => actions.open(step.at, hook)}
-          >
-            ${signView(step.sign)}
-            <span class="node-name">${step.name}</span>
-            ${
-              step.type
-                ? html`<span class="sr-only">, ${step.type}</span
-                    ><span class="type" aria-hidden="true">${step.type}</span>`
-                : nothing
-            }
-            ${
-              step.condition || step.facts.length
-                ? html`<span class="sr-only"
-                    >.
-                    ${[step.condition && `If ${step.condition}`, ...step.facts].filter(Boolean).join('. ')}</span
-                  >`
-                : nothing
-            }
-          </button>
-          ${
+/** Lists the rows of a map in run order; collapsed parts leave theirs out. */
+function rowsOf(map: FlowMap, state: FlowState, actions: FlowActions): Row[] {
+  const rows: Row[] = [];
+  const open = (key: string) => !state.collapsed.has(key);
+  const toggle = (key: string) => () => actions.toggle(key);
+  const note = (text: string, level: number) =>
+    rows.push({
+      key: `#note${rows.length}`,
+      level,
+      kind: 'note',
+      content: html`<span class="fact">${text}</span>`,
+    });
+
+  const steps = (
+    list: readonly FlowStep[],
+    level: number,
+    hook?: FlowHookPoint,
+  ) => {
+    for (const step of list) {
+      const tip = [
+        step.name,
+        step.type,
+        step.condition && `If ${step.condition}`,
+        ...step.facts,
+      ]
+        .filter(Boolean)
+        .join('\n');
+      rows.push({
+        key: step.key,
+        level,
+        kind: 'step',
+        tip,
+        ...(hook && { hook }),
+        activate: () => actions.open(step.at, hook, step.key),
+        content: html`<span class="step-box"
+          ><span
+            class="pill ${step.condition ? 'conditional' : ''} ${step.muted ? 'muted' : ''}"
+            >${signView(step.sign)}<span class="pill-name">${step.name}</span>${
+              step.type ? html`<span class="type">${step.type}</span>` : nothing
+            }</span
+          >${
             step.condition
-              ? html`<span class="step-condition" aria-hidden="true"
+              ? html`<span class="condition" aria-hidden="true"
                   >if ${step.condition}</span
                 >`
               : nothing
-          }
-        </li>`,
-    )}
-  </ol>`;
+          }${
+            step.condition || step.facts.length
+              ? html`<span class="sr-only"
+                  >.
+                  ${[step.condition && `If ${step.condition}`, ...step.facts].filter(Boolean).join('. ')}</span
+                >`
+              : nothing
+          }</span
+        >`,
+      });
+    }
+  };
+
+  const cases = (
+    list: readonly FlowCase[],
+    level: number,
+    endpoint?: number,
+  ) => {
+    // The order matters only when there is more than one case to try
+    const numbered = list.filter(item => item.number !== undefined).length > 1;
+    list.forEach((item, position) => {
+      const follows = endpoint !== undefined && item.number !== undefined;
+      const extra = [
+        item.condition && item.condition !== item.summary
+          ? `If ${item.condition}`
+          : '',
+        ...item.facts,
+        follows && item.followed ? 'The view follows this route' : '',
+      ].filter(Boolean);
+      rows.push({
+        key: item.key,
+        level,
+        kind: 'part',
+        ...(item.steps.length && { expanded: open(item.key) }),
+        ...(follows && { current: Boolean(item.followed) }),
+        tip: [item.name, item.condition, ...item.facts]
+          .filter(Boolean)
+          .join('\n'),
+        activate: follows
+          ? () => actions.route(endpoint, position)
+          : item.at !== undefined
+            ? () => actions.open(item.at!, undefined, item.key)
+            : item.steps.length
+              ? toggle(item.key)
+              : undefined,
+        content: html`<span
+          class="label case ${item.muted ? 'muted' : ''} ${follows ? 'route' : ''}"
+          >${signView(item.sign)}${
+            numbered && item.number !== undefined
+              ? html`<span class="number">${item.number}</span>`
+              : nothing
+          }<span class="case-name">${item.name}</span>${
+            item.summary
+              ? html`<span class="summary">${item.summary}</span>`
+              : nothing
+          }${
+            item.destination
+              ? html`<span class="destination">→ ${item.destination}</span>`
+              : nothing
+          }${
+            extra.length
+              ? html`<span class="sr-only">. ${extra.join('. ')}</span>`
+              : nothing
+          }</span
+        >`,
+      });
+      if (item.steps.length && open(item.key)) steps(item.steps, level + 1);
+    });
+  };
+
+  const station = (item: FlowItem) => {
+    switch (item.kind) {
+      case 'client':
+        rows.push({
+          key: item.key,
+          level: 2,
+          kind: 'station',
+          marker: 'circle',
+          content: html`<span class="label"
+            ><span class="station-name">Client</span>${
+              item.basePath
+                ? html`<span class="muted">${item.basePath}</span>`
+                : nothing
+            }</span
+          >`,
+        });
+        return;
+      case 'hook': {
+        const title = `${hookNames[item.point]} Flow Hook`;
+        rows.push({
+          key: item.key,
+          level: 2,
+          kind: 'station',
+          marker: 'circle',
+          expanded: open(item.key),
+          activate: toggle(item.key),
+          content: html`<span class="label"
+            ><vscode-icon name="plug" class="hook-mark"></vscode-icon
+            ><span class="station-name">${title}</span></span
+          >`,
+        });
+        if (!open(item.key)) return;
+        rows.push({
+          key: `${item.key}#flow`,
+          level: 3,
+          kind: 'part',
+          tip: [title, item.sharedFlow, ...item.facts].join('\n'),
+          activate: () => actions.hook(item.sharedFlow),
+          content: html`<span class="label"
+            ><span class="link">${item.sharedFlow}</span
+            >${signView(item.sign)}${
+              item.revision
+                ? html`<span class="muted">· Revision ${item.revision}</span>`
+                : nothing
+            }<span class="sr-only"
+              >. ${[title, ...item.facts].join('. ')}</span
+            ></span
+          >`,
+        });
+        if (item.steps?.length) steps(item.steps, 3, item.point);
+        return;
+      }
+      case 'endpoint': {
+        const name = `${roleTitles[item.role]} ${item.name}`;
+        const parts = item.segments.length > 0;
+        rows.push({
+          key: item.key,
+          level: 2,
+          kind: 'station',
+          marker: 'circle',
+          ...(parts && { expanded: open(item.key) }),
+          tip: [name, ...item.facts].join('\n'),
+          activate: () => actions.open(item.at, undefined, item.key),
+          content: html`<span class="label"
+            ><span class="station-name link">${name}</span
+            >${signView(item.sign)}${
+              parts ? nothing : html`<span class="muted">no steps</span>`
+            }${
+              item.facts.length
+                ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
+                : nothing
+            }</span
+          >`,
+        });
+        if (!parts || !open(item.key)) return;
+        item.segments.forEach((segment, index) => {
+          // Steps are keyed by their place under the endpoint, parts apart
+          const key = `${item.key}#${index}`;
+          rows.push({
+            key,
+            level: 3,
+            kind: 'part',
+            expanded: open(key),
+            activate: toggle(key),
+            content: html`<span class="label segment-label"
+              >${segment.label}${
+                segment.facts.length
+                  ? html`<span class="sr-only"
+                      >. ${segment.facts.join(' ')}</span
+                    >`
+                  : nothing
+              }</span
+            >`,
+          });
+          if (!open(key)) return;
+          for (const fact of segment.facts) note(fact, 4);
+          if ('cases' in segment) cases(segment.cases, 4);
+          else steps(segment.steps, 4);
+        });
+        return;
+      }
+      case 'routes':
+        rows.push({
+          key: item.key,
+          level: 2,
+          kind: 'station',
+          marker: 'diamond',
+          expanded: open(item.key),
+          activate: toggle(item.key),
+          content: html`<span class="label"
+            ><span class="station-name">Route Rules</span></span
+          >`,
+        });
+        if (open(item.key)) cases(item.cases, 3, item.endpoint);
+        return;
+      case 'backend':
+        rows.push({
+          key: item.key,
+          level: 2,
+          kind: 'station',
+          marker: 'square',
+          tip: ['Backend', item.text, ...item.facts].join('\n'),
+          ...(item.at !== undefined && {
+            activate: () => actions.open(item.at!, undefined, item.key),
+          }),
+          content: html`<span class="label"
+            ><span class="station-name ${item.at === undefined ? '' : 'link'}"
+              >${item.text}</span
+            >${signView(item.sign)}${
+              item.facts.length
+                ? html`<span class="sr-only">. ${item.facts.join('. ')}</span>`
+                : nothing
+            }</span
+          >`,
+        });
+        return;
+    }
+  };
+
+  for (const band of map.bands) {
+    const key = bandKey(map, band);
+    const expanded = open(key);
+    rows.push({
+      key,
+      level: 1,
+      kind: 'band',
+      expanded,
+      activate: toggle(key),
+      content: html`<span class="label band-title"
+        ><vscode-icon name=${bandIcons[band.kind]}></vscode-icon
+        >${bandTitles[band.kind]}${
+          band.facts.length
+            ? html`<span class="sr-only">. ${band.facts.join(' ')}</span>`
+            : nothing
+        }</span
+      >`,
+    });
+    if (!expanded) continue;
+    for (const fact of band.facts) note(fact, 2);
+    const start = rows.length;
+    band.items.forEach(station);
+    // The stations of a band hang on one line, from the first to the last
+    const marks = rows
+      .map((row, index) =>
+        index >= start && row.kind === 'station' ? index : -1,
+      )
+      .filter(index => index >= 0);
+    if (marks.length > 1) {
+      const first = marks[0];
+      const last = marks.at(-1)!;
+      for (let index = first; index <= last; index++) {
+        rows[index].rail =
+          index === first
+            ? 'first'
+            : index === last
+              ? 'last'
+              : rows[index].kind === 'station'
+                ? 'middle'
+                : 'through';
+      }
+    }
+  }
+  return rows;
 }
 
 function signView(sign: FlowSign | undefined) {
@@ -477,45 +801,50 @@ function signView(sign: FlowSign | undefined) {
 }
 
 /**
- * Moves the focus within a band: up and down in run order, left and right to
- * the previous or next stage as the arrows point, Home and End to the ends.
+ * Moves through the list like VS Code's trees: up and down by row, right
+ * opens a part or enters it, left closes it or goes to its parent, Home and
+ * End to the ends, Enter and Space do what a click does.
  */
-function moveInBand(event: KeyboardEvent): void {
-  const list = event.currentTarget as HTMLElement;
-  const items = [...list.querySelectorAll<HTMLElement>('[data-key]')];
-  const current = items.indexOf(event.target as HTMLElement);
-  if (current < 0) return;
+function moveInTree(event: KeyboardEvent, actions: FlowActions): void {
+  const tree = event.currentTarget as HTMLElement;
+  const rows = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"]')];
+  const current = event.target as HTMLElement;
+  const index = rows.indexOf(current);
+  if (index < 0) return;
+  const level = Number(current.getAttribute('aria-level'));
+  const expanded = current.getAttribute('aria-expanded');
+  const key = current.dataset.key ?? '';
   let next: HTMLElement | undefined;
   switch (event.key) {
     case 'ArrowDown':
-      next = items[current + 1];
+      next = rows[index + 1];
       break;
     case 'ArrowUp':
-      next = items[current - 1];
+      next = rows[index - 1];
       break;
     case 'Home':
-      next = items[0];
+      next = rows[0];
       break;
     case 'End':
-      next = items.at(-1);
+      next = rows.at(-1);
+      break;
+    case 'ArrowRight':
+      if (expanded === 'false') actions.toggle(key);
+      else if (expanded === 'true') next = rows[index + 1];
       break;
     case 'ArrowLeft':
-    case 'ArrowRight': {
-      // The wide response band runs from right to left
-      const mirrored =
-        getComputedStyle(list).getPropertyValue('--mirrored').trim() === '1';
-      const forward = (event.key === 'ArrowRight') !== mirrored;
-      const stages = [...list.children];
-      const stage = stages.findIndex(item => item.contains(items[current]));
-      const following = forward
-        ? stages.slice(stage + 1)
-        : stages.slice(0, stage).reverse();
-      next =
-        following
-          .map(item => item.querySelector<HTMLElement>('[data-key]'))
-          .find(item => item !== null) ?? undefined;
+      if (expanded === 'true') actions.toggle(key);
+      else {
+        next = rows
+          .slice(0, index)
+          .reverse()
+          .find(row => Number(row.getAttribute('aria-level')) < level);
+      }
       break;
-    }
+    case 'Enter':
+    case ' ':
+      current.click();
+      break;
     default:
       return;
   }

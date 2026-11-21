@@ -249,7 +249,7 @@ In Restricted Mode, linting and the flow of local bundles keep working, and the 
 
 ### Reading the flow
 
-Each proxy endpoint gets a map of the stages in the order Apigee runs them:
+Each proxy endpoint gets a list of what runs, in the order Apigee runs it:
 
 - **Request:** the client with the base path, the PreFlow, conditional Flows, and PostFlow of the proxy endpoint, the route rules, and the flows of the target endpoint.
 - **Backend:** where the target endpoint sends the request, such as a URL, the servers of a load balancer, or another proxy.
@@ -258,9 +258,15 @@ Each proxy endpoint gets a map of the stages in the order Apigee runs them:
 
 Conditional flows, route rules, and fault rules are numbered in the order Apigee checks them when there are several, and the first match runs: fault rules from the bottom up in a proxy endpoint and from the top down in a target endpoint, followed by the DefaultFaultRule. A case without a condition matches everything, so the cases after it are marked as never running. A route rule shows its name and where it sends the request: **default → Target Endpoint default** is the route rule named default, which sends the request to the target endpoint named default. Route rules are buttons: choose one to draw the target it leads to, or none for a null route.
 
-The steps of each part stand below one another in the order they run. A step with a condition has a dashed border with the condition below it, and a disabled policy is muted. Every part starts expanded; the arrow before a band, an endpoint, a part such as the PreFlow, a conditional flow, or a flow hook collapses it. A step opens its policy, and the title of an endpoint opens its file, in a split view to the right of the flow; hovering over an item names its policy type, its condition, and what else matters.
+The stations of each section, such as the client, a flow hook, an endpoint, and the route rules, hang on a line; the steps of each part stand below one another in the order they run. A step with a condition has a dashed border with the condition below it, and a disabled policy is muted. Every part starts expanded; the arrow before it collapses it, and **Collapse All** next to Refresh folds every station, so that the list shows only the stations. A step opens its policy, and the title of an endpoint opens its file, in a split view to the right of the flow; the row you opened stays marked. Hovering over a row names its policy type, its condition, and what else matters, and Cmd+F (Ctrl+F) finds a policy by its name.
 
-In narrow tabs the stages run from top to bottom. From 1,000 pixels, the request runs from left to right with the response below it from right to left, as in the Apigee console. Keyboard focus moves into each band with Tab and follows the run order with the arrow keys.
+### The map
+
+Above the list, a map shows the way through the proxy endpoint at a glance, and stays at the top while you scroll: the request from the client to the right, the response below it back to the client, and the backend on the right where the request turns. A route rule without a target endpoint turns at **No Target** instead. On Error, Per Event, and After the Response get a row of their own when the proxy has them. A station with a dashed border runs no steps, and a sign on a station says that something in it differs from the workspace or needs attention. The map marks the station whose part of the list is at the top; choose a station to show it in the list, opened. A shared flow has no map, since it has only its steps.
+
+### Keyboard
+
+The map is one Tab stop: the arrow keys choose a station, and Enter shows it in the list. The list works like VS Code's trees: the up and down arrows move from row to row, the right arrow opens a part or enters it, the left arrow closes it or goes to the part around it, and Enter does what a click does.
 
 ### Workspace and environments
 
