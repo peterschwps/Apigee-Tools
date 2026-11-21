@@ -287,6 +287,8 @@ export type FlowView = {
   environments:
     'ready' | 'untrusted' | 'unloaded' | 'loading' | 'problem' | 'undeployed';
   problem?: Problem;
+  /** Whether the dashboard is loading the organization. */
+  loading: boolean;
   /** The deployment shown, in an environment. */
   cell?: Cell;
   /** How many files differ from the local copy, in an environment. */

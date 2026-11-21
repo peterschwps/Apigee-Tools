@@ -30,6 +30,9 @@ import {
 
 const viewType = 'apigeeTools.flow';
 
+/** A deployment that the flow view shows. */
+export type Deployment = { organization: string; row: Row; cell: Cell };
+
 /** What the flow panel needs from the dashboard, which registers it. */
 export type FlowHost = {
   /** Finds the bundles in the workspace. */
@@ -61,6 +64,7 @@ export type FlowHost = {
     name: string,
     environment: string,
     directory: string,
+    from: Deployment,
   ): Promise<void>;
   /** Loads the organization again, as Refresh in the dashboard does. */
   refresh(): Promise<void>;
@@ -92,13 +96,17 @@ type Known = {
   environments: readonly string[];
 };
 
-/** A deployed revision on show, whose files open in the editor. */
-type Shown = {
-  organization: string;
-  row: Row;
-  cell: Cell;
-  files: BundleFiles;
-  changes?: BundleChanges;
+/** The flow hooks of an environment that have a shared flow attached. */
+type Hooks = NonNullable<ViewContext['hooks']>;
+
+/** What a build read: the model of a subject's source, and its context. */
+type Built = {
+  subject: Subject;
+  source: string;
+  model?: FlowModel;
+  context: ViewContext;
+  /** The deployment of an environment, whose files open in the editor. */
+  shown?: Deployment & { files: BundleFiles; changes?: BundleChanges };
 };
 
 /** Registers the Show Flow command and its panel. */
@@ -116,12 +124,16 @@ export function registerFlowPanel(
   let subject: Subject | undefined;
   // The source on show: empty for the local copy, else an environment
   let source = '';
-  let model: FlowModel | undefined;
-  let viewContext: ViewContext = {};
-  let shown: Shown | undefined;
-  let problem: Note | undefined;
+  let built: Built | undefined;
+  // What the newest build reads, so that it is not started twice
+  let target = '';
+  // A remark on the subject, and what went wrong in the last build
+  let notice: Note | undefined;
+  let warning: Note | undefined;
   // A copy, so that closing the dashboard keeps the environments
   let known: Known | undefined;
+  // Counts the dashboard's loads; each may bring other flow hooks
+  let loads = 0;
   // Counts models, so that the webview's references to places stay valid
   let version = 0;
   // Counts builds, so that a slow read cannot replace a newer one
@@ -133,10 +145,9 @@ export function registerFlowPanel(
   // The editor group that Show Flow came from, where files open
   let origin: vscode.ViewColumn | undefined;
   let posted = '';
-  let environmentsPosted = '';
-  // Deployed revisions never change; flow hooks stay until Refresh
+  // Deployed revisions never change; flow hooks are read once per load
   const models = new Map<string, FlowModel>();
-  const hooks = new Map<string, NonNullable<ViewContext['hooks']>>();
+  const hooks = new Map<string, Promise<Hooks>>();
 
   context.subscriptions.push(
     vscode.commands.registerCommand('apigeeTools.showFlow', showFlow),
@@ -164,7 +175,7 @@ export function registerFlowPanel(
     const directory = uri?.scheme === 'file' && findBundleRoot(uri.fsPath);
     const bundles = await host.scanWorkspace();
     if (directory) {
-      open(subjectOf(directory, bundles), '', false);
+      await open(subjectOf(directory, bundles), '', false);
       return;
     }
     if (!bundles.length) {
@@ -181,7 +192,8 @@ export function registerFlowPanel(
       })),
       { placeHolder: 'Choose the bundle whose flow to show' },
     );
-    if (picked) open(subjectOf(picked.bundle.directory, bundles), '', true);
+    if (picked)
+      await open(subjectOf(picked.bundle.directory, bundles), '', true);
   }
 
   /**
@@ -207,17 +219,17 @@ export function registerFlowPanel(
     const first = known?.environments.find(
       environment => row && cellOf(row, environment),
     );
-    open(
+    await open(
       { kind: target.kind, name: target.name, directory },
       deployed ?? (directory ? '' : (first ?? '')),
       true,
+      copies.length > 1
+        ? {
+            tone: 'info',
+            text: `Several bundles in the workspace are named ${target.name}, so the flow shows no local copy. Show the flow from a file of one of them.`,
+          }
+        : undefined,
     );
-    if (copies.length > 1) {
-      problem = {
-        tone: 'info',
-        text: `Several bundles in the workspace are named ${target.name}, so the flow shows no local copy. Show the flow from a file of one of them.`,
-      };
-    }
   }
 
   /** Names a bundle directory as the workspace scan does, else by its folder. */
@@ -236,8 +248,16 @@ export function registerFlowPanel(
     };
   }
 
-  /** Opens the panel beside the editor, or switches it to another bundle. */
-  function open(next: Subject, from: string, focus: boolean): void {
+  /**
+   * Opens the panel beside the editor, or switches it to another bundle, and
+   * resolves once its first build is done.
+   */
+  function open(
+    next: Subject,
+    from: string,
+    focus: boolean,
+    remark?: Note,
+  ): Promise<void> {
     const title = `Flow · ${next.name}`;
     const active = vscode.window.tabGroups.activeTabGroup.viewColumn;
     if (active !== panel?.viewColumn) origin = active;
@@ -266,9 +286,11 @@ export function registerFlowPanel(
         watcher = undefined;
         panel = undefined;
         subject = undefined;
-        model = undefined;
-        shown = undefined;
+        built = undefined;
+        target = '';
         ready = false;
+        // A build still running belongs to the closed panel
+        builds++;
       });
     }
     if (
@@ -282,8 +304,8 @@ export function registerFlowPanel(
     }
     subject = next;
     source = from;
-    problem = undefined;
-    void build();
+    notice = remark;
+    return build();
   }
 
   /** Rebuilds the view shortly after a file of the local copy changed. */
@@ -301,59 +323,69 @@ export function registerFlowPanel(
     return files;
   }
 
+  /** What a build of a source reads, to tell whether it is read already. */
+  function keyOf(from: string): string {
+    if (!subject) return '';
+    const base = `${subject.kind}/${subject.name}/${subject.directory ?? ''}`;
+    if (!from) return base;
+    const row = rowOf(subject);
+    const cell = row && cellOf(row, from);
+    return `${base}/${known?.organization}/${from}/${cell?.revision}/${loads}`;
+  }
+
   /** Reads the source on show and posts its flow. */
   async function build(): Promise<void> {
     const current = subject;
     if (!current) return;
-    const build = ++builds;
     const from = source;
-    let next: {
-      model?: FlowModel;
-      context: ViewContext;
-      shown?: Shown;
-      note?: Note;
-    };
+    target = keyOf(from);
+    const build = ++builds;
+    let next: Built;
+    let note: Note | undefined;
     try {
-      next = from
+      ({ built: next, note } = from
         ? await environmentFlow(current, from)
-        : current.directory
-          ? {
-              model: flowModel(
-                await readBundle(current.directory, current.kind),
-                current.kind,
-              ),
+        : {
+            built: {
+              subject: current,
+              source: from,
               context: {},
-            }
-          : { context: {} };
+              ...(current.directory && {
+                model: flowModel(
+                  await readBundle(current.directory, current.kind),
+                  current.kind,
+                ),
+              }),
+            },
+          });
     } catch (error) {
-      next = {
-        context: {},
-        note: {
-          tone: 'warning',
-          text: from
-            ? `The flow in ${from} could not be read: ${messageOf(error)}`
-            : `The bundle could not be read: ${messageOf(error)}`,
-        },
+      next = { subject: current, source: from, context: {} };
+      note = {
+        tone: 'warning',
+        text: from
+          ? `The flow in ${from} could not be read: ${messageOf(error)}`
+          : `The bundle could not be read: ${messageOf(error)}`,
       };
     }
     if (build !== builds) return;
-    model = next.model;
-    viewContext = next.context;
-    shown = next.shown;
-    if (next.note) problem = next.note;
-    else if (problem?.tone === 'warning') problem = undefined;
+    built = next;
+    warning = note;
     version++;
     post();
   }
 
   /**
    * Reads the revision deployed in an environment with the shared flows of
-   * its flow hooks, and how it differs from the local copy.
+   * its flow hooks, and how it differs from the local copy. Flow hooks or a
+   * local copy that cannot be read leave a note, not a missing flow.
    */
   async function environmentFlow(
     current: Subject,
     environment: string,
-  ): Promise<{ model: FlowModel; context: ViewContext; shown: Shown }> {
+  ): Promise<{ built: Built; note?: Note }> {
+    if (!vscode.workspace.isTrusted) {
+      throw new Error('Environments need a trusted workspace.');
+    }
     const scope = known;
     const row = rowOf(current);
     const cell = row && cellOf(row, environment);
@@ -372,71 +404,118 @@ export function registerFlowPanel(
     const key = `${scope.organization}/${row.kind}/${row.name}/${cell.revision}`;
     const parsed = models.get(key) ?? flowModel(files, row.kind);
     models.set(key, parsed);
-    const attached = await hooksOf(client, scope.organization, environment);
-    const changes = current.directory
-      ? compareBundles(
-          fingerprints(files),
-          fingerprints(await readBundle(current.directory, current.kind)),
-        )
+
+    const notes: string[] = [];
+    const attached = await hooksOf(
+      client,
+      scope.organization,
+      environment,
+    ).catch(error => {
+      notes.push(
+        `The flow hooks of ${environment} could not be read: ${messageOf(error)}`,
+      );
+      return undefined;
+    });
+    const local = current.directory
+      ? await readBundle(current.directory, current.kind).catch(error => {
+          notes.push(
+            `The local copy could not be read, so differences are not marked: ${messageOf(error)}`,
+          );
+          return undefined;
+        })
+      : undefined;
+    const changes = local
+      ? compareBundles(fingerprints(files), fingerprints(local))
       : undefined;
     return {
-      model: parsed,
-      shown: { organization: scope.organization, row, cell, files, changes },
-      context: {
-        environment,
-        hooks: attached,
-        changes,
-        sharedFlow: name => {
-          const flow = scope.rows.find(
-            item => item.kind === 'sharedflows' && item.name === name,
-          );
-          const deployed = flow && cellOf(flow, environment);
-          return (
-            deployed && { revision: deployed.revision, differs: deployed.drift }
-          );
+      built: {
+        subject: current,
+        source: environment,
+        model: parsed,
+        shown: {
+          organization: scope.organization,
+          row,
+          cell,
+          files,
+          changes,
+        },
+        context: {
+          environment,
+          hooks: attached,
+          changes,
+          // The newest deployments of the organization, after each load
+          sharedFlow: name => {
+            const rows =
+              known?.organization === scope.organization
+                ? known.rows
+                : scope.rows;
+            const flow = rows.find(
+              item => item.kind === 'sharedflows' && item.name === name,
+            );
+            const deployed = flow && cellOf(flow, environment);
+            return (
+              deployed && {
+                revision: deployed.revision,
+                differs: deployed.drift,
+              }
+            );
+          },
         },
       },
+      ...(notes.length && {
+        note: { tone: 'warning', text: notes.join(' ') },
+      }),
     };
   }
 
-  /** Reads the flow hooks of an environment once, until Refresh. */
-  async function hooksOf(
+  /** Reads the flow hooks of an environment once per load of the dashboard. */
+  function hooksOf(
     client: ApigeeClient,
     organization: string,
     environment: string,
-  ): Promise<NonNullable<ViewContext['hooks']>> {
+  ): Promise<Hooks> {
     const key = `${organization}/${environment}`;
     const cached = hooks.get(key);
     if (cached) return cached;
-    const found = await Promise.all(
+    const pending = Promise.all(
       flowHookPoints.map(async point => {
         const hook = await client.flowHook(organization, environment, point);
         return [point, hook] as const;
       }),
-    );
-    const attached = Object.fromEntries(
-      found.flatMap(([point, hook]) =>
-        hook.sharedFlow
-          ? [
-              [
-                point,
-                {
-                  sharedFlow: hook.sharedFlow,
-                  continueOnError: hook.continueOnError,
-                },
-              ],
-            ]
-          : [],
+    ).then(found =>
+      Object.fromEntries(
+        found.flatMap(([point, hook]) =>
+          hook.sharedFlow
+            ? [
+                [
+                  point,
+                  {
+                    sharedFlow: hook.sharedFlow,
+                    continueOnError: hook.continueOnError,
+                  },
+                ],
+              ]
+            : [],
+        ),
       ),
     );
-    hooks.set(key, attached);
-    return attached;
+    hooks.set(key, pending);
+    // A failed read is tried again next time, unless a newer one replaced it
+    pending.catch(() => {
+      if (hooks.get(key) === pending) hooks.delete(key);
+    });
+    return pending;
   }
 
   /** Copies the dashboard's deployments when it has loaded them. */
   function refreshKnown(): Snapshot {
     const snapshot = host.snapshot();
     if (snapshot.organization && snapshot.rows && snapshot.overview) {
+      // Each load lists the deployments anew; flow hooks may have changed too
+      if (snapshot.rows !== known?.rows) {
+        loads++;
+        hooks.clear();
+      }
       known = {
         organization: snapshot.organization,
         rows: snapshot.rows,
@@ -455,21 +534,27 @@ export function registerFlowPanel(
   /** The sources to choose from, and what keeps environments away. */
   function environmentsOf(): Pick<
     FlowView,
-    'sources' | 'environments' | 'organization' | 'problem'
+    'sources' | 'environments' | 'organization' | 'problem' | 'loading'
   > {
     const snapshot = refreshKnown();
+    const loading = snapshot.loading;
     const sources: FlowSource[] = subject?.directory
       ? [{ id: '', label: 'Workspace' }]
       : [];
     if (!vscode.workspace.isTrusted) {
-      return { sources, environments: 'untrusted' };
+      return { sources, environments: 'untrusted', loading: false };
     }
     if (!known) {
-      return snapshot.loading
-        ? { sources, environments: 'loading' }
+      return loading
+        ? { sources, environments: 'loading', loading }
         : snapshot.problem
-          ? { sources, environments: 'problem', problem: snapshot.problem }
-          : { sources, environments: 'unloaded' };
+          ? {
+              sources,
+              environments: 'problem',
+              problem: snapshot.problem,
+              loading,
+            }
+          : { sources, environments: 'unloaded', loading };
     }
     const row = subject && rowOf(subject);
     for (const environment of known.environments) {
@@ -485,11 +570,8 @@ export function registerFlowPanel(
     return {
       sources,
       organization: known.organization,
-      environments: deployed
-        ? 'ready'
-        : snapshot.loading
-          ? 'loading'
-          : 'undeployed',
+      environments: deployed ? 'ready' : loading ? 'loading' : 'undeployed',
+      loading,
       ...(snapshot.problem && { problem: snapshot.problem }),
     };
   }
@@ -501,11 +583,10 @@ export function registerFlowPanel(
     // The current deployment state, which may arrive after the revision
     const row = rowOf(subject);
     const cell = source && row ? cellOf(row, source) : undefined;
-    environmentsPosted = JSON.stringify([environments, cell]);
-    const view = model
-      ? flowView(model, { ...viewContext, routes })
+    const view = built?.model
+      ? flowView(built.model, { ...built.context, routes })
       : { maps: [], notes: [] };
-    const changes = shown?.changes;
+    const changes = built?.source === source && built.shown?.changes;
     const flow: FlowView = {
       version,
       kind: subject.kind,
@@ -516,15 +597,14 @@ export function registerFlowPanel(
       source,
       ...environments,
       ...(cell && { cell }),
-      ...(source &&
-        changes && {
-          changes:
-            changes.changed.length +
-            changes.added.length +
-            changes.removed.length,
-        }),
+      ...(changes && {
+        changes:
+          changes.changed.length +
+          changes.added.length +
+          changes.removed.length,
+      }),
       maps: view.maps,
-      notes: problem ? [...view.notes, problem] : view.notes,
+      notes: [...view.notes, ...[warning, notice].filter(note => !!note)],
     };
     const json = JSON.stringify(flow);
     if (json === posted) return;
@@ -534,25 +614,16 @@ export function registerFlowPanel(
   }
 
   /**
-   * Takes in the dashboard's new state. Nothing happens unless the sources
-   * changed; a source that is gone falls back to the local copy or the first
-   * environment, and a new revision of the source is read again.
+   * Takes in the dashboard's new state. A source that is gone falls back to
+   * the local copy or the first environment; a source whose deployment
+   * changed is read again; otherwise the view only posts what changed.
    */
   function update(): void {
     if (!panel || !ready || !subject) return;
-    const environments = environmentsOf();
-    const row = rowOf(subject);
-    const cell = source && row ? cellOf(row, source) : undefined;
-    if (JSON.stringify([environments, cell]) === environmentsPosted) return;
-    const ids = environments.sources.map(item => item.id);
-    if (!ids.includes(source)) {
-      source = ids[0] ?? '';
-      void build();
-    } else if (source && cell?.revision !== shown?.cell.revision) {
-      void build();
-    } else {
-      post();
-    }
+    const ids = environmentsOf().sources.map(item => item.id);
+    if (!ids.includes(source)) source = ids[0] ?? '';
+    if (keyOf(source) !== target) void build();
+    else post();
   }
 
   /** Handles a message from the webview, which counts as untrusted input. */
@@ -561,7 +632,7 @@ export function registerFlowPanel(
       case 'ready':
         ready = true;
         posted = '';
-        post();
+        update();
         break;
       case 'flowOpen':
         if (message.version === version) await openPlace(message.at);
@@ -573,7 +644,7 @@ export function registerFlowPanel(
           Number.isInteger(endpoint) &&
           Number.isInteger(route) &&
           route >= 0 &&
-          route < (model?.proxyEndpoints[endpoint]?.routes.length ?? 0);
+          route < (built?.model?.proxyEndpoints[endpoint]?.routes.length ?? 0);
         if (routed) {
           routes[endpoint] = route;
           post();
@@ -581,53 +652,62 @@ export function registerFlowPanel(
         break;
       }
       case 'flowSource':
-        if (environmentsOf().sources.some(item => item.id === message.source)) {
+        if (
+          typeof message.source === 'string' &&
+          environmentsOf().sources.some(item => item.id === message.source)
+        ) {
           source = message.source;
           await build();
         }
         break;
       case 'showFlow': {
         // Only the shared flow of a flow hook on show, in the same environment
-        const hook = Object.values(viewContext.hooks ?? {}).find(
+        const view = built;
+        const hook = Object.values(view?.context.hooks ?? {}).find(
           item => item.sharedFlow === message.name,
         );
         if (
+          view &&
           hook &&
           message.kind === 'sharedflows' &&
-          message.environment === source
+          message.environment === view.source
         ) {
           await show({
             kind: 'sharedflows',
             name: hook.sharedFlow,
-            environment: source,
+            environment: view.source,
           });
         }
         break;
       }
-      case 'compare':
+      case 'compare': {
+        const view = built;
+        const current = subject;
         if (
-          subject?.directory &&
-          message.kind === subject.kind &&
-          message.name === subject.name &&
-          message.environment === source &&
-          source
+          view?.shown &&
+          current?.directory &&
+          view.subject === current &&
+          message.kind === current.kind &&
+          message.name === current.name &&
+          message.environment === view.source
         ) {
           await host.compare(
-            subject.kind,
-            subject.name,
-            source,
-            subject.directory,
+            current.kind,
+            current.name,
+            view.source,
+            current.directory,
+            view.shown,
           );
         }
         break;
+      }
       case 'refresh':
+        // The new deployments rebuild an environment's flow when they arrive
         hooks.clear();
         await host.refresh();
-        // Flow hooks may have changed even where the revision has not
-        if (source) await build();
         break;
       case 'signIn':
-        host.signIn();
+        if (vscode.workspace.isTrusted) host.signIn();
         break;
       case 'settings':
         await vscode.commands.executeCommand(
@@ -641,24 +721,25 @@ export function registerFlowPanel(
     }
   }
 
-  /** Opens a place of the model in the editor group Show Flow came from. */
+  /** Opens a place of the model on show in the group Show Flow came from. */
   async function openPlace(at: number): Promise<void> {
-    const place = Number.isInteger(at) ? model?.places[at] : undefined;
-    if (!place || !subject) return;
+    const view = built;
+    const place = Number.isInteger(at) ? view?.model?.places[at] : undefined;
+    if (!view || !place) return;
     let uri: vscode.Uri | undefined;
-    if (source && shown) {
+    if (view.source && view.shown) {
       uri = host.revisionDocument(
-        shown.organization,
-        shown.row,
-        shown.cell.revision,
-        shown.files,
+        view.shown.organization,
+        view.shown.row,
+        view.shown.cell.revision,
+        view.shown.files,
         place.file,
       );
-    } else if (!source && subject.directory) {
+    } else if (!view.source && view.subject.directory) {
       uri = vscode.Uri.file(
         path.join(
-          subject.directory,
-          place.file.slice(bundleDirectory(subject.kind).length + 1),
+          view.subject.directory,
+          place.file.slice(bundleDirectory(view.subject.kind).length + 1),
         ),
       );
     }

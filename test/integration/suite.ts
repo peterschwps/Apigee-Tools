@@ -209,6 +209,48 @@ const tests: [string, () => Promise<void>][] = [
     },
   ],
   [
+    'Show Flow opens the flow beside the editor without gcloud or the network',
+    async () => {
+      // Before the dashboard ran, so no session exists that it could reuse
+      const requests: string[] = [];
+      const original = globalThis.fetch;
+      globalThis.fetch = async input => {
+        requests.push(String(input));
+        return new Response('{}', { status: 404 });
+      };
+      try {
+        const document = await open(
+          'hello',
+          'apiproxy',
+          'proxies',
+          'default.xml',
+        );
+        await vscode.commands.executeCommand(
+          'apigeeTools.showFlow',
+          document.uri,
+        );
+        const tab = await waitFor('the flow tab', () =>
+          vscode.window.tabGroups.all
+            .flatMap(group => group.tabs)
+            .find(
+              item =>
+                item.input instanceof vscode.TabInputWebview &&
+                item.input.viewType.endsWith('apigeeTools.flow'),
+            ),
+        );
+        assert.equal(tab.label, 'Flow · hello');
+        // Beside the editor, which keeps the focus
+        const editor = vscode.window.activeTextEditor;
+        assert.equal(editor?.document.uri.toString(), document.uri.toString());
+        assert.notEqual(tab.group.viewColumn, editor?.viewColumn);
+        assert.deepEqual(gcloudCalls(), []);
+        assert.deepEqual(requests, []);
+      } finally {
+        globalThis.fetch = original;
+      }
+    },
+  ],
+  [
     'the dashboard loads deployments through gcloud and the Apigee API',
     async () => {
       // The fake gcloud is a shell script, which Windows cannot run
@@ -267,48 +309,6 @@ const tests: [string, () => Promise<void>][] = [
             .sort(),
           ['auth print-access-token', 'config list'],
         );
-      } finally {
-        globalThis.fetch = original;
-      }
-    },
-  ],
-  [
-    'Show Flow opens the flow beside the editor without gcloud or the network',
-    async () => {
-      const calls = gcloudCalls().length;
-      const requests: string[] = [];
-      const original = globalThis.fetch;
-      globalThis.fetch = async input => {
-        requests.push(String(input));
-        return new Response('{}', { status: 404 });
-      };
-      try {
-        const document = await open(
-          'hello',
-          'apiproxy',
-          'proxies',
-          'default.xml',
-        );
-        await vscode.commands.executeCommand(
-          'apigeeTools.showFlow',
-          document.uri,
-        );
-        const tab = await waitFor('the flow tab', () =>
-          vscode.window.tabGroups.all
-            .flatMap(group => group.tabs)
-            .find(
-              item =>
-                item.input instanceof vscode.TabInputWebview &&
-                item.input.viewType.endsWith('apigeeTools.flow'),
-            ),
-        );
-        assert.equal(tab.label, 'Flow · hello');
-        // Beside the editor, which keeps the focus
-        const editor = vscode.window.activeTextEditor;
-        assert.equal(editor?.document.uri.toString(), document.uri.toString());
-        assert.notEqual(tab.group.viewColumn, editor?.viewColumn);
-        assert.equal(gcloudCalls().length, calls);
-        assert.deepEqual(requests, []);
       } finally {
         globalThis.fetch = original;
       }

@@ -18,7 +18,7 @@ import {
   statusTargets,
   type ApigeeClient,
 } from './apigee';
-import { registerFlowPanel } from './flowPanel';
+import { registerFlowPanel, type Deployment } from './flowPanel';
 import {
   gcloudCommand,
   gcloudConfig,
@@ -131,6 +131,9 @@ export function registerDashboard(
   // Full API keys for the key search and for copying; the webview gets none
   let keyOwners = new Map<string, KeyRef>();
 
+  // Documents of revisions that come back into memory
+  const revisionChanged = new vscode.EventEmitter<vscode.Uri>();
+
   const flow = registerFlowPanel(context, {
     scanWorkspace: host.scanWorkspace,
     pageHtml: webview => pageHtml(webview, webviewRoot, 'apigee-flow'),
@@ -142,9 +145,14 @@ export function registerDashboard(
     revisionFiles,
     revisionDocument: (organization, row, revision, files, file) => {
       const key = revisionKey(organization, row.kind, row.name, revision);
-      // Kept again, since the document reads from the kept revisions
-      if (!revisions.has(key)) keep(key, Promise.resolve(files));
-      return revisionUri(key, file);
+      const uri = revisionUri(key, file);
+      // Kept again, since the documents read from the kept revisions; one
+      // that showed the placeholder before shows the file now
+      if (!revisions.has(key)) {
+        keep(key, Promise.resolve(files));
+        revisionChanged.fire(uri);
+      }
+      return uri;
     },
     compare,
     refresh: async () => {
@@ -179,7 +187,9 @@ export function registerDashboard(
         else attach(restored);
       },
     }),
+    revisionChanged,
     vscode.workspace.registerTextDocumentContentProvider(revisionScheme, {
+      onDidChange: revisionChanged.event,
       provideTextDocumentContent: revisionContent,
     }),
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
@@ -1078,13 +1088,15 @@ export function registerDashboard(
     name: string,
     environment: string,
     directory?: string,
+    from?: Deployment,
   ): Promise<void> {
-    const row = snapshot.rows?.find(
-      item => item.kind === kind && item.name === name,
-    );
-    const cell = row && cellOf(row, environment);
+    // The flow view names its deployment, which may be of an earlier load
+    const row =
+      from?.row ??
+      snapshot.rows?.find(item => item.kind === kind && item.name === name);
+    const cell = from?.cell ?? (row && cellOf(row, environment));
     const bundle = directory ?? (row && localBundle(row)?.directory);
-    const organization = snapshot.organization;
+    const organization = from?.organization ?? snapshot.organization;
     if (!row || !cell || !bundle || !organization) return;
     try {
       const current = (session ??= await startSession());
@@ -1148,7 +1160,7 @@ export function registerDashboard(
         ?.get(file.join('/'))
         ?.toString('utf8')
         .replace(/^\uFEFF/, '') ??
-      'This revision is no longer in memory. Open the comparison again from the Apigee Tools dashboard.'
+      'This revision is no longer in memory. Open it again from the Apigee Tools dashboard or the flow view.'
     );
   }
 
