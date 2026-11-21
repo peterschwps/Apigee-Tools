@@ -985,30 +985,6 @@ export const styles = css`
     grid-row: 2;
   }
 
-  .r3 {
-    grid-row: 3;
-  }
-
-  .r4 {
-    grid-row: 4;
-  }
-
-  .r5 {
-    grid-row: 5;
-  }
-
-  .r6 {
-    grid-row: 6;
-  }
-
-  .r7 {
-    grid-row: 7;
-  }
-
-  .r8 {
-    grid-row: 8;
-  }
-
   .c1 {
     grid-column: 1;
   }
@@ -1060,10 +1036,6 @@ export const styles = css`
     grid-column: 7;
   }
 
-  .c8 {
-    grid-column: 8;
-  }
-
   /* The connections, drawn after layout, with an arrow halfway */
   .links {
     position: absolute;
@@ -1082,15 +1054,6 @@ export const styles = css`
 
   .links .arrow {
     fill: var(--at-text-muted);
-  }
-
-  .row-mark {
-    display: flex;
-    align-items: center;
-  }
-
-  .row-mark vscode-icon {
-    color: var(--at-text-muted);
   }
 
   .slot {

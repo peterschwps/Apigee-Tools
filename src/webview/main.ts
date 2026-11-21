@@ -820,9 +820,15 @@ class ApigeeFlow extends LitElement {
 
   /** Marks on each map the station whose part of the list is at its top. */
   private spy(): void {
-    for (const section of this.renderRoot.querySelectorAll<HTMLElement>(
-      '.flow-map',
-    )) {
+    const sections = [
+      ...this.renderRoot.querySelectorAll<HTMLElement>('.flow-map'),
+    ];
+    // At the end of the page, the last part cannot reach the top: it counts
+    const page = document.documentElement;
+    const atEnd =
+      window.scrollY > 0 &&
+      window.scrollY + window.innerHeight >= page.scrollHeight - 2;
+    for (const section of sections) {
       const map = section.querySelector<HTMLElement>('.overview');
       if (!map) continue;
       const limit = map.getBoundingClientRect().bottom + 8;
@@ -831,12 +837,16 @@ class ApigeeFlow extends LitElement {
       ];
       let current = stations.find(row => row.dataset.station === this.spyHold)
         ?.dataset.station;
+      if (!current && atEnd && section === sections.at(-1)) {
+        current = stations.at(-1)?.dataset.station;
+      }
       for (const row of current ? [] : stations) {
         if (current && row.getBoundingClientRect().top > limit) break;
         current = row.dataset.station;
       }
       for (const chip of map.querySelectorAll<HTMLElement>('[data-go]')) {
-        if (chip.dataset.go === current) {
+        const also = chip.dataset.also?.split(' ') ?? [];
+        if (chip.dataset.go === current || also.includes(current ?? '')) {
           chip.setAttribute('aria-current', 'location');
         } else {
           chip.removeAttribute('aria-current');

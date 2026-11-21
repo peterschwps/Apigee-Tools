@@ -55,14 +55,11 @@ const bandTitles: Readonly<Record<FlowBand['kind'], string>> = {
   steps: 'Steps',
 };
 
-const bandIcons: Readonly<Record<FlowBand['kind'], string>> = {
-  request: 'arrow-right',
-  backend: 'server',
-  response: 'arrow-left',
+/** The marks of what an endpoint runs besides the round trip. */
+const extraIcons: Partial<Record<FlowBand['kind'], string>> = {
+  error: 'zap',
   event: 'pulse',
-  error: 'error',
   after: 'history',
-  steps: 'list-flat',
 };
 
 const roleTitles = {
@@ -128,6 +125,8 @@ type Chip = {
   icon?: string;
   sign?: FlowSign;
   empty?: boolean;
+  /** Icons after the name for what else the endpoint runs, with their keys. */
+  marks?: { icon: string; key: string }[];
 };
 
 /** The strongest sign of an item and everything in it; disabled is no sign. */
@@ -219,7 +218,12 @@ function overview(
   const request = map.bands.find(band => band.kind === 'request');
   if (!request) return nothing;
   const backend = map.bands.find(band => band.kind === 'backend');
-  const rows = map.bands.filter(band => band.kind !== 'backend');
+  // The round trip gets a row each; what else an endpoint runs shows at its
+  // station in the response: on an error, per event, after the response
+  const rows = map.bands.filter(
+    band => band.kind === 'request' || band.kind === 'response',
+  );
+  const others = map.bands.filter(band => band.kind in extraIcons);
   const used = columns
     .map((_, index) => index)
     .filter(index => rows.some(band => band.items.some(columns[index])));
@@ -246,6 +250,40 @@ function overview(
         }
       : undefined;
 
+  // A station of the response with the marks of what else its endpoint runs
+  const stationOf = (band: FlowBand, item: FlowItem): Chip => {
+    const value = chipOf(map, band, item);
+    if (band.kind !== 'response' || item.kind !== 'endpoint') return value;
+    const extras = others.flatMap(other =>
+      other.items
+        .filter(entry => entry.kind === 'endpoint' && entry.role === item.role)
+        .map(entry => ({ band: other, item: entry })),
+    );
+    if (!extras.length) return value;
+    return {
+      ...value,
+      marks: extras.map(extra => ({
+        icon: extraIcons[extra.band.kind] ?? '',
+        key: extra.item.key,
+      })),
+      tip: [
+        value.tip,
+        ...extras.map(extra =>
+          [
+            bandTitles[extra.band.kind],
+            ...(extra.item.kind === 'endpoint'
+              ? extra.item.segments.flatMap(segment =>
+                  'cases' in segment
+                    ? segment.cases.map(entry => entry.name)
+                    : segment.steps.map(step => step.name),
+                )
+              : []),
+          ].join(': '),
+        ),
+      ].join('\n'),
+    };
+  };
+
   const group = `${map.key}#map`;
   const chips = rows.flatMap(band =>
     band.items
@@ -261,6 +299,7 @@ function overview(
     html`<button
       class="chip ${value.empty ? 'empty' : ''}"
       data-go=${value.key}
+      data-also=${value.marks?.map(mark => mark.key).join(' ') || nothing}
       data-band=${band}
       data-row=${row}
       data-column=${column}
@@ -276,38 +315,31 @@ function overview(
             ></vscode-icon>`
           : nothing
       }
-      <span class="chip-name">${value.label}</span>${signView(value.sign)}<span
-        class="sr-only"
-        >. ${value.tip.replaceAll('\n', '. ')}</span
-      >
+      <span class="chip-name">${value.label}</span
+      >${signView(value.sign)}${value.marks?.map(
+        mark =>
+          html`<vscode-icon
+            name=${mark.icon}
+            size="14"
+            class="chip-icon"
+          ></vscode-icon>`,
+      )}<span class="sr-only">. ${value.tip.replaceAll('\n', '. ')}</span>
     </button>`;
 
-  // Classes place the cells, since the page allows no inline styles
-  const turnRows = rows.filter(
-    band => band.kind === 'request' || band.kind === 'response',
-  ).length;
-  // The request leaves the client's dot, hollow, the response reaches it
+  // Classes place the cells, since the page allows no inline styles. The
+  // request leaves the client's dot, hollow, the response reaches it.
   const cells = rows.map((band, index) => {
     const row = index + 1;
     return html`
-      ${
-        band.kind === 'request' || band.kind === 'response'
-          ? html`<span
-              class="dot r${row} c1 ${band.kind === 'request' ? 'start' : ''}"
-              data-dot=${band.kind}
-            ></span>`
-          : html`<span
-              class="row-mark r${row} c1"
-              data-tooltip=${bandTitles[band.kind]}
-              ><vscode-icon name=${bandIcons[band.kind]}></vscode-icon
-              ><span class="sr-only">${bandTitles[band.kind]}</span></span
-            >`
-      }
+      <span
+        class="dot r${row} c1 ${band.kind === 'request' ? 'start' : ''}"
+        data-dot=${band.kind}
+      ></span>
       ${used.map((column, position) => {
         const item = band.items.find(columns[column]);
         return item
           ? html`<span class="slot r${row} c${position + 2}"
-              >${chip(chipOf(map, band, item), band.kind, index, position)}</span
+              >${chip(stationOf(band, item), band.kind, index, position)}</span
             >`
           : nothing;
       })}
@@ -328,7 +360,7 @@ function overview(
       ${cells}
       ${
         turn
-          ? html`<span class="turn c${used.length + 2} span${turnRows}"
+          ? html`<span class="turn c${used.length + 2} span${rows.length}"
               >${chip(turn, 'turn', 0, used.length)}</span
             >`
           : nothing
